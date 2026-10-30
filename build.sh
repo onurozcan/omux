@@ -3,7 +3,8 @@
 #   ./build.sh            builds and installs /Applications/omux.app, signed for development.
 #   ./build.sh --beta     builds and installs "omux Beta" instead: a separate app with its own
 #                         preferences and workspace, so you can try a branch next to the release build.
-#   ./build.sh --dist     builds a distributable release: signed with the Developer ID certificate,
+#   ./build.sh --dist     builds a universal (Apple Silicon + Intel) distributable release:
+#                         signed with the Developer ID certificate,
 #                         hardened runtime, notarized and stapled; produces build/omux-<version>.dmg
 #                         and build/omux-<version>.zip. Doesn't install anything.
 #                         Needs a notarytool keychain profile (see NOTARY_PROFILE below).
@@ -26,23 +27,49 @@ for arg in "$@"; do
   esac
 done
 
-swift build -c release 2>&1 | grep -E "error|warning: unre|Compiling|Build complete" | tail -20
+if [[ "$MODE" == dist ]]; then
+  # Keep the output paths: SwiftPM's .build/release symlink changes with the last architecture built.
+  swift build -c release --arch arm64
+  ARM_BIN=$(swift build -c release --arch arm64 --show-bin-path)
+  swift build -c release --arch x86_64
+  INTEL_BIN=$(swift build -c release --arch x86_64 --show-bin-path)
+  BIN_DIR="$ARM_BIN"
+else
+  swift build -c release
+  BIN_DIR=$(swift build -c release --show-bin-path)
+fi
 
 APP="build/$NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/omux "$APP/Contents/MacOS/omux"
+if [[ "$MODE" == dist ]]; then
+  lipo -create "$ARM_BIN/omux" "$INTEL_BIN/omux" -output "$APP/Contents/MacOS/omux"
+else
+  cp "$BIN_DIR/omux" "$APP/Contents/MacOS/omux"
+fi
 cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleName $NAME" \
   -c "Set :NSServices:0:NSMenuItem:default Open in $NAME" -c "Set :NSServices:0:NSPortName $NAME" "$APP/Contents/Info.plist"
 cp Resources/omux.icns "$APP/Contents/Resources/"
-for bundle in .build/release/*.bundle; do
+for bundle in "$BIN_DIR"/*.bundle; do
   [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 # Sparkle, for updates. The binary looks for it in Contents/Frameworks (see Package.swift).
 SPARKLE_DIR=.build/artifacts/sparkle/Sparkle
 mkdir -p "$APP/Contents/Frameworks"
 cp -R "$SPARKLE_DIR/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" "$APP/Contents/Frameworks/"
+
+if [[ "$MODE" == dist ]]; then
+  # Check every Mach-O, including Sparkle's nested helpers, before signing or packaging.
+  while IFS= read -r -d '' binary; do
+    if [[ "$(file -b "$binary")" == *Mach-O* ]]; then
+      if ! lipo "$binary" -verify_arch arm64 x86_64; then
+        echo "Missing arm64 or x86_64 architecture in $binary" >&2
+        exit 1
+      fi
+    fi
+  done < <(find "$APP" -type f -print0)
+fi
 
 # Signs Sparkle's nested helpers with our identity, inside out, so library validation and
 # notarization accept them. $1 identity, remaining args extra codesign options.
