@@ -1,0 +1,49 @@
+{
+  "groups": [
+    {
+      "command": "claude",
+      "directory": "/tmp/omux-demo",
+      "id": "6B1E2C1A-0A55-4C0E-9C3B-2B5A9E1D0001",
+      "isCollapsed": false,
+      "name": "omux",
+      "provider": "claude",
+      "tabs": [
+        {
+          "claudeSessionID": "1F2E3D4C-5B6A-4798-8A9B-0C1D2E3F0001",
+          "color": "none",
+          "command": "clear; printf '\\033]7501;state=working:msg=UnVubmluZyB0ZXN0cw==\\007$ cargo test\\n   Compiling omux v0.1.0\\n    Finished test profile in 41.2s\\n     Running unittests src/main.rs\\n\\nrunning 86 tests\\ntest term::status::tests::clear_removes_record_and_descendants ... ok\\ntest term::osc::tests::finds_status_split_across_reads ... ok\\ntest model::tests::legacy_workspace_preserves_claude_identity ... ok\\n'; cat",
+          "id": "AA000000-0000-4000-8000-000000000001",
+          "name": "Linux port"
+        },
+        {
+          "claudeSessionID": "1F2E3D4C-5B6A-4798-8A9B-0C1D2E3F0002",
+          "color": "purple",
+          "command": "clear; printf '\\033]7501;state=blocked:kind=permission:msg=QmFzaDogbnBtIHRlc3Q=\\007Claude wants to run: npm test\\n\\n  1. Yes\\n  2. No, and tell Claude what to do differently\\n'; cat",
+          "id": "AA000000-0000-4000-8000-000000000002",
+          "name": "Review PR"
+        }
+      ],
+      "useWorktrees": false,
+      "worktreeSetup": ""
+    },
+    {
+      "command": "codex",
+      "id": "6B1E2C1A-0A55-4C0E-9C3B-2B5A9E1D0002",
+      "isCollapsed": false,
+      "name": "website",
+      "provider": "codex",
+      "tabs": [
+        {
+          "claudeSessionID": "1F2E3D4C-5B6A-4798-8A9B-0C1D2E3F0003",
+          "color": "teal",
+          "command": "clear; printf '\\033]7501;state=done\\007Done. The landing page builds and the tests pass.\\n'; cat",
+          "id": "AA000000-0000-4000-8000-000000000003",
+          "name": "Landing page"
+        }
+      ],
+      "useWorktrees": false,
+      "worktreeSetup": ""
+    }
+  ],
+  "selectedTabID": "AA000000-0000-4000-8000-000000000001"
+}

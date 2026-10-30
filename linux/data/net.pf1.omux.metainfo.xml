@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>net.pf1.omux</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>omux</name>
+  <summary>Run many Claude Code and Codex sessions side by side</summary>
+  <description>
+    <p>
+      omux groups agent sessions into projects in a sidebar. Each session keeps
+      its conversation across relaunches and shows whether its agent is
+      working, needs you or is done.
+    </p>
+    <ul>
+      <li>Allow or deny tool permissions from the sidebar</li>
+      <li>Subagents and their transcripts</li>
+      <li>Worktree sessions with pull request status</li>
+      <li>Files, Changes and Browser panels per session</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">net.pf1.omux.desktop</launchable>
+  <url type="homepage">https://github.com/onurozcan/omux</url>
+  <url type="bugtracker">https://github.com/onurozcan/omux/issues</url>
+  <developer id="net.pf1">
+    <name>Onur Özcan</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-30"/>
+  </releases>
+</component>

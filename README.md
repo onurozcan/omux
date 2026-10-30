@@ -70,6 +70,10 @@ builds and installs **omux Beta** next to the release app instead, with its own 
 
 builds the release that goes on GitHub: signed with the Developer ID certificate and the hardened runtime, notarized, stapled, and packaged as `build/omux-<version>.dmg` and `.zip`. It also signs the zip for Sparkle and adds the version to `site/appcast.xml`, which goes live with the site. It needs the notarization credentials stored once with `xcrun notarytool store-credentials omux-notary`; `--no-notarize` only signs.
 
+## Linux
+
+A native Linux version (GTK 4, libadwaita, VTE, WebKitGTK) lives in [`linux/`](linux/README.md). It is a separate Rust app with the same features, workspace format and settings; see [linux/README.md](linux/README.md) for installing and building it.
+
 ## Keyboard shortcuts
 
 | Action | Shortcut |

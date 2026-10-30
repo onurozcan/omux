@@ -1,0 +1,96 @@
+name: Linux
+
+on:
+  push:
+    paths: ["linux/**", ".github/workflows/linux.yml"]
+  pull_request:
+    paths: ["linux/**", ".github/workflows/linux.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: linux
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK, libadwaita, VTE and WebKitGTK headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev libvte-2.91-gtk4-dev libwebkitgtk-6.0-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Codex app-server integration test (real codex CLI, no model calls)
+        run: |
+          npm install -g @openai/codex
+          codex --version
+          OMUX_CODEX_INTEGRATION=1 cargo test -- --ignored real_server_persists_and_resumes_exact_thread
+      - run: cargo build --release
+      - name: Validate desktop entry and metainfo
+        run: |
+          sudo apt-get install -y --no-install-recommends desktop-file-utils appstream
+          desktop-file-validate data/net.pf1.omux.desktop
+          appstreamcli validate --no-net --explain data/net.pf1.omux.metainfo.xml
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+      - name: Package (.deb and tarball)
+        run: |
+          cargo deb --no-build --output target/omux.deb
+          mkdir -p target/omux-linux-x86_64
+          cp -r target/release/omux install.sh data target/omux-linux-x86_64/
+          sed -i 's|SOURCE="${1:-target/release/omux}"|SOURCE="${1:-./omux}"|' target/omux-linux-x86_64/install.sh
+          tar -C target -czf target/omux-linux-x86_64.tar.gz omux-linux-x86_64
+      - name: Screenshot under Xvfb
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb imagemagick dbus-x11 fonts-dejavu-core adwaita-icon-theme librsvg2-common
+          mkdir -p "$RUNNER_TEMP/ws" "$RUNNER_TEMP/shots"
+          # A small repository with changes, for the Files and Changes tabs.
+          git init -q -b main /tmp/omux-demo && cd /tmp/omux-demo
+          mkdir src && printf '# Demo\n\nA *small* project.\n' > README.md
+          printf 'fn main() {\n    println!("hi");\n}\n' > src/main.rs
+          git add -A && git -c user.name=ci -c user.email=ci@example.com commit -qm init
+          printf 'fn main() {\n    println!("hello, omux");\n    run();\n}\n' > src/main.rs
+          printf '## Notes\n\n- first\n- second\n' > NOTES.md
+          cd "$GITHUB_WORKSPACE/linux"
+          cp -r tests/fixtures/workspace/. "$RUNNER_TEMP/ws/" 2>/dev/null || true
+          export OMUX_WORKSPACE_DIRECTORY="$RUNNER_TEMP/ws" GSK_RENDERER=cairo RUST_BACKTRACE=1
+          xvfb-run -a -s "-screen 0 1440x900x24" dbus-run-session -- sh -c '
+            ./target/release/omux > "$RUNNER_TEMP/shots/omux.log" 2>&1 & pid=$!
+            sleep 7
+            import -window root "$RUNNER_TEMP/shots/main.png"
+            act() { gdbus call --session --dest net.pf1.omux --object-path /net/pf1/omux \
+              --method org.gtk.Actions.Activate "$1" "[]" "{}" > /dev/null; sleep 2; }
+            act toggle-panel
+            import -window root "$RUNNER_TEMP/shots/files.png"
+            gdbus call --session --dest net.pf1.omux --object-path /net/pf1/omux \
+              --method org.gtk.Actions.Activate panel-tab "[<\"changes\">]" "{}" > /dev/null; sleep 3
+            import -window root "$RUNNER_TEMP/shots/changes.png"
+            act settings
+            import -window root "$RUNNER_TEMP/shots/settings.png"
+            kill $pid || true'
+          cat "$RUNNER_TEMP/shots/omux.log"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omux-linux-x86_64
+          path: |
+            linux/target/omux.deb
+            linux/target/omux-linux-x86_64.tar.gz
+            linux/Cargo.lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ runner.temp }}/shots

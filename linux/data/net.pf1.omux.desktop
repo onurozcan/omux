@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=omux
+GenericName=Agent Terminal
+Comment=Run many Claude Code and Codex sessions side by side
+Exec=omux %F
+Icon=net.pf1.omux
+Terminal=false
+Categories=Development;TerminalEmulator;GTK;
+Keywords=claude;codex;terminal;agent;ai;worktree;
+MimeType=inode/directory;
+StartupNotify=true
+StartupWMClass=net.pf1.omux
