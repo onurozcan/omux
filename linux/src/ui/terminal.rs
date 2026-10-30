@@ -51,7 +51,8 @@ pub fn apply_appearance(settings: &Settings, terminal: &SessionTerminal) {
 
 pub fn font(settings: &Settings) -> gtk::pango::FontDescription {
     let family = if settings.font_family.is_empty() {
-        "Monospace"
+        // Closest open fonts to SF Mono / Menlo first, then whatever is installed.
+        "JetBrains Mono, SF Mono, Menlo, DejaVu Sans Mono, Monospace"
     } else {
         settings.font_family.as_str()
     };

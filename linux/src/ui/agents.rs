@@ -275,6 +275,7 @@ pub fn update_header(app: &App, id: Uuid, container: &gtk::Box) {
             .tooltip_text("Subagents in this session")
             .build();
         button.add_css_class("flat");
+        button.add_css_class("omux-pill");
         button.set_create_popup_func(move |button| {
             let popover = agent_list(id);
             // Elapsed times tick and states change while the list is open.

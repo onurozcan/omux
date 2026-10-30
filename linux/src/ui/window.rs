@@ -70,6 +70,7 @@ impl Ui {
             .height_request(420)
             .content(&split)
             .build();
+        window.add_css_class("omux-window");
 
         Self {
             window,

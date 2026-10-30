@@ -298,7 +298,7 @@ fn group_row(app: &Rc<App>, group: &TabGroup) -> gtk::ListBoxRow {
     let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     hbox.set_margin_start(6);
     hbox.set_margin_end(4);
-    hbox.set_margin_top(8);
+    hbox.set_margin_top(10);
     hbox.set_margin_bottom(2);
     let chevron = gtk::Image::from_icon_name(if group.is_collapsed {
         "pan-end-symbolic"
@@ -357,8 +357,8 @@ fn session_row(app: &Rc<App>, tab: &TabItem) -> SessionRow {
     let row = gtk::ListBoxRow::new();
     row.set_widget_name(&format!("tab:{}", tab.id));
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    outer.set_margin_start(16);
-    outer.set_margin_end(6);
+    outer.set_margin_start(12);
+    outer.set_margin_end(8);
     outer.set_margin_top(5);
     outer.set_margin_bottom(5);
 

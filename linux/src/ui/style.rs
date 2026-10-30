@@ -57,18 +57,27 @@ fn css(theme: &Theme) -> String {
 .omux-sidebar, .omux-sidebar list, headerbar.omux-chrome, .omux-panel-strip {{
   background-color: {chrome};
 }}
-headerbar.omux-chrome, .omux-chrome-bar {{ box-shadow: none; border-bottom: 1px solid alpha(currentColor, 0.08); min-height: 46px; }}
+window.omux-window {{ font-family: "Inter", "SF Pro Text", "Cantarell", sans-serif; font-size: 13px; }}
+headerbar.omux-chrome, .omux-chrome-bar {{ box-shadow: none; border-bottom: 1px solid alpha(currentColor, 0.08); min-height: 36px; padding-top: 0; padding-bottom: 0; }}
+headerbar.omux-chrome button, .omux-chrome-bar button {{ min-height: 26px; min-width: 26px; padding: 0 4px; }}
+windowcontrols button {{ min-height: 22px; min-width: 22px; padding: 0; margin: 0 2px; }}
 .omux-chrome-bar {{ background-color: {chrome}; }}
 .omux-terminal-bg, .omux-panel {{ background-color: {bg}; color: {fg}; }}
-.omux-sidebar list row {{ padding: 0; border-radius: 6px; margin: 0 6px; }}
-.omux-sidebar list row:selected {{ background-color: alpha(currentColor, 0.12); color: inherit; }}
-.omux-project {{ font-size: 0.85em; font-weight: 600; opacity: 0.55; }}
-.omux-session-name {{ font-weight: 500; }}
-.omux-status {{ font-size: 0.82em; opacity: 0.6; }}
+.omux-sidebar list row {{ padding: 0; border-radius: 7px; margin: 1px 8px; min-height: 0; }}
+.omux-sidebar list row:hover {{ background-color: alpha(currentColor, 0.05); }}
+.omux-sidebar list row:selected {{ background-color: alpha(currentColor, 0.14); color: inherit; }}
+.omux-project {{ font-size: 11px; font-weight: 500; opacity: 0.5; }}
+.omux-session-name {{ font-size: 13px; font-weight: 500; }}
+.omux-status {{ font-size: 11px; opacity: 0.58; }}
 .omux-stopped {{ opacity: 0.55; }}
-.omux-header-name {{ font-weight: 600; font-size: 0.92em; }}
-.omux-provider {{ font-size: 0.75em; opacity: 0.45; }}
-.omux-usage {{ font-size: 0.8em; }}
+.omux-header-name {{ font-weight: 600; font-size: 12px; }}
+.omux-provider {{ font-size: 11px; opacity: 0.42; }}
+.omux-usage {{ font-size: 11px; }}
+button.omux-pill {{ border-radius: 999px; min-height: 20px; padding: 0 9px; border: 1px solid alpha({blue}, 0.55); background-color: alpha({blue}, 0.10); }}
+.omux-panel-strip button {{ min-height: 24px; padding: 0 8px; font-size: 12px; }}
+.omux-panel-strip button:checked {{ background-color: alpha(currentColor, 0.12); }}
+.omux-file-header {{ font-size: 12px; }}
+.omux-plus {{ color: {green}; }} .omux-minus {{ color: {red}; }}
 .omux-hairline {{ background-color: alpha(currentColor, 0.08); min-height: 1px; min-width: 1px; }}
 .omux-dot {{ min-width: 8px; min-height: 8px; border-radius: 999px; background-color: alpha(currentColor, 0.35); }}
 .omux-dot.ring {{ background-color: transparent; border: 1.5px solid alpha(currentColor, 0.6); min-width: 5px; min-height: 5px; }}

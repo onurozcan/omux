@@ -30,7 +30,7 @@ maintainer = "omux contributors"
 copyright = "2026, Onur Özcan"
 section = "devel"
 depends = "libgtk-4-1 (>= 4.14), libadwaita-1-0 (>= 1.5), libvte-2.91-gtk4-0 (>= 0.76), libwebkitgtk-6.0-4, git"
-recommends = "gh, libcanberra-gtk3-module"
+recommends = "gh, libcanberra-gtk3-module, fonts-inter, fonts-jetbrains-mono"
 extended-description = "Run many Claude Code and Codex sessions side by side, with live agent status, worktrees and pull request status."
 assets = [
     ["target/release/omux", "usr/bin/", "755"],

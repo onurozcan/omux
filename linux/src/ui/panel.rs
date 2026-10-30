@@ -41,7 +41,14 @@ pub fn build(app: &Rc<App>) {
     changes_badge.add_css_class("omux-status");
     let mut first: Option<gtk::ToggleButton> = None;
     for (key, label) in TABS {
-        let content = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let content = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+        let icon = match key {
+            "files" => gtk::Image::from_icon_name("text-x-generic-symbolic"),
+            "changes" => gtk::Image::from_icon_name("list-add-symbolic"),
+            _ => gtk::Image::from_icon_name("web-browser-symbolic"),
+        };
+        icon.set_pixel_size(12);
+        content.append(&icon);
         content.append(&gtk::Label::new(Some(label)));
         if key == "changes" {
             content.append(&changes_badge);

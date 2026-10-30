@@ -75,6 +75,8 @@ struct Changes {
     activity: HashMap<Uuid, String>,
     stack: gtk::Stack,
     diff_view: gtk::TextView,
+    /// Above the diff: file name, folder and line counts, as on the Mac.
+    file_header: gtk::Box,
     list: gtk::ListBox,
     list_header: gtk::Label,
     footer: gtk::Box,
@@ -160,7 +162,17 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
     bottom.append(&footer);
 
     let paned = gtk::Paned::new(gtk::Orientation::Vertical);
-    paned.set_start_child(Some(&diff_scroller));
+    let file_header = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+    file_header.add_css_class("omux-panel-strip");
+    file_header.add_css_class("omux-file-header");
+    file_header.set_margin_start(10);
+    file_header.set_margin_end(6);
+    file_header.set_margin_top(4);
+    file_header.set_margin_bottom(4);
+    let diff_box = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    diff_box.append(&file_header);
+    diff_box.append(&diff_scroller);
+    paned.set_start_child(Some(&diff_box));
     paned.set_end_child(Some(&bottom));
     paned.set_shrink_start_child(false);
     paned.set_shrink_end_child(false);
@@ -192,6 +204,7 @@ pub fn build(app: &Rc<App>) -> gtk::Widget {
             activity: HashMap::new(),
             stack: stack.clone(),
             diff_view: diff_view.clone(),
+            file_header: file_header.clone(),
             list: list.clone(),
             list_header,
             footer,
@@ -402,21 +415,7 @@ fn render_list() {
             icon.add_css_class("omux-yellow");
             hbox.append(&icon);
         }
-        // Zero counts are left out, as on the Mac.
-        let counts = match (file.added, file.removed) {
-            (None, _) => "binary".to_string(),
-            (Some(a), r) => [
-                (a > 0).then(|| format!("+{a}")),
-                r.filter(|r| *r > 0).map(|r| format!("−{r}")),
-            ]
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>()
-            .join(" "),
-        };
-        let counts = gtk::Label::new(Some(&counts));
-        counts.add_css_class("omux-status");
-        hbox.append(&counts);
+        hbox.append(&counts_view(file.added, file.removed));
         row.set_child(Some(&hbox));
         with(|c| {
             c.list.append(&row);
@@ -456,8 +455,85 @@ fn load_diff() {
     );
 }
 
+/// `+29 −2` in green and red; zero counts are left out, as on the Mac.
+fn counts_view(added: Option<usize>, removed: Option<usize>) -> gtk::Box {
+    let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    match added {
+        None => {
+            let label = gtk::Label::new(Some("binary"));
+            label.add_css_class("omux-status");
+            hbox.append(&label);
+        }
+        Some(a) => {
+            for (text, class) in [
+                ((a > 0).then(|| format!("+{a}")), "omux-plus"),
+                (
+                    removed.filter(|r| *r > 0).map(|r| format!("−{r}")),
+                    "omux-minus",
+                ),
+            ] {
+                if let Some(text) = text {
+                    let label = gtk::Label::new(Some(&text));
+                    label.add_css_class(class);
+                    label.add_css_class("omux-file-header");
+                    hbox.append(&label);
+                }
+            }
+        }
+    }
+    hbox
+}
+
+fn render_file_header(c: &Changes) {
+    while let Some(child) = c.file_header.first_child() {
+        c.file_header.remove(&child);
+    }
+    let Some(file) = c
+        .selected
+        .as_ref()
+        .and_then(|s| c.files.iter().find(|f| f.path == *s))
+    else {
+        c.file_header.set_visible(false);
+        return;
+    };
+    c.file_header.set_visible(true);
+    let path = Path::new(&file.path);
+    let name = gtk::Label::new(Some(
+        &path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+    ));
+    name.add_css_class("omux-header-name");
+    c.file_header.append(&name);
+    let folder = gtk::Label::new(Some(
+        &path
+            .parent()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+    ));
+    folder.add_css_class("omux-status");
+    folder.set_hexpand(true);
+    folder.set_xalign(0.0);
+    folder.set_ellipsize(gtk::pango::EllipsizeMode::Start);
+    c.file_header.append(&folder);
+    c.file_header.append(&counts_view(file.added, file.removed));
+    if let Some(dir) = &c.dir {
+        let open = gtk::Button::from_icon_name("document-open-symbolic");
+        open.add_css_class("flat");
+        open.add_css_class("omux-small");
+        open.set_tooltip_text(Some("Open with default app"));
+        let uri = gio::File::for_path(dir.join(&file.path)).uri();
+        open.connect_clicked(move |_| {
+            let _ = gio::AppInfo::launch_default_for_uri(&uri, gio::AppLaunchContext::NONE);
+        });
+        c.file_header.append(&open);
+    }
+}
+
 fn render_diff() {
     with(|c| {
+        render_file_header(c);
         let buffer = c.diff_view.buffer();
         buffer.set_text("");
         let wrap = c

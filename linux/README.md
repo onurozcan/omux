@@ -22,6 +22,7 @@ same behavior. [docs/PARITY.md](docs/PARITY.md) describes that behavior.
 - Codex CLI 0.165.0 or later installed as `codex`, for managed Codex
   sessions.
 - Optional:
+  - `fonts-inter` and `fonts-jetbrains-mono`, for the look closest to the Mac's SF fonts. Without them omux uses the system fonts.
   - `git`, for worktree sessions and the Changes panel.
   - [GitHub CLI](https://cli.github.com) `gh`, for pull request status.
 
