@@ -2,6 +2,13 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Changed
+
+- **Universal distribution builds.** `./build.sh --dist` builds for Apple Silicon and Intel, combines the binaries before signing, and checks that every embedded Mach-O supports both architectures before packaging the DMG and zip. Build failures stop packaging. Development and beta installs still build for the current Mac.
+- Building from source requires Swift 6.2 or later to match the locked SwiftTerm dependency; downloaded releases do not require Swift.
+
 ## [0.6.0] - 2026-10-30
 
 ### Added

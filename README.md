@@ -31,7 +31,6 @@ Built with SwiftUI and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
 ## Requirements
 
 - macOS 14 or later
-- Swift 5.9 or later (Xcode 15+ or the Command Line Tools)
 - [Claude Code](https://claude.com/claude-code) installed as `claude` for Claude sessions; plain shell sessions work without it
 - Codex CLI **0.165.0 or later** installed as `codex` for managed Codex sessions. Tested with 0.166.0; the app-server integration is experimental on the Codex side.
 
@@ -51,12 +50,14 @@ Download `omux-<version>.dmg` from the [latest release](https://github.com/onuro
 
 ## Build
 
+Building from source requires Swift 6.2 or later (with a matching Xcode or Command Line Tools toolchain), as required by the locked SwiftTerm dependency. Downloading the app does not require Swift.
+
 ```sh
 ./build.sh
 open /Applications/omux.app
 ```
 
-`build.sh` builds a release binary, assembles `build/omux.app`, and then **replaces `/Applications/omux.app`** so the Finder service and Dock entry stay registered. It signs with the first "Apple Development" certificate in your keychain, or ad hoc if there is none.
+`build.sh` builds a release binary for the current Mac's architecture, assembles `build/omux.app`, and then **replaces `/Applications/omux.app`** so the Finder service and Dock entry stay registered. It signs with the first "Apple Development" certificate in your keychain, or ad hoc if there is none.
 
 ```sh
 ./build.sh --beta
@@ -68,7 +69,9 @@ builds and installs **omux Beta** next to the release app instead, with its own 
 ./build.sh --dist
 ```
 
-builds the release that goes on GitHub: signed with the Developer ID certificate and the hardened runtime, notarized, stapled, and packaged as `build/omux-<version>.dmg` and `.zip`. It also signs the zip for Sparkle and adds the version to `site/appcast.xml`, which goes live with the site. It needs the notarization credentials stored once with `xcrun notarytool store-credentials omux-notary`; `--no-notarize` only signs.
+builds a universal release for Apple Silicon (`arm64`) and Intel (`x86_64`), with macOS 14 or later required on both. The two release binaries are combined before signing; the app and all embedded Mach-O binaries are checked for both architectures. A build failure or a missing architecture stops distribution.
+
+The release is signed with the Developer ID certificate and the hardened runtime, notarized, stapled, and packaged as `build/omux-<version>.dmg` and `.zip`. It also signs the zip for Sparkle and adds the version to `site/appcast.xml`, which goes live with the site. It needs the notarization credentials stored once with `xcrun notarytool store-credentials omux-notary`; `--no-notarize` only signs. Review the generated appcast to confirm the new universal release is available to both architectures; older arm64-only entries should keep their existing requirements.
 
 ## Keyboard shortcuts
 
