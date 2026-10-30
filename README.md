@@ -9,8 +9,8 @@ Built with SwiftUI and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
 ## Features
 
 - **Projects and sessions.** A project is a folder plus a default command; sessions live under it in the sidebar. Drag to reorder or move sessions between projects, rename them, and give them colors.
-- **Agent selection.** Choose Claude Code, Codex, a plain shell, or a custom command in project/session settings. File › New Codex Session starts Codex directly. Worktree sessions also have an agent selector.
-- **Conversations that resume.** Claude sessions keep their pinned UUID; Codex sessions keep the thread ID assigned by Codex. Restart and Continue reopen that exact conversation.
+- **Agent selection.** Choose Claude Code, Codex, the Cursor CLI, a plain shell, or a custom command in project/session settings. File › New Codex Session starts Codex directly. Worktree sessions also have an agent selector.
+- **Conversations that resume.** Claude sessions keep their pinned UUID; Codex sessions keep the thread ID assigned by Codex; Cursor sessions keep the chat ID `cursor-agent create-chat` minted for them. Restart and Continue reopen that exact conversation.
 - **Live status.** Each session shows whether its agent is working, needs you or is done, and the Dock badge counts sessions waiting on you.
 - **Notifications.** When a session you aren't looking at needs you, omux posts a macOS notification with a sound; clicking it opens the session. Notifications for finished sessions are optional, and Settings can make it sound only, with the macOS sound of your choice. Programs can send their own with OSC 9 or OSC 777: set Claude Code's notification channel to `ghostty` (in `/config`) to get its notifications, and its plugins', this way. Turn each kind on or off in Settings › Notifications.
 - **Allow or deny from the sidebar.** Claude tool permissions and Codex command/file-change approvals can be answered in the sidebar or header. Codex's info button shows the requested command or reason. Other Codex permission forms and questions are answered in its terminal.
@@ -23,7 +23,7 @@ Built with SwiftUI and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
   - **Browser** (⌥⌘3). A web view per session that opens the local server the session prints (like `localhost:3000`). The pick button sends an element's HTML, styles and a screenshot to the prompt.
 - **Images and files in the prompt.** ⌘V with an image on the clipboard pastes it as a file path, which Claude Code and Codex read as an attachment. ⌘V with files, or dropping files onto the terminal, pastes their paths.
 - **Recent conversations** (⇧⌘O). Switch between Claude Code's recent conversations and the Codex conversation catalog.
-- **Usage limits.** The sidebar shows the selected provider's plan limits when available (see [Privacy](#privacy)).
+- **Usage limits.** The sidebar shows the selected provider's plan limits when available: Claude's 5-hour and weekly windows, Codex's rate-limit windows, or how much of Cursor's included usage this billing cycle is gone (see [Privacy](#privacy)).
 - **Updates.** omux checks for new versions about once a day and offers to install them, with the release notes; Help › Check for Updates… checks now. Updates are signed and verified before they're installed.
 - **Open folders from anywhere.** Finder's right-click "Open in omux" service, dropping a folder on the Dock icon, or `open -a omux <folder>`.
 - Themes, terminal font and size, and a quick switcher (⌘K).
@@ -34,6 +34,7 @@ Built with SwiftUI and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
 - To build from source: Swift 6.2 or later (Xcode 26 or the Command Line Tools); the downloaded app needs no Swift
 - [Claude Code](https://claude.com/claude-code) installed as `claude` for Claude sessions; plain shell sessions work without it
 - Codex CLI **0.165.0 or later** installed as `codex` for managed Codex sessions. Tested with 0.166.0; the app-server integration is experimental on the Codex side.
+- [Cursor CLI](https://cursor.com/cli) installed as `cursor-agent` for Cursor sessions
 
 ## Codex sessions
 
@@ -44,6 +45,14 @@ Each Codex terminal and omux's management client connect to the same private loc
 Codex permits one writing app-server per conversation. A conversation currently running in another app-server must be closed there before opening it in omux; omux reports the failure and keeps the saved ID. Restart waits for its previous server to exit before reopening the conversation.
 
 Codex subagents appear in the sidebar/header. Their preview shows up to 100 recent protocol items. Review notes and browser picks are pasted into the selected session's prompt. Managed sessions use the Codex provider selection; custom wrappers remain terminal commands.
+
+## Cursor sessions
+
+Select **Cursor CLI** in a project's or session's settings, and sessions run `cursor-agent` with its own login and configuration. Unlike Codex, there is no app-server: Cursor is an ordinary command in the session's shell.
+
+So that a conversation survives a relaunch, omux asks `cursor-agent create-chat` for an empty chat the first time a session starts, saves that ID, and resumes it with `cursor-agent --resume <id>` from then on. The session shows that it's starting a chat while the ID is being minted. If Cursor can't give one, the session still starts, just unpinned. A command that already picks a chat itself (`--resume`, `--continue`, `ls`) is left exactly as written, and Session Settings can drop the saved ID to start fresh on the next restart.
+
+Because Cursor doesn't report its state to the terminal the way Claude Code does, Cursor sessions have no sidebar status, Allow/Deny buttons or subagent list, and they aren't in the recent conversations list. The usage line, worktrees, the Changes tab, the files panel and the browser all work as they do for any session.
 
 ## Install
 
@@ -95,6 +104,7 @@ omux has no telemetry. Its integrations use these network paths:
 - **Pull request status.** If `gh` is installed, omux runs `gh pr view` for each worktree session's branch about once a minute and when you switch back to omux. gh uses its own login; omux never reads or stores your GitHub token.
 - **Updates.** About once a day, omux fetches `https://omux.app/appcast.xml` to see whether a newer version exists, and downloads the update from GitHub only when you accept it. Nothing about you or your machine is sent.
 - **Codex.** omux communicates with its owned Codex app-servers over authenticated loopback WebSockets. Codex itself connects to the model provider, tools, and services configured in your Codex settings. Usage is requested through `account/rateLimits/read`; accounts without supported plan limits display an unavailable message. omux starts its app-servers with analytics disabled.
+- **Cursor.** While a Cursor session is selected, omux reads the CLI's login from the Keychain (the `cursor-access-token` item, via `/usr/bin/security`, or `CURSOR_API_KEY` when it's set) and sends it to `https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage`, the same undocumented endpoint `cursor-agent` itself calls to report usage. The token is never written to disk or logged, and nothing is requested while no Cursor session is selected. `cursor-agent` otherwise runs as an ordinary command in the session's shell with its own login and configuration.
 
 Local files omux touches:
 

@@ -42,6 +42,9 @@ struct TabItem: Identifiable, Codable, Hashable {
     var claudeSessionID = UUID()
     /// Assigned by Codex, never guessed from the working directory or latest chat.
     var codexThreadID: String?
+    /// Minted by `cursor-agent create-chat` the first time the session runs, so later
+    /// launches resume that exact chat instead of starting a new one.
+    var cursorChatID: String?
     /// Set when the session runs in its own git worktree; `directory` is the worktree.
     var worktree: Worktree?
 
@@ -64,6 +67,7 @@ struct TabItem: Identifiable, Codable, Hashable {
         color = (try? c.decodeIfPresent(TabColor.self, forKey: .color)) ?? .none
         claudeSessionID = try c.decodeIfPresent(UUID.self, forKey: .claudeSessionID) ?? UUID()
         codexThreadID = try c.decodeIfPresent(String.self, forKey: .codexThreadID)
+        cursorChatID = try c.decodeIfPresent(String.self, forKey: .cursorChatID)
         worktree = try c.decodeIfPresent(Worktree.self, forKey: .worktree)
     }
 

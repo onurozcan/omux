@@ -307,6 +307,7 @@ struct AppCommands: Commands {
             Button("New Session") { store.newTab() }.keyboardShortcut("t")
             Button("New Codex Session") { store.newTab(command: "codex") }
             Button("New Claude Code Session") { store.newTab(command: "claude") }
+            Button("New Cursor Session") { store.newTab(command: "cursor-agent") }
             Button("New Shell") { store.newTab(command: "") }.keyboardShortcut("t", modifiers: [.command, .shift])
             Button("New Session in Worktree…") {
                 if let id = store.selectedGroup?.id ?? store.groups.first?.id { store.newWorktreeGroupID = id }

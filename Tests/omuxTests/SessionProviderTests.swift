@@ -62,4 +62,36 @@ final class SessionProviderTests: XCTestCase {
             XCTAssertEqual(SessionProvider.claudeCommand(raw, sessionID: UUID(), conversationExists: false), raw)
         }
     }
+
+    func testStandardCursorCommandsPickTheCursorProvider() {
+        XCTAssertEqual(SessionProvider.infer(command: "cursor-agent"), .cursor)
+        XCTAssertEqual(SessionProvider.infer(command: "cursor-agent --model gpt-5"), .cursor)
+    }
+
+    func testCursorResumesItsOwnChatOnceItHasOne() {
+        XCTAssertEqual(SessionProvider.cursorCommand("cursor-agent", chatID: "chat-1"),
+                       "cursor-agent --resume chat-1")
+        XCTAssertEqual(SessionProvider.cursorCommand("cursor-agent --model gpt-5", chatID: "chat-1"),
+                       "cursor-agent --resume chat-1 --model gpt-5")
+        // Nothing to resume yet: the first run starts the chat Cursor will give us an id for.
+        XCTAssertEqual(SessionProvider.cursorCommand("cursor-agent", chatID: nil), "cursor-agent")
+    }
+
+    func testExplicitCursorChatChoicesArePreserved() {
+        for raw in ["cursor-agent --resume abc", "cursor-agent --resume=abc", "cursor-agent --continue", "cursor-agent ls"] {
+            XCTAssertEqual(SessionProvider.cursorCommand(raw, chatID: "chat-1"), raw)
+        }
+    }
+
+    func testCursorIdentitySurvivesRoundTrip() throws {
+        var group = TabGroup(name: "Project")
+        group.provider = .cursor
+        group.command = "cursor-agent"
+        var tab = TabItem(name: "Cursor")
+        tab.cursorChatID = "chat-assigned-by-cursor"
+        group.tabs = [tab]
+        let restored = try JSONDecoder().decode(TabGroup.self, from: JSONEncoder().encode(group))
+        XCTAssertEqual(restored.tabs[0].resolvedProvider(in: restored), .cursor)
+        XCTAssertEqual(restored.tabs[0].cursorChatID, tab.cursorChatID)
+    }
 }

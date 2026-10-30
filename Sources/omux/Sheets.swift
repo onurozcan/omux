@@ -79,7 +79,8 @@ struct TabEditSheet: View {
     let tabID: UUID
 
     private enum CommandMode: String, CaseIterable, Identifiable {
-        case inherit = "Project default", claude = "Claude Code", codex = "Codex", shell = "Plain shell", custom = "Custom"
+        case inherit = "Project default", claude = "Claude Code", codex = "Codex",
+             cursor = "Cursor CLI", shell = "Plain shell", custom = "Custom"
         var id: String { rawValue }
     }
 
@@ -89,14 +90,25 @@ struct TabEditSheet: View {
     @State private var customCommand = ""
     @State private var sessionID = UUID()
     @State private var codexThreadID: String?
+    @State private var cursorChatID: String?
 
     private var provider: SessionProvider {
         switch mode {
         case .inherit: return store.group(containing: tabID)?.provider ?? .shell
         case .claude: return .claude
         case .codex: return .codex
+        case .cursor: return .cursor
         case .shell: return .shell
         case .custom: return .custom
+        }
+    }
+
+    /// What the session resumes next time, as the agent that owns it names it.
+    private var conversationID: String {
+        switch provider {
+        case .codex: return codexThreadID ?? "New conversation"
+        case .cursor: return cursorChatID ?? "New chat"
+        default: return sessionID.uuidString.lowercased()
         }
     }
 
@@ -117,16 +129,19 @@ struct TabEditSheet: View {
                 Text(group?.command?.isEmpty == false ? group!.command! : "plain shell")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if provider == .claude || provider == .codex {
-                LabeledContent(provider == .codex ? "Codex conversation" : "Claude conversation") {
+            if provider == .claude || provider == .codex || provider == .cursor {
+                LabeledContent("\(provider.agentName) conversation") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(provider == .codex ? codexThreadID ?? "New conversation" : sessionID.uuidString.lowercased())
+                        Text(conversationID)
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                             .foregroundStyle(.secondary)
                         Button("Start a fresh conversation on next restart") {
-                            if provider == .codex { codexThreadID = nil }
-                            else { sessionID = UUID() }
+                            switch provider {
+                            case .codex: codexThreadID = nil
+                            case .cursor: cursorChatID = nil
+                            default: sessionID = UUID()
+                            }
                         }
                         .controlSize(.small)
                     }
@@ -149,6 +164,9 @@ struct TabEditSheet: View {
                 if let command = tab.command, command != "claude" { mode = .custom; customCommand = command }
                 else { mode = .claude }
             case .codex: mode = .codex
+            case .cursor:
+                if let command = tab.command, command != "cursor-agent" { mode = .custom; customCommand = command }
+                else { mode = .cursor }
             case .shell: mode = .shell
             case .custom: mode = .custom; customCommand = tab.command ?? ""
             case nil:
@@ -157,11 +175,13 @@ struct TabEditSheet: View {
                 case "": mode = .shell
                 case "codex": mode = .codex
                 case "claude": mode = .claude
+                case "cursor-agent": mode = .cursor
                 case let cmd?: mode = .custom; customCommand = cmd
                 }
             }
             sessionID = tab.claudeSessionID
             codexThreadID = tab.codexThreadID
+            cursorChatID = tab.cursorChatID
         }
     }
 
@@ -173,11 +193,13 @@ struct TabEditSheet: View {
             case .inherit: tab.command = nil; tab.provider = nil
             case .claude: tab.command = "claude"; tab.provider = .claude
             case .codex: tab.command = "codex"; tab.provider = .codex
+            case .cursor: tab.command = "cursor-agent"; tab.provider = .cursor
             case .shell: tab.command = ""; tab.provider = .shell
             case .custom: tab.command = customCommand; tab.provider = SessionProvider.infer(command: customCommand)
             }
             tab.claudeSessionID = sessionID
             tab.codexThreadID = codexThreadID
+            tab.cursorChatID = cursorChatID
         }
         dismiss()
     }
@@ -279,7 +301,8 @@ struct RecentSessionsSheet: View {
             switch store.provider(of: entry.tab) {
             case .claude: return "claude:" + entry.tab.claudeSessionID.uuidString.lowercased()
             case .codex: return entry.tab.codexThreadID.map { "codex:" + $0 }
-            case .shell, .custom: return nil
+            // Cursor chats aren't in this list; it reads Claude's and Codex's own stores.
+            case .cursor, .shell, .custom: return nil
             }
         })
     }

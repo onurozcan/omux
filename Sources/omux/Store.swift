@@ -54,6 +54,9 @@ final class Store: ObservableObject {
     private var codexStarts: [UUID: Task<Void, Never>] = [:]
     /// A worktree setup command to run before a new Codex session's TUI starts.
     private var codexSetup: [UUID: String] = [:]
+    private var cursorStarts: [UUID: Task<Void, Never>] = [:]
+    /// The same, for a Cursor session, which waits on a chat id before its TUI starts.
+    private var cursorSetup: [UUID: String] = [:]
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -234,6 +237,8 @@ final class Store: ObservableObject {
 
         if provider == .codex, command == nil {
             startCodex(view, tab: tab, cwd: dir)
+        } else if provider == .cursor, command == nil {
+            startCursor(view, tab: tab, group: group)
         } else if let command = command ?? startupCommand(tab: tab, group: group), !command.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 view.send(txt: command + "\n")
@@ -264,8 +269,45 @@ final class Store: ObservableObject {
         }
     }
 
-    private func closeCodex(_ id: UUID) {
+    /// A Cursor session resumes one exact chat, so a brand new one needs an id before it can
+    /// start. Minting it takes a moment, which the session shows instead of a bare prompt; if
+    /// Cursor can't give one, the session still starts, just unpinned.
+    private func startCursor(_ view: TermView, tab: TabItem, group: TabGroup) {
+        guard cursorStarts[tab.id] == nil else { return }
+        let setup = cursorSetup.removeValue(forKey: tab.id)
+        guard tab.cursorChatID == nil else {
+            sendStartup(for: tab, group: group, setup: setup, to: view)
+            return
+        }
+        update(tab.id) { $0.busy = true; $0.statusState = .working; $0.statusDetail = "Starting a Cursor chat…" }
+        cursorStarts[tab.id] = Task { [weak self, weak view] in
+            defer {
+                if let self, let view, self.terminals[tab.id] === view { self.cursorStarts[tab.id] = nil }
+            }
+            let chatID = try? await CursorManager.shared.createChat()
+            guard !Task.isCancelled, let self, let view, self.terminals[tab.id] === view else { return }
+            if let chatID {
+                self.updateTab(tab.id) { $0.cursorChatID = chatID }
+                self.save()
+            }
+            self.update(tab.id) { $0.busy = false; $0.statusState = nil; $0.statusDetail = nil }
+            guard let loc = self.location(of: tab.id) else { return }
+            self.sendStartup(for: self.groups[loc.group].tabs[loc.tab], group: self.groups[loc.group], setup: setup, to: view)
+        }
+    }
+
+    private func sendStartup(for tab: TabItem, group: TabGroup, setup: String?, to view: TermView) {
+        let parts = [setup, startupCommand(tab: tab, group: group)].compactMap { $0 }.filter { !$0.isEmpty }
+        guard !parts.isEmpty else { return }
+        let command = parts.joined(separator: " && ")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { view.send(txt: command + "\n") }
+    }
+
+    /// Drops whatever an agent was still setting up for the session, before its shell goes away.
+    private func closeAgents(_ id: UUID) {
         codexStarts.removeValue(forKey: id)?.cancel()
+        cursorStarts.removeValue(forKey: id)?.cancel()
+        cursorSetup.removeValue(forKey: id)
         CodexManager.shared.close(id)
     }
 
@@ -288,6 +330,8 @@ final class Store: ObservableObject {
             }
             return
         }
+        // Still waiting on a chat id: there is no program yet for Ctrl-C to reach.
+        if runtime[id]?.provider == .cursor, cursorStarts[id] != nil { kill(id); return }
         guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return }
         view.send(txt: "\u{03}")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { view.send(txt: "\u{03}") }
@@ -296,7 +340,7 @@ final class Store: ObservableObject {
 
     /// Force-kills the session's whole process tree; the tab shows as exited.
     func kill(_ id: UUID) {
-        closeCodex(id)
+        closeAgents(id)
         guard let view = terminals[id] else { return }
         killTree(view)
         update(id) { $0.exited = true; $0.statusState = nil; $0.busy = false; $0.agentConnected = false }
@@ -393,7 +437,7 @@ final class Store: ObservableObject {
                 restart(id)
                 return
             }
-            guard !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil else { return }
+            guard !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil, cursorStarts[id] == nil else { return }
             if runtime[id]?.provider != tab.resolvedProvider(in: groups[loc.group]) { restart(id); return }
         }
         if tab.resolvedProvider(in: groups[loc.group]) != .claude {
@@ -401,6 +445,8 @@ final class Store: ObservableObject {
                 // A live Codex TUI is not an idle shell, even when its agent is idle.
                 if provider(of: tab) == .codex {
                     startCodex(view, tab: tab, cwd: runtime[id]?.cwd ?? directory(of: tab) ?? NSHomeDirectory())
+                } else if provider(of: tab) == .cursor {
+                    startCursor(view, tab: tab, group: groups[loc.group])
                 } else if let command = startupCommand(tab: tab, group: groups[loc.group]), !command.isEmpty {
                     view.send(txt: command + "\n")
                 }
@@ -422,15 +468,23 @@ final class Store: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refreshBusy(id) }
     }
 
-    /// Resolves the tab's command and, for `claude`, pins it to the tab's session id so the
-    /// conversation resumes on relaunch.
+    /// Resolves the tab's command and, for the agents that let omux name a conversation,
+    /// pins it to the one the tab owns so it resumes on relaunch.
     func startupCommand(tab: TabItem, group: TabGroup) -> String? {
         let raw = (tab.command ?? group.command ?? "").trimmingCharacters(in: .whitespaces)
-        if tab.resolvedProvider(in: group) == .shell { return nil }
         guard !raw.isEmpty else { return nil }
-        guard tab.resolvedProvider(in: group) == .claude else { return raw }
-        let session = tab.claudeSessionID.uuidString.lowercased()
-        return SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: Self.claudeSessionExists(session))
+        switch tab.resolvedProvider(in: group) {
+        case .shell:
+            return nil
+        case .cursor:
+            return SessionProvider.cursorCommand(raw, chatID: tab.cursorChatID)
+        case .claude:
+            let session = tab.claudeSessionID.uuidString.lowercased()
+            return SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID,
+                                                 conversationExists: Self.claudeSessionExists(session))
+        case .codex, .custom:
+            return raw
+        }
     }
 
     /// Claude Code writes each conversation to ~/.claude/projects/<project>/<session>.jsonl.
@@ -625,6 +679,9 @@ final class Store: ObservableObject {
             if tab.resolvedProvider(in: groups[gi]) == .codex {
                 // Codex starts after its app-server connects; the setup runs in front of it then.
                 codexSetup[tab.id] = setup
+            } else if tab.resolvedProvider(in: groups[gi]) == .cursor {
+                // Same for Cursor, which starts once it has a chat id.
+                cursorSetup[tab.id] = setup
             } else {
                 command = [setup, startupCommand(tab: tab, group: groups[gi])].compactMap { $0 }.joined(separator: " && ")
             }
@@ -634,7 +691,7 @@ final class Store: ObservableObject {
     }
 
     func closeTab(_ id: UUID) {
-        closeCodex(id)
+        closeAgents(id)
         guard let loc = location(of: id) else { return }
         if let view = terminals.removeValue(forKey: id) {
             killTree(view)
@@ -653,7 +710,7 @@ final class Store: ObservableObject {
     }
 
     func restart(_ id: UUID) {
-        closeCodex(id)
+        closeAgents(id)
         guard let loc = location(of: id) else { return }
         if let view = terminals.removeValue(forKey: id) {
             killTree(view)

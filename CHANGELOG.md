@@ -2,6 +2,13 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- **Cursor CLI sessions.** Cursor joins Claude Code and Codex in the project, session and worktree agent pickers, and runs `cursor-agent` as an ordinary command in the session's shell. Conversations resume: omux mints an empty chat with `cursor-agent create-chat` the first time a session starts and resumes that exact chat afterwards, and Session Settings can drop the saved ID to start fresh. A command that already picks its own chat is left untouched.
+- **Cursor usage limits** in the sidebar, like Claude's and Codex's. While a Cursor session is selected, omux reads the CLI's own login and asks the dashboard endpoint `cursor-agent` calls how much of this billing cycle's included usage is gone.
+
 ## [0.6.1] - 2026-10-30
 
 ### Added

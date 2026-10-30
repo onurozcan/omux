@@ -232,8 +232,9 @@ struct WorktreeSheet: View {
                     TextField("Name", text: $name)
                     Picker("Agent", selection: $provider) {
                         Text("Project default").tag(Optional<SessionProvider>.none)
-                        Text("Claude Code").tag(Optional(SessionProvider.claude))
-                        Text("Codex").tag(Optional(SessionProvider.codex))
+                        Text(SessionProvider.claude.label).tag(Optional(SessionProvider.claude))
+                        Text(SessionProvider.codex.label).tag(Optional(SessionProvider.codex))
+                        Text(SessionProvider.cursor.label).tag(Optional(SessionProvider.cursor))
                     }
                     LabeledContent("Branch") {
                         TextField("Branch", text: Binding(get: { branch }, set: { branch = $0; branchEdited = true }))
