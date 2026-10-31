@@ -43,10 +43,12 @@ enum Prefs {
     /// A macOS alert sound name, or "Default".
     static let notifySound = "notifySound"
     static let welcomed = "welcomed"
+    /// Session names follow Claude Code's /rename and its auto-generated title. Off by default.
+    static let inheritClaudeSessionName = "inheritClaudeSessionName"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms]
+                      notifyNeedsYou, notifyDone, notifyPrograms, inheritClaudeSessionName]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -75,6 +77,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.notifyNeedsYou) private var notifyNeedsYou = true
     @AppStorage(Prefs.notifyDone) private var notifyDone = false
     @AppStorage(Prefs.notifyPrograms) private var notifyPrograms = true
+    @AppStorage(Prefs.inheritClaudeSessionName) private var inheritClaudeName = false
 
     var body: some View {
         Form {
@@ -107,6 +110,10 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 Toggle("Confirm before quitting while sessions are running", isOn: $confirmQuit)
                 Text("Quitting stops every session. Saved Claude Code and Codex conversations can be continued on the next launch.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Claude Session Name Inheritance", isOn: $inheritClaudeName)
+                Text("Session names follow Claude Code's /rename and, until you rename a session yourself, its auto-generated title.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -232,7 +239,10 @@ struct ContentView: View {
         .sheet(isPresented: $store.showWelcome) { WelcomeSheet().environmentObject(store) }
         .sheet(item: $store.editingTabID) { TabEditSheet(tabID: $0).environmentObject(store) }
         .sheet(item: $store.editingGroupID) { GroupEditSheet(groupID: $0).environmentObject(store) }
-        .onAppear { AppDelegate.openWindow = openWindow }
+        .onAppear {
+            AppDelegate.openWindow = openWindow
+            ClaudeTitleMonitor.shared.start()
+        }
     }
 }
 
