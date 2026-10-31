@@ -44,6 +44,8 @@ struct TabItem: Identifiable, Codable, Hashable {
     var codexThreadID: String?
     /// Set when the session runs in its own git worktree; `directory` is the worktree.
     var worktree: Worktree?
+    /// The Claude Code title last copied into `name`; a new one is applied only when it changes.
+    var claudeTitle: String?
 
     init(name: String, directory: String? = nil, command: String? = nil, worktree: Worktree? = nil) {
         self.name = name
@@ -65,6 +67,7 @@ struct TabItem: Identifiable, Codable, Hashable {
         claudeSessionID = try c.decodeIfPresent(UUID.self, forKey: .claudeSessionID) ?? UUID()
         codexThreadID = try c.decodeIfPresent(String.self, forKey: .codexThreadID)
         worktree = try c.decodeIfPresent(Worktree.self, forKey: .worktree)
+        claudeTitle = try? c.decodeIfPresent(String.self, forKey: .claudeTitle)
     }
 
     func resolvedProvider(in group: TabGroup) -> SessionProvider {

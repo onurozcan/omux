@@ -480,6 +480,11 @@ final class Store: ObservableObject {
             gi = groups.count - 1
         }
         var tab = TabItem(name: recent.tabName.isEmpty ? "Session" : recent.tabName)
+        if UserDefaults.standard.bool(forKey: Prefs.inheritClaudeSessionName),
+           let title = ClaudeTitle.load(session: recent.id.uuidString.lowercased()).best {
+            tab.name = title
+            tab.claudeTitle = title
+        }
         tab.provider = .claude
         tab.command = "claude"
         tab.claudeSessionID = recent.id
@@ -693,6 +698,14 @@ final class Store: ObservableObject {
             groups[loc.group].tabs[loc.tab].name = trimmed
         } else if let gi = groups.firstIndex(where: { $0.id == id }) {
             groups[gi].name = trimmed
+        }
+    }
+
+    /// Copies a Claude Code session title into the tab's name.
+    func applyClaudeTitle(_ id: UUID, _ title: String) {
+        updateTab(id) { tab in
+            tab.name = title
+            tab.claudeTitle = title
         }
     }
 
