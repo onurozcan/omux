@@ -259,7 +259,7 @@ def head_html(title, meta, canonical, extra=""):
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 {extra}</head>'''
 
 HEADER = '''<header class="site-header">
