@@ -42,7 +42,7 @@ extension Store {
             closeTab(id)
             return
         }
-        let dirty = Git.run(["status", "--porcelain"], in: path).out.split(separator: "\n").count
+        let dirty = Git.uncommittedFileCount(path)
         // nil when git can't compare, e.g. the base branch was deleted or renamed: unknown, not zero.
         let ahead = Int(Git.run(["rev-list", "--count", "\(worktree.base)..\(worktree.branch)"], in: worktree.repo).out
             .trimmingCharacters(in: .whitespacesAndNewlines))
@@ -81,7 +81,7 @@ extension Store {
     func cleanUpMergedWorktree(_ id: UUID) {
         guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab),
               FileManager.default.fileExists(atPath: path) else { return }
-        let dirty = Git.run(["status", "--porcelain"], in: path).out.split(separator: "\n").count
+        let dirty = Git.uncommittedFileCount(path)
         let number = PullRequestMonitor.shared.requests[id].map { " in #\($0.number)" } ?? ""
 
         let alert = NSAlert()
@@ -157,7 +157,7 @@ extension Store {
     /// Offers to commit uncommitted work first. Returns false when the user cancels or the
     /// commit fails.
     private func commitIfNeeded(path: String, branch: String, suggestion: String) -> Bool {
-        let dirty = Git.run(["status", "--porcelain"], in: path).out.split(separator: "\n").count
+        let dirty = Git.uncommittedFileCount(path)
         guard dirty > 0 else { return true }
         let alert = NSAlert()
         alert.messageText = "Commit \(dirty) changed file\(dirty == 1 ? "" : "s") first?"

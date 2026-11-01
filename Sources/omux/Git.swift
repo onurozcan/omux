@@ -97,7 +97,13 @@ enum Git {
     }
 
     static func hasUncommittedChanges(_ dir: String) -> Bool {
-        !run(["status", "--porcelain"], in: dir).out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        uncommittedFileCount(dir) > 0
+    }
+
+    /// Changed and new files, a new folder counting once. New files are listed even when
+    /// the user's status.showUntrackedFiles=no hides them from `git status`.
+    static func uncommittedFileCount(_ dir: String) -> Int {
+        run(["status", "--porcelain", "--untracked-files=normal"], in: dir).out.split(separator: "\n").count
     }
 
     /// A branch name from free text: "Fix the login bug" → "fix-the-login-bug".

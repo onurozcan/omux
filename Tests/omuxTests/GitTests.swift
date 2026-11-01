@@ -17,6 +17,22 @@ final class GitTests: XCTestCase {
         XCTAssertEqual(result?.err.count, 200_000)
     }
 
+    /// ⌘W, Create PR and Merge count uncommitted files with git status. With
+    /// status.showUntrackedFiles=no new files were left out, so a worktree holding only new
+    /// files looked clean and "Delete Worktree and Branch" removed them without a warning.
+    func testNewFilesCountWhenStatusHidesThem() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("omux-status-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: dir + "/newdir", withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        XCTAssertTrue(Git.run(["init", "-q"], in: dir).ok)
+        XCTAssertEqual(Git.uncommittedFileCount(dir), 0)
+        Git.run(["config", "status.showUntrackedFiles", "no"], in: dir)
+        try "x\n".write(toFile: dir + "/notes.md", atomically: true, encoding: .utf8)
+        try "y\n".write(toFile: dir + "/newdir/a.txt", atomically: true, encoding: .utf8)
+        XCTAssertEqual(Git.uncommittedFileCount(dir), 2)
+        XCTAssertTrue(Git.hasUncommittedChanges(dir))
+    }
+
     func testTypeChangeDiffSkipsTheSecondFileHeader() {
         let diff = """
         diff --git a/link b/link
