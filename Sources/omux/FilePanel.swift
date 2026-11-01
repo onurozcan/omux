@@ -292,6 +292,13 @@ struct FilePreview: View {
 
     private var isMarkdown: Bool { ["md", "markdown"].contains(url.pathExtension.lowercased()) }
 
+    /// Under 1 MB, so it can be read and laid out whole on the main thread. Sized through
+    /// symlinks, since String(contentsOf:) follows them.
+    private var isSmall: Bool {
+        let size = try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.fileSizeKey]).fileSize
+        return (size ?? .max) < 1_000_000
+    }
+
     private var isText: Bool {
         isMarkdown || Self.text.contains(url.pathExtension.lowercased()) || url.lastPathComponent.hasPrefix(".")
     }
@@ -299,7 +306,7 @@ struct FilePreview: View {
     @ViewBuilder
     private var content: some View {
         let ext = url.pathExtension.lowercased()
-        if isMarkdown {
+        if isMarkdown, isSmall {
             MarkdownView(text: (try? String(contentsOf: url, encoding: .utf8)) ?? "", wrapCode: wrapLines)
         } else if Self.images.contains(ext), let image = NSImage(contentsOf: url) {
             Image(nsImage: image)
@@ -310,8 +317,7 @@ struct FilePreview: View {
             PlayerView(url: url)
         } else if ext == "pdf" {
             PDFKitView(url: url)
-        } else if Self.text.contains(ext) || url.lastPathComponent.hasPrefix("."),
-                  let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 1_000_000,
+        } else if Self.text.contains(ext) || url.lastPathComponent.hasPrefix("."), isSmall,
                   let text = try? String(contentsOf: url, encoding: .utf8) {
             // Vertical-only scrolling offers the text the panel's width, so it wraps.
             ScrollView(wrapLines ? .vertical : [.vertical, .horizontal]) {
