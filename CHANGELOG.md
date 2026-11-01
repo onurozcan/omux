@@ -2,6 +2,12 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- **Edge status light.** Settings › Status Light shows a small traffic light on the screen edge: green while an agent works, yellow while a session waits for you, red when no session is running. Click it to bring omux forward; right-click to snap it to the other edge, make it compact or hide it. Off by default.
+
 ## [0.9.1] - 2026-11-01
 
 ### Added

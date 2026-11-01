@@ -50,10 +50,19 @@ enum Prefs {
     static let playAgent = "playAgent"
     /// What ▶ does for an agent with no saved conversation: "fresh" or "continue" (the folder's latest).
     static let startWithoutHistory = "startWithoutHistory"
+    /// A traffic light on the screen edge showing the sessions' state. Off by default.
+    static let edgeLight = "edgeLight"
+    /// The edge the light sits on: "left" or "right" (default).
+    static let edgeLightSide = "edgeLightSide"
+    /// The light's vertical position on screen, kept across launches.
+    static let edgeLightY = "edgeLightY"
+    /// The light shows a single dot instead of three.
+    static let edgeLightCompact = "edgeLightCompact"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory]
+                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
+                      edgeLight, edgeLightSide, edgeLightY, edgeLightCompact]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -85,6 +94,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.cliEnabled) private var cliEnabled = true
     @AppStorage(Prefs.playAgent) private var playAgent = "claude"
     @AppStorage(Prefs.startWithoutHistory) private var startWithoutHistory = "fresh"
+    @AppStorage(Prefs.edgeLight) private var edgeLight = false
 
     var body: some View {
         Form {
@@ -152,6 +162,13 @@ struct SettingsView: View {
                     }
                     Button("Play") { Notifier.shared.playSound() }.controlSize(.small)
                 }
+            }
+            Section("Status Light") {
+                Toggle("Show a status light on the screen edge", isOn: $edgeLight)
+                    .onChange(of: edgeLight) { EdgeLight.shared.sync() }
+                Text("A small panel on the edge of the screen: green while an agent works, yellow while a session waits for you, red when no session is running. Click it to bring omux forward; right-click to move or hide it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -728,6 +745,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         Notifier.shared.activate()
         _ = Updater.shared
+        EdgeLight.shared.start()
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard Fonts.isBiggerKey(event.charactersIgnoringModifiers, event.modifierFlags) else { return event }
             Fonts.adjustSize(by: 1)
