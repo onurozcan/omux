@@ -65,11 +65,20 @@ enum Prefs {
     static let transcriptDensity = "transcriptDensity"
     static let transcriptBubbles = "transcriptBubbles"
     static let transcriptTimestamps = "transcriptTimestamps"
+    /// A traffic light on the screen edge showing the sessions' state. Off by default.
+    static let edgeLight = "edgeLight"
+    /// The edge the light sits on: "left" or "right" (default).
+    static let edgeLightSide = "edgeLightSide"
+    /// The light's vertical position on screen, kept across launches.
+    static let edgeLightY = "edgeLightY"
+    /// The light shows a single dot instead of three.
+    static let edgeLightCompact = "edgeLightCompact"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
-                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
+                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps,
+                      edgeLight, edgeLightSide, edgeLightY, edgeLightCompact]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -294,6 +303,7 @@ private struct NotificationSettings: View {
     @AppStorage(Prefs.notifyPrograms) private var notifyPrograms = true
     @AppStorage(Prefs.notifyStyle) private var notifyStyle = "banner"
     @AppStorage(Prefs.notifySound) private var notifySound = "Default"
+    @AppStorage(Prefs.edgeLight) private var edgeLight = false
 
     var body: some View {
         Form {
@@ -314,6 +324,11 @@ private struct NotificationSettings: View {
                     }
                     Button("Play") { Notifier.shared.playSound() }.controlSize(.small)
                 }
+            }
+            Section("Status Light") {
+                Toggle("Show a status light on the screen edge", isOn: $edgeLight)
+                    .onChange(of: edgeLight) { EdgeLight.shared.sync() }
+                SettingNote("A small panel on the edge of the screen: green while an agent works, yellow while a session waits for you, red when no session is running. Click it to bring omux forward; right-click to move or hide it.")
             }
         }
         .formStyle(.grouped)
@@ -918,6 +933,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         Notifier.shared.activate()
         _ = Updater.shared
+        EdgeLight.shared.start()
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard Fonts.isBiggerKey(event.charactersIgnoringModifiers, event.modifierFlags) else { return event }
             Fonts.adjustSize(by: 1)

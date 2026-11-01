@@ -4,6 +4,10 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+
+- **Edge status light.** Settings › Notifications › Status Light shows a small traffic light on the screen edge: green while an agent works, yellow while a session waits for you, red when no session is running. Click it to bring omux forward; right-click to snap it to the other edge, make it compact or hide it. Off by default.
+
 ### Fixed
 
 - **A subagent stopped with TaskStop no longer stays listed as running** under its session for half an hour. Claude Code never marks it finished; once the session is idle and lists no such child, omux shows it as done and drops it after the usual while.
