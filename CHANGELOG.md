@@ -2,6 +2,12 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- **Session links.** `omux://reveal?tab=<id>` brings a session forward, so notifications and agent monitors in other apps can take you to it. A session can also be found by its Claude Code session id or Codex thread id. A link only selects a session.
+
 ## [0.9.1] - 2026-11-01
 
 ### Added
