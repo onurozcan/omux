@@ -6,6 +6,10 @@ Written in Swift on SwiftTerm, no Electron, no web view, launches instantly. omu
 
 ![omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff](docs/screenshot.png)
 
+![Scattered terminals pulled into one omux window, then arranged as panes](docs/panes.gif)
+
+Eight seconds of the [37-second tour](https://omux.app/#tour), or the [23-second version](https://omux.app/).
+
 [**Download the latest release**](https://github.com/onurozcan/omux/releases/latest) · signed and notarized · Apple Silicon, macOS 14+
 
 ---

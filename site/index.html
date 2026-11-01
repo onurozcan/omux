@@ -92,14 +92,31 @@
 
     <div class="container container-wide">
       <figure class="shot">
-        <img
-          src="screenshot.png"
-          srcset="screenshot.png 1600w, screenshot@2x.png 2400w"
-          sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)"
-          width="1600" height="1043"
-          alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff"
-          fetchpriority="high">
-        <figcaption>A worktree session running three subagents, a session waiting on Allow or Deny, and the Changes tab with a review note.</figcaption>
+        <video autoplay muted loop playsinline preload="metadata" poster="screenshot.png" width="1920" height="1080"
+               aria-label="omux in 23 seconds: many agents in one window, approvals from the sidebar, each session on its own branch, the diff with notes, sessions side by side">
+          <source src="video/omux-hype.webm" type="video/webm">
+          <source src="video/omux-hype.mp4" type="video/mp4">
+          <img
+            src="screenshot.png"
+            srcset="screenshot.png 1600w, screenshot@2x.png 2400w"
+            sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)"
+            width="1600" height="1043"
+            alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
+        </video>
+        <figcaption>omux in 23 seconds. <a href="#tour">Watch the 37-second tour</a>, from scattered terminals to one window.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="tour" class="tour">
+    <div class="container container-wide">
+      <h2>From scattered terminals to one window</h2>
+      <figure class="shot">
+        <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080"
+               aria-label="A 37-second tour of omux: the pain of scattered terminals, then projects, panes, approvals, agents, git, usage limits and the omux command">
+          <source src="video/omux-story.webm" type="video/webm">
+          <source src="video/omux-story.mp4" type="video/mp4">
+        </video>
       </figure>
     </div>
   </section>

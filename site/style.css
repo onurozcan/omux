@@ -113,7 +113,7 @@ pre code { background: none; border: 0; padding: 0; font-size: inherit; }
 }
 
 .shot { margin: 56px 0 0; }
-.shot img {
+.shot img, .shot video {
   display: block;
   width: 100%;
   height: auto;
@@ -279,3 +279,7 @@ ul.plain li { margin-bottom: 0.45em; }
   color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
   fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .card .icon use { stroke: inherit; }
+
+.tour { padding: 24px 0 8px; }
+.tour h2 { text-align: center; margin: 0; }
+.tour .shot { margin-top: 24px; }
