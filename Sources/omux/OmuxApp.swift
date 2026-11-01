@@ -747,10 +747,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Folders dropped on the Dock icon, opened via Finder's "Open With", or `open -a omux <dir>`.
+    /// Folders dropped on the Dock icon, opened via Finder's "Open With", or `open -a omux <dir>`,
+    /// and `omux://reveal` links from other apps (see RevealLink).
     func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where !url.isFileURL {
+            if let link = RevealLink(url), let id = Store.shared.tabID(for: link) { Store.shared.reveal(id) }
+        }
+        let folders = urls.filter(\.isFileURL)
+        guard !folders.isEmpty else { return }
         Self.openWindow?(id: "main")
-        urls.forEach { Store.shared.openFolder($0.path) }
+        folders.forEach { Store.shared.openFolder($0.path) }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

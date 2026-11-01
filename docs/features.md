@@ -20,4 +20,5 @@ Everything omux does, in detail. The [README](../README.md) has the short versio
 - **Usage limits.** The sidebar shows the selected provider's plan limits when available (see [privacy.md](privacy.md)).
 - **Updates.** omux checks for new versions about once a day and offers to install them, with the release notes; Help › Check for Updates… checks now. Updates are signed and verified before they're installed.
 - **Open folders from anywhere.** Finder's right-click "Open in omux" service, dropping a folder on the Dock icon, or `open -a omux <folder>`.
+- **Session links.** `omux://reveal?tab=<id>` brings a session forward, so other apps can take you to it. A session can also be found by its agent: `claude-session=<Claude Code session id>` or `codex-thread=<Codex thread id>`. Programs in a session find their own id in `OMUX_TAB_ID`. A link only selects the session; it never types into or starts one.
 - Themes, terminal font and size, and a quick switcher (⌘K).
