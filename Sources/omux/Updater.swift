@@ -20,13 +20,17 @@ final class Updater: ObservableObject {
     }
     @Published private(set) var allowsAutomaticDownloads = false
     @Published private(set) var lastCheck: Date?
+    /// The version Sparkle is about to install. Set just before it asks omux to quit and relaunch,
+    /// so the quit confirmation can say why.
+    var installingVersion: String?
     private var observations: [NSKeyValueObservation] = []
+    private let delegate = Delegate()
 
     var updater: SPUUpdater { controller.updater }
 
     private init() {
         isAvailable = Bundle.main.bundleURL.pathExtension == "app"
-        controller = SPUStandardUpdaterController(startingUpdater: isAvailable, updaterDelegate: nil, userDriverDelegate: nil)
+        controller = SPUStandardUpdaterController(startingUpdater: isAvailable, updaterDelegate: delegate, userDriverDelegate: nil)
         // A check that finishes makes checking possible again, so that's when the date moves.
         observations.append(updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
             let value = updater.canCheckForUpdates
@@ -49,6 +53,14 @@ final class Updater: ObservableObject {
     func check() { controller.checkForUpdates(nil) }
 
     func refreshLastCheck() { lastCheck = updater.lastUpdateCheckDate }
+
+    /// The controller holds its delegate weakly; Updater keeps it.
+    private final class Delegate: NSObject, SPUUpdaterDelegate {
+        func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
+            let version = item.displayVersionString
+            MainActor.assumeIsolated { Updater.shared.installingVersion = version }
+        }
+    }
 }
 
 struct CheckForUpdatesButton: View {

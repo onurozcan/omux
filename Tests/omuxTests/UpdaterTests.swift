@@ -39,3 +39,19 @@ final class UpdaterTests: XCTestCase {
         XCTAssertTrue(until { !updater.automaticallyChecks })
     }
 }
+
+final class QuitAlertTests: XCTestCase {
+    @MainActor
+    func testUpdateRelaunchSaysWhyAndCanWait() {
+        let update = AppDelegate.quitAlert(running: 2, update: "0.9.2")
+        XCTAssertEqual(update.messageText, "Relaunch to install omux 0.9.2?")
+        XCTAssertTrue(update.informativeText.hasPrefix("2 sessions are running."))
+        XCTAssertTrue(update.informativeText.contains("next time you quit"))
+        XCTAssertEqual(update.buttons.map(\.title), ["Relaunch", "Later"])
+
+        let quit = AppDelegate.quitAlert(running: 1, update: nil)
+        XCTAssertEqual(quit.messageText, "Quit omux?")
+        XCTAssertEqual(quit.informativeText, "1 session is running. Agent conversation IDs are saved so you can continue them next launch.")
+        XCTAssertEqual(quit.buttons.map(\.title), ["Quit", "Cancel"])
+    }
+}

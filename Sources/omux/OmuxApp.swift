@@ -764,14 +764,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let running = store.runningSessionCount
         let confirm = UserDefaults.standard.object(forKey: Prefs.confirmQuit) as? Bool ?? true
         if confirm, running > 0 {
-            let alert = NSAlert()
-            alert.messageText = "Quit omux?"
-            alert.informativeText = "\(running) session\(running == 1 ? " is" : "s are") running. Agent conversation IDs are saved so you can continue them next launch."
-            alert.addButton(withTitle: "Quit")
-            alert.addButton(withTitle: "Cancel")
-            if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
+            let update = Updater.shared.installingVersion
+            if Self.quitAlert(running: running, update: update).runModal() != .alertFirstButtonReturn {
+                // Sparkle still installs the update when omux quits.
+                Updater.shared.installingVersion = nil
+                return .terminateCancel
+            }
         }
         store.prepareForTermination()
         return .terminateNow
+    }
+
+    /// Asks before quitting stops running sessions. When Sparkle is quitting omux to install an
+    /// update, says so, and that the update can wait.
+    static func quitAlert(running: Int, update: String?) -> NSAlert {
+        let alert = NSAlert()
+        let sessions = "\(running) session\(running == 1 ? " is" : "s are") running."
+        if let update {
+            alert.messageText = "Relaunch to install omux \(update)?"
+            alert.informativeText = "\(sessions) Relaunching stops them; agent conversation IDs are saved so you can continue them after the update. Choose Later to install it the next time you quit omux."
+            alert.addButton(withTitle: "Relaunch")
+            alert.addButton(withTitle: "Later")
+        } else {
+            alert.messageText = "Quit omux?"
+            alert.informativeText = "\(sessions) Agent conversation IDs are saved so you can continue them next launch."
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
+        }
+        return alert
     }
 }
