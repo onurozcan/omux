@@ -235,10 +235,10 @@ struct ContentView: View {
 
     private var theme: Theme { Theme(rawValue: themeName) ?? .dark }
 
-    /// Changes follow the selected session and its folder.
+    /// Changes follow the selected session and its folder, which may be its project's.
     private var changesKey: String {
         let tab = store.selectedTab
-        return "\(tab?.id.uuidString ?? "")|\(tab?.directory ?? "")|\(tab?.worktree?.branch ?? "")"
+        return "\(tab?.id.uuidString ?? "")|\(tab.flatMap(store.directory(of:)) ?? "")|\(tab?.worktree?.branch ?? "")"
     }
 
     /// Folder the file panel shows: the selected session's folder, else its project's.
