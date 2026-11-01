@@ -153,6 +153,7 @@ struct SettingsView: View {
                     Button("Play") { Notifier.shared.playSound() }.controlSize(.small)
                 }
             }
+            UpdateSettings()
         }
         .formStyle(.grouped)
         .frame(width: 460)
