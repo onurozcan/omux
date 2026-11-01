@@ -34,6 +34,7 @@ private final class ProcessEvents: LocalProcessTerminalViewDelegate {
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         owner?.emit(.exited)
+        owner?.releaseAfterExit()
     }
 
     func processFailedToStart(source: TerminalView, error: LocalProcessError) {
@@ -99,6 +100,22 @@ final class TermView: LocalProcessTerminalView {
         nativeForegroundColor = theme.foreground
         caretColor = theme.foreground
         installColors(theme.palette)
+    }
+
+    /// Closed sessions whose shell is still exiting. Released at once, the view stops reading
+    /// the PTY but keeps it open until the shell is reaped, and a shell that prints on its way
+    /// out (an agent's goodbye, a TUI restoring the screen) then waits forever for that output
+    /// to drain: a stuck shell, PTY and thread per close.
+    private static var exiting: Set<TermView> = []
+
+    /// Keeps the view reading until its shell exits, or for 30 s at most.
+    func keepUntilExit() {
+        Self.exiting.insert(self)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.releaseAfterExit() }
+    }
+
+    fileprivate func releaseAfterExit() {
+        if Thread.isMainThread { Self.exiting.remove(self) } else { DispatchQueue.main.async { Self.exiting.remove(self) } }
     }
 
     fileprivate func emit(_ event: TermEvent) {

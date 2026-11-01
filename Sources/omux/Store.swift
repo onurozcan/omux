@@ -484,6 +484,7 @@ final class Store: ObservableObject {
         let pid = view.process.shellPid
         if pid > 0 { Darwin.kill(-pid, SIGHUP) }
         view.terminate()
+        view.keepUntilExit()
     }
 
     /// Stops a session: its whole process tree is killed and the tab shows as stopped.
