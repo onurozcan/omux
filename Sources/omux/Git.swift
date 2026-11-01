@@ -106,6 +106,14 @@ enum Git {
         run(["status", "--porcelain", "--untracked-files=normal"], in: dir).out.split(separator: "\n").count
     }
 
+    /// Commits on `branch` that aren't in `commit`, or nil when git doesn't have that commit.
+    /// `commit` comes from GitHub, so only an object id is taken.
+    static func commitCount(after commit: String, on branch: String, in repo: String) -> Int? {
+        guard commit.range(of: #"^[0-9a-f]{40,64}\z"#, options: .regularExpression) != nil else { return nil }
+        return Int(run(["rev-list", "--count", "\(commit)..refs/heads/\(branch)"], in: repo).out
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     /// A branch name from free text: "Fix the login bug" → "fix-the-login-bug".
     static func slug(_ text: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_/."))

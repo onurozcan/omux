@@ -36,6 +36,8 @@ struct PullRequest: Equatable {
     let isDraft: Bool
     let review: Review?
     let checks: [Check]
+    /// The pull request's last commit, so commits made on the branch after it can be told apart.
+    var head: String? = nil
 
     /// The checks taken together: any failure wins, then anything still running.
     var checksResult: Result? {
@@ -143,7 +145,7 @@ final class PullRequestMonitor: ObservableObject {
         if result != requests { requests = result }
     }
 
-    nonisolated private static let fields = "number,title,url,state,isDraft,reviewDecision,statusCheckRollup"
+    nonisolated private static let fields = "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefOid"
 
     /// Asks about the branch checked out in `dir` rather than naming it, so gh can follow
     /// the branch's upstream to a pull request opened from a fork.
@@ -159,7 +161,8 @@ final class PullRequestMonitor: ObservableObject {
                               result: check.result, url: (check.detailsUrl ?? check.targetUrl).flatMap(webURL))
         }
         return .found(PullRequest(number: raw.number, title: raw.title, url: url, state: state, isDraft: raw.isDraft,
-                                  review: raw.reviewDecision.flatMap(PullRequest.Review.init(rawValue:)), checks: checks))
+                                  review: raw.reviewDecision.flatMap(PullRequest.Review.init(rawValue:)), checks: checks,
+                                  head: raw.headRefOid))
     }
 
     /// Only web links: these open on click, and check links come from whoever reports the check.
@@ -204,6 +207,7 @@ final class PullRequestMonitor: ObservableObject {
         let isDraft: Bool
         let reviewDecision: String?
         let statusCheckRollup: [Check]?
+        let headRefOid: String?
     }
 }
 
