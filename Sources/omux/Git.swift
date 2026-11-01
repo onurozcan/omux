@@ -18,8 +18,16 @@ enum Git {
     /// with whatever git the session itself is running.
     @discardableResult
     static func run(_ args: [String], in dir: String) -> Result {
-        exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"])
+        exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath])
     }
+
+    /// The login shell's PATH, looked up once. Opened from Finder, omux only has
+    /// /usr/bin:/bin, where hooks, signing and LFS filters can't find npx, gpg or git-lfs.
+    static let loginPath: String = {
+        let out = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory()).out
+        let path = out.components(separatedBy: "\n").last ?? ""
+        return path.contains("/") ? path : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }()
 
     /// Runs a command through the user's login shell, so PATH and credential helpers
     /// match their terminal (needed for push and anything that may call gh).
