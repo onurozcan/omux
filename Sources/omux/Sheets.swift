@@ -79,7 +79,7 @@ struct TabEditSheet: View {
     let tabID: UUID
 
     private enum CommandMode: String, CaseIterable, Identifiable {
-        case inherit = "Project default", claude = "Claude Code", codex = "Codex", shell = "Plain shell", custom = "Custom"
+        case inherit = "Project default", claude = "Claude Code", codex = "Codex", antigravity = "Antigravity", shell = "Plain shell", custom = "Custom"
         var id: String { rawValue }
     }
 
@@ -89,6 +89,7 @@ struct TabEditSheet: View {
     @State private var customCommand = ""
     @State private var sessionID = UUID()
     @State private var codexThreadID: String?
+    @State private var antigravityConversationID: String?
     /// Only a fresh start is saved: Codex can assign or replace the thread while the sheet is open.
     @State private var freshConversation = false
 
@@ -97,6 +98,7 @@ struct TabEditSheet: View {
         case .inherit: return store.group(containing: tabID)?.provider ?? .shell
         case .claude: return .claude
         case .codex: return .codex
+        case .antigravity: return .antigravity
         case .shell: return .shell
         case .custom: return .custom
         }
@@ -122,15 +124,16 @@ struct TabEditSheet: View {
                 Text(group?.command?.isEmpty == false ? group!.command! : "plain shell")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            if provider == .claude || provider == .codex {
-                LabeledContent(provider == .codex ? "Codex conversation" : "Claude conversation") {
+            if provider == .claude || provider == .codex || provider == .antigravity {
+                LabeledContent(provider == .codex ? "Codex conversation" : provider == .antigravity ? "Antigravity conversation" : "Claude conversation") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(provider == .codex ? codexThreadID ?? "New conversation" : sessionID.uuidString.lowercased())
+                        Text(provider == .codex ? codexThreadID ?? "New conversation" : provider == .antigravity ? antigravityConversationID ?? "New conversation" : sessionID.uuidString.lowercased())
                             .font(.caption.monospaced())
                             .textSelection(.enabled)
                             .foregroundStyle(.secondary)
                         Button("Start a fresh conversation on next restart") {
                             if provider == .codex { codexThreadID = nil }
+                            else if provider == .antigravity { antigravityConversationID = nil }
                             else { sessionID = UUID() }
                             freshConversation = true
                         }
@@ -155,6 +158,9 @@ struct TabEditSheet: View {
                 if let command = tab.command, command != "claude" { mode = .custom; customCommand = command }
                 else { mode = .claude }
             case .codex: mode = .codex
+            case .antigravity:
+                if let command = tab.command, command != "agy" { mode = .custom; customCommand = command }
+                else { mode = .antigravity }
             case .shell: mode = .shell
             case .custom: mode = .custom; customCommand = tab.command ?? ""
             case nil:
@@ -163,11 +169,13 @@ struct TabEditSheet: View {
                 case "": mode = .shell
                 case "codex": mode = .codex
                 case "claude": mode = .claude
+                case "agy", "antigravity": mode = .antigravity
                 case let cmd?: mode = .custom; customCommand = cmd
                 }
             }
             sessionID = tab.claudeSessionID
             codexThreadID = tab.codexThreadID
+            antigravityConversationID = tab.antigravityConversationID
         }
     }
 
@@ -180,11 +188,14 @@ struct TabEditSheet: View {
             case .inherit: tab.command = nil; tab.provider = nil
             case .claude: tab.command = "claude"; tab.provider = .claude
             case .codex: tab.command = "codex"; tab.provider = .codex
+            case .antigravity: tab.command = "agy"; tab.provider = .antigravity
             case .shell: tab.command = ""; tab.provider = .shell
             case .custom: tab.command = customCommand; tab.provider = SessionProvider.infer(command: customCommand)
             }
             if freshConversation {
-                if provider == .codex { tab.codexThreadID = nil } else { tab.claudeSessionID = sessionID }
+                if provider == .codex { tab.codexThreadID = nil }
+                else if provider == .antigravity { tab.antigravityConversationID = nil }
+                else { tab.claudeSessionID = sessionID }
             }
         }
         dismiss()
@@ -290,6 +301,7 @@ struct RecentSessionsSheet: View {
             switch store.provider(of: entry.tab) {
             case .claude: return "claude:" + entry.tab.claudeSessionID.uuidString.lowercased()
             case .codex: return entry.tab.codexThreadID.map { "codex:" + $0 }
+            case .antigravity: return entry.tab.antigravityConversationID.map { "antigravity:" + $0 }
             case .shell, .custom: return nil
             }
         })
@@ -315,6 +327,7 @@ struct RecentSessionsSheet: View {
             Picker("Agent", selection: $provider) {
                 Text("Claude Code").tag(SessionProvider.claude)
                 Text("Codex").tag(SessionProvider.codex)
+                Text("Antigravity").tag(SessionProvider.antigravity)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 12)
@@ -342,7 +355,11 @@ struct RecentSessionsSheet: View {
             }
         }
         .frame(width: 560, height: 440)
-        .onAppear { provider = store.selectedProvider == .codex ? .codex : .claude }
+        .onAppear {
+            if store.selectedProvider == .codex { provider = .codex }
+            else if store.selectedProvider == .antigravity { provider = .antigravity }
+            else { provider = .claude }
+        }
         .onExitCommand { dismiss() }
         .task(id: provider) {
             focused = true
@@ -351,6 +368,8 @@ struct RecentSessionsSheet: View {
                 let result: [RecentConversation]
                 if provider == .codex {
                     result = try await CodexManager.shared.recent().map(RecentConversation.codex)
+                } else if provider == .antigravity {
+                    result = await Task.detached { AntigravitySession.load().map(RecentConversation.antigravity) }.value
                 } else {
                     result = await Task.detached { RecentSession.load().map(RecentConversation.claude) }.value
                 }
@@ -391,6 +410,7 @@ struct RecentSessionsSheet: View {
         switch session {
         case .claude(let recent): store.openClaudeSession(recent)
         case .codex(let recent): store.openCodexSession(recent)
+        case .antigravity(let recent): store.openAntigravitySession(recent)
         }
         dismiss()
     }

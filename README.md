@@ -2,7 +2,7 @@
 
 **A 5 MB native Mac terminal for running fleets of coding agents.**
 
-Written in Swift on SwiftTerm, no Electron, no web view, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
+Written in Swift on SwiftTerm, no Electron, no web view, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code), [Codex](https://developers.openai.com/codex/cli) and [Antigravity](https://antigravity.google) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
 
 ![omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff](docs/screenshot.png)
 
@@ -30,7 +30,7 @@ omux turns that into a dashboard.
 | Feature | What it does |
 | --- | --- |
 | **Projects and sessions** | A project is a folder plus a default agent. Sessions live under it in the sidebar: drag to reorder, rename, color, move between projects. |
-| **Conversations that resume** | Each Claude Code session keeps its session ID and each Codex session its thread, so Restart and relaunch reopen the exact conversation. |
+| **Conversations that resume** | Each Claude Code session keeps its session ID, each Codex session its thread, and each Antigravity session its conversation ID, so Restart and relaunch reopen the exact conversation. |
 | **Live status** | Working, needs you or done, per session. The Dock badge counts sessions waiting on you, and a notification brings you to the right one. |
 | **Allow or deny from the sidebar** | Claude Code tool permissions and Codex approvals answered without switching sessions. Deny lets you tell the agent what to do instead. |
 | **Subagents** | Every subagent of Claude Code or Codex listed with its current tool. Click one to read its transcript. |
@@ -40,7 +40,7 @@ omux turns that into a dashboard.
 | **Files** (⌥⌘1) | The session's folder, with previews of code, Markdown, images, PDFs and anything Quick Look shows. ⌘-click a path in the terminal to preview it. |
 | **Browser** (⌥⌘3) | A web view per session that opens the local server the session prints. Pick an element to send its HTML, styles and a screenshot to the prompt. |
 | **Images and files in the prompt** | Paste an image or drop files onto the terminal, and the agent gets their paths as attachments. |
-| **Recent conversations** (⇧⌘O) | Claude Code's and Codex's recent conversations, reopened as sessions. |
+| **Recent conversations** (⇧⌘O) | Claude Code's, Codex's and Antigravity's recent conversations, reopened as sessions. |
 | **Usage limits** | The selected provider's plan limits at the bottom of the sidebar. |
 | **Open folders from anywhere** | Finder's "Open in omux", a folder dropped on the Dock icon, or `open -a omux <folder>`. |
 | **The rest** | Notifications with the macOS sound of your choice, themes, terminal fonts, a quick switcher (⌘K), signed automatic updates. |
@@ -67,6 +67,7 @@ Beta builds, distribution builds and tests are in [docs/building.md](docs/buildi
 - A Mac with Apple Silicon running macOS 14 or later
 - [Claude Code](https://claude.com/claude-code) installed as `claude` for Claude sessions. Plain shell sessions work without it.
 - Codex CLI 0.165.0 or later installed as `codex` for Codex sessions
+- [Antigravity CLI](https://antigravity.google) installed as `agy` for Antigravity sessions
 - To build from source: Swift 6.2 or later (Xcode 26 or the Command Line Tools)
 
 ---

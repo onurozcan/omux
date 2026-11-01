@@ -447,15 +447,21 @@ final class Store: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refreshBusy(id) }
     }
 
-    /// Resolves the tab's command and, for `claude`, pins it to the tab's session id so the
+    /// Resolves the tab's command and, for `claude` and `antigravity`, pins it to the tab's session/conversation id so the
     /// conversation resumes on relaunch.
     func startupCommand(tab: TabItem, group: TabGroup) -> String? {
         let raw = (tab.command ?? group.command ?? "").trimmingCharacters(in: .whitespaces)
         if tab.resolvedProvider(in: group) == .shell { return nil }
         guard !raw.isEmpty else { return nil }
-        guard tab.resolvedProvider(in: group) == .claude else { return raw }
-        let session = tab.claudeSessionID.uuidString.lowercased()
-        return SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: Self.claudeSessionExists(session))
+        if tab.resolvedProvider(in: group) == .claude {
+            let session = tab.claudeSessionID.uuidString.lowercased()
+            return SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: Self.claudeSessionExists(session))
+        }
+        if tab.resolvedProvider(in: group) == .antigravity {
+            let id = tab.antigravityConversationID
+            return SessionProvider.antigravityCommand(raw, conversationID: id, conversationExists: id.map(Self.antigravityConversationExists) ?? false)
+        }
+        return raw
     }
 
     /// Claude Code writes each conversation to ~/.claude/projects/<project>/<session>.jsonl.
@@ -463,6 +469,19 @@ final class Store: ObservableObject {
         let projects = NSHomeDirectory() + "/.claude/projects"
         guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: projects) else { return false }
         return dirs.contains { FileManager.default.fileExists(atPath: "\(projects)/\($0)/\(session).jsonl") }
+    }
+
+    /// Antigravity CLI writes conversations to SQLite databases in ~/.gemini/antigravity-cli or ~/.gemini/antigravity.
+    private static func antigravityConversationExists(_ id: String) -> Bool {
+        guard !id.isEmpty else { return false }
+        let home = NSHomeDirectory()
+        let candidates = [
+            "\(home)/.gemini/antigravity-cli/conversations/\(id).db",
+            "\(home)/.gemini/antigravity/conversations/\(id).db",
+            "\(home)/.gemini/antigravity-cli/brain/\(id)",
+            "\(home)/.gemini/antigravity/brain/\(id)"
+        ]
+        return candidates.contains { FileManager.default.fileExists(atPath: $0) }
     }
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
@@ -527,6 +546,25 @@ final class Store: ObservableObject {
         addSession(tab, to: groupID)
     }
 
+    func openAntigravitySession(_ recent: AntigravitySession) {
+        if let existing = allTabs.first(where: { $0.tab.antigravityConversationID == recent.id && provider(of: $0.tab) == .antigravity }) {
+            selectedTabID = existing.tab.id
+            return
+        }
+        let groupID: UUID
+        if let group = groups.first(where: { Self.samePath($0.directory, recent.cwd) }) {
+            groupID = group.id
+        } else {
+            var group = TabGroup(name: (recent.cwd as NSString).lastPathComponent, directory: recent.cwd)
+            group.provider = .antigravity; group.command = "agy"
+            groups.append(group); groupID = group.id
+        }
+        var tab = TabItem(name: recent.tabName.isEmpty ? "Session" : recent.tabName, command: "agy")
+        tab.provider = .antigravity
+        tab.antigravityConversationID = recent.id
+        addSession(tab, to: groupID)
+    }
+
     func openFolderPanel() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -543,12 +581,12 @@ final class Store: ObservableObject {
             if !isWatching(id) { update(id) { $0.needsAttention = true } }
         case .title(let title):
             refreshBusy(id)
-            // Claude Code rewrites the title as its state changes; treat that as activity.
+            // Claude Code and Antigravity rewrite the title as state changes; treat that as activity.
             update(id) {
                 if $0.title != title, !isWatching(id) { $0.hasActivity = true }
                 $0.title = title
             }
-            if runtime[id]?.provider == .claude, tab(id)?.autoName == true,
+            if let p = runtime[id]?.provider, (p == .claude || p == .antigravity), tab(id)?.autoName == true,
                let name = TabItem.name(fromTitle: title), tab(id)?.name != name {
                 updateTab(id) { $0.name = name }
             }

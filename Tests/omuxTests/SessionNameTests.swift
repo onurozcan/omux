@@ -14,6 +14,8 @@ final class SessionNameTests: XCTestCase {
         XCTAssertNil(TabItem.name(fromTitle: "✳"))
         XCTAssertNil(TabItem.name(fromTitle: "✳ Claude Code"))
         XCTAssertNil(TabItem.name(fromTitle: "claude"))
+        XCTAssertNil(TabItem.name(fromTitle: "Antigravity"))
+        XCTAssertNil(TabItem.name(fromTitle: "agy"))
         XCTAssertNil(TabItem.name(fromTitle: String(repeating: "a", count: 81)))
     }
 

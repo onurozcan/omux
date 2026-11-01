@@ -19,8 +19,10 @@ struct WelcomeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var usage = UsageMonitor()
     @ObservedObject private var codex = CodexManager.shared
+    @ObservedObject private var antigravity = AntigravityManager.shared
     @State private var claudePath: String??
     @State private var codexPath: String??
+    @State private var agyPath: String??
     @State private var notifications: UNAuthorizationStatus?
     @State private var checkedUsage = false
 
@@ -28,7 +30,7 @@ struct WelcomeSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Welcome to omux").font(.title2.bold())
-                Text("A terminal for running many Claude Code and Codex sessions side by side. A few checks before you start.")
+                Text("A terminal for running many Claude Code, Codex and Antigravity sessions side by side. A few checks before you start.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -56,8 +58,10 @@ struct WelcomeSheet: View {
             UserDefaults.standard.set(true, forKey: Prefs.welcomed)
             async let claude = Tools.path(of: "claude")
             async let codex = Tools.path(of: "codex")
+            async let agy = Tools.path(of: "agy")
             claudePath = .some(await claude)
             codexPath = .some(await codex)
+            agyPath = .some(await agy)
             notifications = await Notifier.shared.authorizationStatus()
         }
     }
@@ -77,6 +81,8 @@ struct WelcomeSheet: View {
                     missing: "Not found. Install it with `npm install -g @anthropic-ai/claude-code`, or see claude.com/claude-code. Plain shell sessions work without it.")
             toolRow("Codex", command: "codex", path: codexPath,
                     missing: "Not found. Optional: `npm install -g @openai/codex` to run Codex sessions too.")
+            toolRow("Antigravity", command: "agy", path: agyPath,
+                    missing: "Not found. Optional: Install Antigravity CLI (`agy`) to run Antigravity sessions too.")
         }
     }
 
@@ -132,12 +138,16 @@ struct WelcomeSheet: View {
                 checkedUsage = true
                 usage.refresh()
                 if case .some(.some) = codexPath { Task { await codex.refreshUsage() } }
+                if case .some(.some) = agyPath { Task { await antigravity.refreshUsage() } }
             }
             .controlSize(.small)
             if checkedUsage {
                 usageRow("Claude", limits: usage.limits, error: usage.detail ?? usage.error)
                 if case .some(.some) = codexPath {
                     usageRow("Codex", limits: codex.limits, error: codex.usageError)
+                }
+                if case .some(.some) = agyPath {
+                    usageRow("Antigravity", limits: antigravity.limits, error: antigravity.usageError)
                 }
             }
         }

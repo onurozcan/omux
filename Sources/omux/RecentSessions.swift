@@ -1,23 +1,36 @@
 import Foundation
 
 enum RecentConversation: Identifiable {
-    case claude(RecentSession), codex(CodexConversation)
+    case claude(RecentSession), codex(CodexConversation), antigravity(AntigravitySession)
 
     var id: String {
         switch self {
         case .claude(let session): return "claude:" + session.id.uuidString.lowercased()
         case .codex(let session): return "codex:" + session.id
+        case .antigravity(let session): return "antigravity:" + session.id
         }
     }
     var cwd: String {
-        switch self { case .claude(let s): return s.cwd; case .codex(let s): return s.cwd }
+        switch self {
+        case .claude(let s): return s.cwd
+        case .codex(let s): return s.cwd
+        case .antigravity(let s): return s.cwd
+        }
     }
     var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
     var prompt: String {
-        switch self { case .claude(let s): return s.prompt; case .codex(let s): return s.name }
+        switch self {
+        case .claude(let s): return s.prompt
+        case .codex(let s): return s.name
+        case .antigravity(let s): return s.prompt
+        }
     }
     var date: Date {
-        switch self { case .claude(let s): return s.date; case .codex(let s): return s.date }
+        switch self {
+        case .claude(let s): return s.date
+        case .codex(let s): return s.date
+        case .antigravity(let s): return s.date
+        }
     }
 }
 
@@ -105,5 +118,78 @@ struct RecentSession: Identifiable, Hashable {
             }
         }
         return result
+    }
+}
+
+/// An Antigravity CLI conversation found in ~/.gemini/antigravity-cli or ~/.gemini/antigravity.
+struct AntigravitySession: Identifiable, Hashable {
+    let id: String
+    let cwd: String
+    let prompt: String
+    let date: Date
+
+    var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
+
+    /// Short name for a tab: first words of the prompt.
+    var tabName: String {
+        let words = prompt.split(separator: " ").prefix(5).joined(separator: " ")
+        return words.count > 32 ? String(words.prefix(32)) + "…" : words
+    }
+
+    private struct Row: Decodable {
+        let conversation_id: String
+        let title: String?
+        let preview: String?
+        let workspace_uris: String?
+        let timestamp: Double?
+    }
+
+    /// Loads recent conversations from SQLite summary databases.
+    static func load(limit: Int = 300) -> [AntigravitySession] {
+        let home = NSHomeDirectory()
+        let paths = [
+            "\(home)/.gemini/antigravity-cli/conversation_summaries.db",
+            "\(home)/.gemini/antigravity/conversation_summaries.db"
+        ]
+        var seenIDs = Set<String>()
+        var result: [AntigravitySession] = []
+
+        let decoder = JSONDecoder()
+        for dbPath in paths where FileManager.default.fileExists(atPath: dbPath) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+            process.arguments = [
+                "-json",
+                dbPath,
+                "SELECT conversation_id, title, preview, workspace_uris, CAST(strftime('%s', last_modified_time) AS INTEGER) AS timestamp FROM conversation_summaries WHERE killed = 0 ORDER BY last_modified_time DESC LIMIT \(limit);"
+            ]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
+            guard (try? process.run()) != nil else { continue }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0,
+                  let rows = try? decoder.decode([Row].self, from: data) else { continue }
+
+            for row in rows {
+                guard !seenIDs.contains(row.conversation_id) else { continue }
+                seenIDs.insert(row.conversation_id)
+
+                let prompt = [row.title, row.preview].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first(where: { !$0.isEmpty }) ?? "Antigravity conversation"
+
+                var cwd = home
+                if let urisRaw = row.workspace_uris,
+                   let urisArray = try? JSONDecoder().decode([String].self, from: Data(urisRaw.utf8)),
+                   let first = urisArray.first,
+                   let url = URL(string: first) {
+                    cwd = url.path
+                }
+                let date = row.timestamp.map { Date(timeIntervalSince1970: $0) } ?? Date()
+                result.append(AntigravitySession(id: row.conversation_id, cwd: cwd, prompt: prompt.replacingOccurrences(of: "\n", with: " "), date: date))
+            }
+        }
+        result.sort { $0.date > $1.date }
+        return Array(result.prefix(limit))
     }
 }

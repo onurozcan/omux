@@ -413,7 +413,8 @@ struct ChangesPanel: View {
             if !notes.isEmpty {
                 Image(systemName: "text.bubble").foregroundStyle(.yellow)
                 Text("\(notes.count) note\(notes.count == 1 ? "" : "s")")
-                Button("Send to \(store.selectedProvider == .codex ? "Codex" : "Claude")") { changes.sendNotes() }
+                let recipient = store.selectedProvider == .codex ? "Codex" : store.selectedProvider == .antigravity ? "Antigravity" : "Claude"
+                Button("Send to \(recipient)") { changes.sendNotes() }
                     .help("Types the notes into the session and sends them")
             } else if !changes.files.isEmpty {
                 Text("Click a line to leave a note").foregroundStyle(.secondary)

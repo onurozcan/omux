@@ -292,7 +292,7 @@ struct SessionHeader: View {
                 Text(tab.name)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                if [.claude, .codex].contains(store.provider(of: tab)) {
+                if [.claude, .codex, .antigravity].contains(store.provider(of: tab)) {
                     Text(store.provider(of: tab).label).font(.caption2).foregroundStyle(.tertiary)
                 }
                 if let line = rt.statusLine(showFolder: false) {
@@ -349,6 +349,7 @@ struct AppCommands: Commands {
         CommandGroup(after: .appInfo) { CheckForUpdatesButton() }
         CommandGroup(replacing: .newItem) {
             Button("New Session") { store.newTab() }.keyboardShortcut("t")
+            Button("New Antigravity Session") { store.newTab(command: "agy") }
             Button("New Codex Session") { store.newTab(command: "codex") }
             Button("New Claude Code Session") { store.newTab(command: "claude") }
             Button("New Shell") { store.newTab(command: "") }.keyboardShortcut("t", modifiers: [.command, .shift])

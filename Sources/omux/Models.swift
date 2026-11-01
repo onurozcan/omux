@@ -42,6 +42,8 @@ struct TabItem: Identifiable, Codable, Hashable {
     var claudeSessionID = UUID()
     /// Assigned by Codex, never guessed from the working directory or latest chat.
     var codexThreadID: String?
+    /// Assigned by Antigravity, or loaded from an existing session.
+    var antigravityConversationID: String?
     /// Set when the session runs in its own git worktree; `directory` is the worktree.
     var worktree: Worktree?
     /// The name follows the title Claude Code gives the conversation until the session is renamed.
@@ -67,6 +69,7 @@ struct TabItem: Identifiable, Codable, Hashable {
         color = (try? c.decodeIfPresent(TabColor.self, forKey: .color)) ?? .none
         claudeSessionID = try c.decodeIfPresent(UUID.self, forKey: .claudeSessionID) ?? UUID()
         codexThreadID = try c.decodeIfPresent(String.self, forKey: .codexThreadID)
+        antigravityConversationID = try c.decodeIfPresent(String.self, forKey: .antigravityConversationID)
         worktree = try c.decodeIfPresent(Worktree.self, forKey: .worktree)
         autoName = try c.decodeIfPresent(Bool.self, forKey: .autoName) ?? Self.isDefaultName(name)
     }
@@ -79,13 +82,16 @@ struct TabItem: Identifiable, Codable, Hashable {
             && number.dropFirst().allSatisfy { $0.isASCII && $0.isNumber })
     }
 
-    /// The conversation's topic from a terminal title Claude Code sets, without its status
+    /// The conversation's topic from a terminal title Claude Code or Antigravity sets, without its status
     /// glyph ("✳ Fix login bug" → "Fix login bug"). nil for titles that aren't a topic.
     static func name(fromTitle title: String) -> String? {
         let topic = String(title.drop { !$0.isLetter && !$0.isNumber })
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !topic.isEmpty, topic.count <= 80, topic.caseInsensitiveCompare("Claude Code") != .orderedSame,
-              topic.caseInsensitiveCompare("claude") != .orderedSame else { return nil }
+        guard !topic.isEmpty, topic.count <= 80,
+              topic.caseInsensitiveCompare("Claude Code") != .orderedSame,
+              topic.caseInsensitiveCompare("claude") != .orderedSame,
+              topic.caseInsensitiveCompare("Antigravity") != .orderedSame,
+              topic.caseInsensitiveCompare("agy") != .orderedSame else { return nil }
         return topic
     }
 

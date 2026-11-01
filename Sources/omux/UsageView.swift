@@ -6,50 +6,76 @@ struct UsageView: View {
     @EnvironmentObject var store: Store
     @StateObject private var monitor = UsageMonitor()
     @ObservedObject private var codex = CodexManager.shared
+    @ObservedObject private var antigravity = AntigravityManager.shared
     @State private var hovered: String?
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
 
-    /// Codex sessions show Codex's limits; every other session shows Claude's, as before.
+    /// Codex sessions show Codex's limits, Antigravity sessions show Antigravity limits;
+    /// every other session shows Claude's.
     private var isCodex: Bool { store.selectedProvider == .codex }
-    private var limits: [UsageMonitor.Limit] { isCodex ? codex.limits : monitor.limits }
+    private var isAntigravity: Bool { store.selectedProvider == .antigravity }
+    private var limits: [UsageMonitor.Limit] {
+        if isCodex { return codex.limits }
+        if isAntigravity { return antigravity.limits }
+        return monitor.limits
+    }
+
+    private var providerName: String {
+        if isCodex {
+            return codex.plan.map { "Codex (\($0.replacingOccurrences(of: "_", with: " ").capitalized))" } ?? "Codex"
+        }
+        if isAntigravity {
+            return "Antigravity"
+        }
+        return "Claude Code"
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
-            if isCodex {
-                Text(codex.plan.map { "Codex \($0.replacingOccurrences(of: "_", with: " ").capitalized)" } ?? "Codex")
-                    .font(.caption2).foregroundStyle(.tertiary)
-            }
-            if limits.isEmpty {
-                Button {
-                    if isCodex { Task { await codex.refreshUsage() } } else { monitor.refresh() }
-                } label: {
-                    Text(isCodex ? codex.usageError ?? "Codex usage…" : monitor.error ?? "Claude usage…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(isCodex ? codex.usageError ?? "" : monitor.detail ?? "")
-            }
-            ForEach(limits) { limit in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(hovered == limit.id ? limit.resetText : "\(limit.label) \(limit.percent)%")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(hovered == limit.id ? .primary : .secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary)
-                            Capsule().fill(limit.tint)
-                                .frame(width: geo.size.width * CGFloat(min(limit.percent, 100)) / 100)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(providerName)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
+            HStack(spacing: 10) {
+                if limits.isEmpty {
+                    Button {
+                        if isCodex {
+                            Task { await codex.refreshUsage() }
+                        } else if isAntigravity {
+                            Task { await antigravity.refreshUsage() }
+                        } else {
+                            monitor.refresh()
                         }
+                    } label: {
+                        let errText = isCodex ? (codex.usageError ?? "Codex usage…") : isAntigravity ? (antigravity.usageError ?? "Antigravity usage…") : (monitor.error ?? "Claude usage…")
+                        Text(errText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                    .frame(height: 3)
+                    .buttonStyle(.plain)
+                    .help(isCodex ? codex.usageError ?? "" : isAntigravity ? (antigravity.detail ?? antigravity.usageError ?? "") : (monitor.detail ?? ""))
                 }
-                .onHover { hovered = $0 ? limit.id : nil }
-                .help(limit.resetText)
+                ForEach(limits) { limit in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(hovered == limit.id ? limit.resetText : "\(limit.label) \(limit.percent)%")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(hovered == limit.id ? .primary : .secondary)
+                            .lineLimit(1)
+                            .fixedSize()
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(.quaternary)
+                                Capsule().fill(limit.tint)
+                                    .frame(width: geo.size.width * CGFloat(min(limit.percent, 100)) / 100)
+                            }
+                        }
+                        .frame(height: 3)
+                    }
+                    .onHover { hovered = $0 ? limit.id : nil }
+                    .help(limit.resetText)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -60,6 +86,13 @@ struct UsageView: View {
             guard isCodex else { return }
             while !Task.isCancelled {
                 await codex.refreshUsage()
+                try? await Task.sleep(for: .seconds(max(usageInterval, 30)))
+            }
+        }
+        .task(id: isAntigravity) {
+            guard isAntigravity else { return }
+            while !Task.isCancelled {
+                await antigravity.refreshUsage()
                 try? await Task.sleep(for: .seconds(max(usageInterval, 30)))
             }
         }
