@@ -50,10 +50,23 @@ enum Prefs {
     static let playAgent = "playAgent"
     /// What ▶ does for an agent with no saved conversation: "fresh" or "continue" (the folder's latest).
     static let startWithoutHistory = "startWithoutHistory"
+    /// Keep the Mac awake while agents work, lid closed included. Off by default.
+    static let keepAwake = "keepAwake"
+    /// Keep awake for at most this many seconds per period (default 3 hours).
+    static let keepAwakeLimit = "keepAwakeLimit"
+    /// Let the Mac sleep as soon as no agent is working. Off by default.
+    static let keepAwakeReleaseWhenDone = "keepAwakeReleaseWhenDone"
+    /// The current keep-awake period (KeepAwake), so a relaunch continues it.
+    static let keepAwakePeriod = "keepAwakePeriod"
+    /// The "your Mac slept while agents were working" banner was shown.
+    static let keepAwakeHintShown = "keepAwakeHintShown"
+    /// For testing only, not in Settings: a time limit in minutes that overrides keepAwakeLimit.
+    static let stayAwakeLimitMinutes = "stayAwakeLimitMinutes"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory]
+                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
+                      keepAwakeLimit, keepAwakeReleaseWhenDone]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -135,6 +148,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            KeepAwakeSettings()
             Section("Notifications") {
                 Toggle("When a session needs you", isOn: $notifyNeedsYou)
                 Toggle("When a session finishes", isOn: $notifyDone)
@@ -680,6 +694,8 @@ struct AppCommands: Commands {
             Button("Bigger") { Fonts.adjustSize(by: 1) }.keyboardShortcut("+")
             Button("Smaller") { Fonts.adjustSize(by: -1) }.keyboardShortcut("-")
             Button("Default Font Size") { Fonts.adjustSize(by: nil) }.keyboardShortcut("0")
+            Divider()
+            Button("Screen Off") { ScreenOff.shared.start() }
         }
         CommandMenu("Session") {
             Button("Rename") { store.renamingID = store.selectedTabID }.keyboardShortcut("r")
@@ -729,6 +745,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSUpdateDynamicServices()
         Notifier.shared.activate()
         _ = Updater.shared
+        KeepAwake.shared.start()
+        LidWatcher.shared.start()
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard Fonts.isBiggerKey(event.charactersIgnoringModifiers, event.modifierFlags) else { return event }
             Fonts.adjustSize(by: 1)
@@ -778,6 +796,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         store.prepareForTermination()
+        ScreenOff.shared.restoreBrightness()
+        KeepAwake.shared.shutdown()
         return .terminateNow
     }
 

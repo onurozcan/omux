@@ -48,6 +48,7 @@ omux turns that into a dashboard.
 | **Images and files in the prompt** | Paste an image or drop files onto the terminal, and the agent gets their paths as attachments. |
 | **Recent conversations** (⇧⌘O) | Claude Code's and Codex's recent conversations, reopened as sessions. |
 | **Usage limits** | The selected provider's plan limits at the bottom of the sidebar. |
+| **Keep awake** | The Mac stays awake while agents work, lid closed included, and stops on its own when it gets hot, the battery falls to 10% or the time limit passes. Off by default. |
 | **Open folders from anywhere** | Finder's "Open in omux", a folder dropped on the Dock icon, or `open -a omux <folder>`. |
 | **The rest** | Notifications with the macOS sound of your choice, themes, terminal fonts, a quick switcher (⌘K), signed automatic updates. |
 
