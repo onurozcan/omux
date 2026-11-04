@@ -38,6 +38,45 @@ cp .build/release/omux "$APP/Contents/MacOS/omux"
 # The `omux` command line tool, on the PATH of every session the app starts.
 mkdir -p "$APP/Contents/Resources/bin"
 cp .build/release/omux-cli "$APP/Contents/Resources/bin/omux"
+# The keep-awake helper, a launch daemon the app registers with SMAppService once Keep Awake is
+# turned on (see Sources/omux-awake). Its label is the bundle id plus ".awake".
+cp .build/release/omux-awake "$APP/Contents/MacOS/omux-awake"
+AWAKE_LABEL="$BUNDLE_ID.awake"
+mkdir -p "$APP/Contents/Library/LaunchDaemons"
+cat > "$APP/Contents/Library/LaunchDaemons/$AWAKE_LABEL.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>$AWAKE_LABEL</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/omux-awake</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>Contents/MacOS/omux-awake</string>
+		<string>$AWAKE_LABEL</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>$AWAKE_LABEL</key>
+		<true/>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<!-- Relaunched if it crashes, so its start-up reset turns sleep back on right away. -->
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>$BUNDLE_ID</string>
+	</array>
+</dict>
+</plist>
+PLIST
 cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleName $NAME" \
   -c "Set :NSServices:0:NSMenuItem:default Open in $NAME" -c "Set :NSServices:0:NSPortName $NAME" "$APP/Contents/Info.plist"
@@ -74,6 +113,7 @@ if [[ "$MODE" == "install" ]]; then
   IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}' || true)
   sign_sparkle "${IDENTITY:--}"
   codesign --force --sign "${IDENTITY:--}" "$APP/Contents/Resources/bin/omux" 2>&1 | without "replacing existing signature"
+  codesign --force --sign "${IDENTITY:--}" --identifier "$AWAKE_LABEL" "$APP/Contents/MacOS/omux-awake" 2>&1 | without "replacing existing signature"
   codesign --force --sign "${IDENTITY:--}" "$APP" 2>&1 | without "replacing existing signature"
   # Install to /Applications so Finder's "Open in omux" service and Dock stay registered.
   rm -rf "/Applications/$NAME.app"
@@ -106,6 +146,7 @@ fi
 # Hardened runtime and a secure timestamp are required for notarization.
 sign_sparkle "$IDENTITY" --options runtime --timestamp
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP/Contents/Resources/bin/omux"
+codesign --force --options runtime --timestamp --sign "$IDENTITY" --identifier "$AWAKE_LABEL" "$APP/Contents/MacOS/omux-awake"
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
 codesign --verify --strict --deep "$APP"
 
