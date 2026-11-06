@@ -4,11 +4,22 @@
 
 Written in Swift on SwiftTerm, no Electron, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
 
-![omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff](docs/screenshot.png)
+![omux with eight projects in the sidebar, a Claude Code conversation in the transcript view, a Codex session waiting on Allow or Deny, and the Changes panel showing a diff](docs/hero.png)
 
-![Scattered terminals pulled into one omux window, then arranged as panes](docs/panes.gif)
-
-Eight seconds of the [37-second tour](https://omux.app/#tour), or the [23-second version](https://omux.app/).
+<table>
+<tr>
+<td width="50%"><img src="docs/approval.png" alt="A Codex session asking to run npm outdated, with Allow and Deny in the transcript and in the sidebar"><br><sub>Every approval is a card. Allow or Deny from the transcript or the sidebar, or tell the agent what to do instead.</sub></td>
+<td width="50%"><img src="docs/codex.png" alt="A Codex session's reply with a code block, next to the file it changes"><br><sub>Codex replies stream in as they're written, with code blocks you can copy and files you can open.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/panes.png" alt="A Claude Code session and a Codex session side by side in one project, with the diff on the right"><br><sub>Sessions side by side: drop one onto another to split the pane.</sub></td>
+<td width="50%"><img src="docs/editor.png" alt="The Files panel editing server.ts next to the conversation, with ⌘S to save"><br><sub>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/picker.png" alt="The agent and model picker: Claude Code models and Codex models in one menu"><br><sub>Switch a session between Claude Code and Codex, or change the model, from the compose box. The conversation is handed over.</sub></td>
+<td width="50%"></td>
+</tr>
+</table>
 
 [**Download the latest release**](https://github.com/onurozcan/omux/releases/latest) · signed and notarized · Apple Silicon, macOS 14+
 

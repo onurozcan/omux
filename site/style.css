@@ -283,6 +283,10 @@ ul.plain li { margin-bottom: 0.45em; }
 .tour { padding: 24px 0 8px; }
 .tour h2 { text-align: center; margin: 0; }
 .tour .shot { margin-top: 24px; }
+.gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 24px; margin-top: 32px; }
+.gallery .shot { margin: 0; }
+.gallery .shot figcaption { text-align: left; }
+@media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
 
 /* Comparison pages: facts strip, "where the agent lives" diagram */
 .facts { list-style: none; margin: 0 0 2rem; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }

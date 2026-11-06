@@ -100,32 +100,37 @@
 
     <div class="container container-wide">
       <figure class="shot">
-        <video autoplay muted loop playsinline preload="metadata" poster="screenshot.png" width="1920" height="1080"
-               aria-label="omux in 23 seconds: many agents in one window, approvals from the sidebar, each session on its own branch, the diff with notes, sessions side by side">
-          <source src="video/omux-hype.webm" type="video/webm">
-          <source src="video/omux-hype.mp4" type="video/mp4">
-          <img
-            src="screenshot.png"
-            srcset="screenshot.png 1600w, screenshot@2x.png 2400w"
-            sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)"
-            width="1600" height="1043"
-            alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
-        </video>
-        <figcaption>omux in 23 seconds. <a href="#tour">Watch the 37-second tour</a>, from scattered terminals to one window.</figcaption>
+        <img src="shots/hero.png" srcset="shots/hero.png 1600w, shots/hero@2x.png 2400w" sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)" width="1600" height="985" alt="omux with eight projects in the sidebar, a Claude Code conversation in the transcript view, a Codex session waiting on Allow or Deny, and the Changes panel showing a diff">
+        <figcaption>Eight projects, one window. The transcript of a Claude Code session, a Codex session that needs you, and the diff. <a href="#tour">More screenshots</a>.</figcaption>
       </figure>
     </div>
   </section>
 
   <section id="tour" class="tour">
     <div class="container container-wide">
-      <h2>From scattered terminals to one window</h2>
-      <figure class="shot">
-        <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080"
-               aria-label="A 37-second tour of omux: the pain of scattered terminals, then projects, panes, approvals, agents, git, usage limits and the omux command">
-          <source src="video/omux-story.webm" type="video/webm">
-          <source src="video/omux-story.mp4" type="video/mp4">
-        </video>
-      </figure>
+      <h2>A closer look</h2>
+      <div class="gallery">
+        <figure class="shot">
+          <img src="shots/approval.png" srcset="shots/approval.png 1600w, shots/approval@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session asking to run npm outdated, with Allow and Deny in the transcript and in the sidebar">
+          <figcaption>Every approval is a card. Allow or Deny from the transcript or the sidebar, or tell the agent what to do instead.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/codex.png" srcset="shots/codex.png 1600w, shots/codex@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session's reply with a code block, next to the file it changes">
+          <figcaption>Codex replies stream in as they're written, with code blocks you can copy and files you can open.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/panes.png" srcset="shots/panes.png 1600w, shots/panes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Claude Code session and a Codex session side by side in one project, with the diff on the right">
+          <figcaption>Sessions side by side: drop one onto another to split the pane.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/editor.png" srcset="shots/editor.png 1600w, shots/editor@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The Files panel editing server.ts next to the conversation, with ⌘S to save">
+          <figcaption>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/picker.png" srcset="shots/picker.png 1600w, shots/picker@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The agent and model picker: Claude Code models and Codex models in one menu">
+          <figcaption>Switch a session between Claude Code and Codex, or change the model, from the compose box. The conversation is handed over.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
