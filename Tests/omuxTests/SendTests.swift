@@ -42,6 +42,14 @@ final class SendTests: XCTestCase {
         XCTAssertFalse(Store.showsDialog(["● pong7", "", "❯ "]))
     }
 
+    /// The agents animate a spinner in front of the title; the title is what comes after it.
+    func testSpinnersAreNotPartOfTheTitle() {
+        XCTAssertEqual(Store.cleanTitle("⠙ LocaleSwitcher review | acme-web"), "LocaleSwitcher review | acme-web")
+        XCTAssertEqual(Store.cleanTitle("✳ Settings i18n"), "Settings i18n")
+        XCTAssertEqual(Store.cleanTitle("Settings i18n"), "Settings i18n")
+        XCTAssertEqual(Store.cleanTitle("⋮ LocaleSwitcher review"), "LocaleSwitcher review")
+    }
+
     func testShellPathKeepsOrderAndDropsDuplicates() {
         XCTAssertEqual(ShellPath.joined(["/a", "", "/b", "/a", "/c"]), "/a:/b:/c")
         XCTAssertTrue(ShellPath.current.split(separator: ":").contains("/usr/bin"))

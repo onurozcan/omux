@@ -6,6 +6,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
+- **omux no longer redraws the window ten times a second while an agent works.** Claude Code and Codex animate a spinner in the terminal title; each frame counted as a title change and re-rendered everything. With a dozen sessions open that kept the app busy enough to stop answering Accessibility.
 - **Picking "default" in the permission-mode chip** cycled past it and landed back where it started: Claude Code's status line says nothing in the default mode, and the chip only knew the named ones.
 
 ## [0.10.0] - 2026-11-06

@@ -659,6 +659,15 @@ final class Store: ObservableObject {
         update(id) { $0.busy = busy }
     }
 
+    /// A terminal title without the spinner the agents animate in front of it.
+    nonisolated static func cleanTitle(_ title: String) -> String {
+        let spinners: Set<Character> = ["✢", "✳", "✶", "✻", "✽", "·", "⏺", "◐", "◓", "◑", "◒", "⋮"]
+        return String(title.drop { character in
+            character == " " || spinners.contains(character)
+                || character.unicodeScalars.first.map { (0x2800...0x28FF).contains($0.value) } == true
+        })
+    }
+
     /// Whether the session's shell runs a child process right now (the agent, a build, …).
     func shellHasChild(_ id: UUID) -> Bool {
         guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return false }
@@ -959,7 +968,11 @@ final class Store: ObservableObject {
         switch event {
         case .bell:
             if !isWatching(id) { update(id) { $0.needsAttention = true } }
-        case .title(let title):
+        case .title(let raw):
+            // Claude Code and Codex spin a glyph in the title while they work, ten times a
+            // second: not a change, and not worth a redraw of the window each time.
+            let title = Self.cleanTitle(raw)
+            guard runtime[id]?.title != title else { return }
             refreshBusy(id)
             // Claude Code rewrites the title as its state changes; treat that as activity.
             update(id) {
