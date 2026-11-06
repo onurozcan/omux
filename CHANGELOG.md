@@ -6,6 +6,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
+- **A subagent stopped with TaskStop no longer stays listed as running** under its session for half an hour. Claude Code never marks it finished; once the session is idle and lists no such child, omux shows it as done and drops it after the usual while.
 - **A refused /restart is done by omux.** Claude Code can't restart itself while Remote Control is connected; when it says so, omux exits it and resumes the conversation, as the message asks. Run /remote-control again afterwards.
 - **An attached image no longer stays in the compose box after sending** when the message went out later: once the agent was up, or once a dialog was answered.
 - **omux no longer redraws the window ten times a second while an agent works.** Claude Code and Codex animate a spinner in the terminal title; each frame counted as a title change and re-rendered everything. With a dozen sessions open that kept the app busy enough to stop answering Accessibility.

@@ -10,9 +10,9 @@ struct SubAgent: Identifiable, Equatable {
     let description: String
     let background: Bool
     let depth: Int
-    let finished: Bool
+    var finished: Bool
     let started: Date
-    let ended: Date?
+    var ended: Date?
     let transcript: URL
     var activity: String?
     var toolCount: Int
@@ -61,6 +61,8 @@ final class AgentMonitor: ObservableObject {
     private let queue = DispatchQueue(label: "omux.agents", qos: .utility)
     private var scanning = false
     private var timer: Timer?
+    /// When an agent without a "finished" mark was first seen with its session idle.
+    private var stopped: [String: Date] = [:]
 
     private init() {
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
@@ -73,6 +75,7 @@ final class AgentMonitor: ObservableObject {
         let store = Store.shared
         var sessions: [AgentScanner.Session] = []
         var children: [UUID: [TabRuntime.StatusChild]] = [:]
+        var working: Set<UUID> = []
         for entry in store.allTabs {
             guard store.provider(of: entry.tab) == .claude else { continue }
             let rt = store.runtime[entry.tab.id] ?? TabRuntime()
@@ -80,6 +83,7 @@ final class AgentMonitor: ObservableObject {
             guard active || agents[entry.tab.id] != nil else { continue }
             sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active))
             children[entry.tab.id] = rt.statusChildren
+            if rt.statusState == .working || rt.statusState == .blocked { working.insert(entry.tab.id) }
         }
         guard !sessions.isEmpty || !agents.isEmpty else { return }
         scanning = true
@@ -89,14 +93,27 @@ final class AgentMonitor: ObservableObject {
             DispatchQueue.main.async {
                 self.scanning = false
                 var result: [UUID: [SubAgent]] = [:]
+                let now = Date()
                 for (tab, list) in found {
-                    let blocked = (children[tab] ?? []).filter { $0.state == .blocked }
-                    result[tab] = list.map { agent in
+                    let kids = children[tab] ?? []
+                    let blocked = kids.filter { $0.state == .blocked }
+                    result[tab] = list.compactMap { agent in
                         var agent = agent
+                        // An agent stopped with TaskStop never writes "finished": once its
+                        // session is idle and Claude Code lists no such child, it's over.
+                        if !agent.finished, !working.contains(tab), !kids.contains(where: { Self.matches($0, agent) }) {
+                            let since = self.stopped[agent.id] ?? now
+                            self.stopped[agent.id] = since
+                            if now.timeIntervalSince(since) > AgentScanner.lingerForeground { return nil }
+                            agent.finished = true
+                            agent.ended = since
+                        }
                         agent.blocked = !agent.finished && blocked.contains { Self.matches($0, agent) }
                         return agent
                     }
+                    if result[tab]?.isEmpty == true { result[tab] = nil }
                 }
+                self.stopped = self.stopped.filter { now.timeIntervalSince($0.value) < 3600 }
                 if result != self.agents { self.agents = result }
             }
         }
