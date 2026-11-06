@@ -200,6 +200,8 @@ struct ComposeBox: View {
         .onChange(of: ComposeDrafts.version) { _, _ in
             let text = ComposeDrafts.text[tabID] ?? ""
             if text != draft { draft = text }
+            let files = ComposeDrafts.attachments[tabID] ?? []
+            if files != attachments { attachments = files }
         }
         .onChange(of: focused) { _, now in if now { onFocus() } }
         .onDisappear { if let pasteMonitor { NSEvent.removeMonitor(pasteMonitor) }; pasteMonitor = nil }
@@ -434,9 +436,9 @@ struct ComposeBox: View {
         let paths = attachments.map { $0.path.contains(" ") ? "\"\($0.path)\"" : $0.path }
         if !paths.isEmpty { text = (text.trimmingCharacters(in: .whitespacesAndNewlines) + " " + paths.joined(separator: " ")).trimmingCharacters(in: .whitespaces) }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // The panel clears the draft, attachments included, once the message went out; that
+        // may be now, or once the agent is up or a dialog answered.
         send(text)
-        // The panel clears the draft once the message went out; the attachments go with it.
-        if (ComposeDrafts.text[tabID] ?? "").isEmpty { attachments = []; ComposeDrafts.attachments[tabID] = nil }
     }
 
     private func saveSoon() {

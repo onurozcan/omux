@@ -214,6 +214,19 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(m.history, ["fix the build", "now the tests", "/model opus"])
     }
 
+    func testARefusedRestartAsksOmuxToRestartOnlyWhenItJustHappened() {
+        let m = model()
+        let command = object(#"{"type":"user","timestamp":"2026-11-06T19:45:38.743Z","message":{"role":"user","content":"<command-name>/restart</command-name>\n            <command-message>restart</command-message>\n            <command-args></command-args>"}}"#)
+        let refusal = object(#"{"type":"system","subtype":"local_command","timestamp":"2026-11-06T19:45:38.744Z","content":"<local-command-stdout>Can't restart while Remote Control is connected. To use the installed version, exit and start Claude Code again, then run /resume.</local-command-stdout>"}"#)
+        // Read back from the file at load: history, nothing to do.
+        m.ingest([command, refusal])
+        XCTAssertEqual(m.restartAsked, 0)
+        // The same refusal arriving live: omux restarts.
+        m.ingest([command, refusal])
+        XCTAssertEqual(m.restartAsked, 1)
+        XCTAssertTrue(m.blocks.last?.text.contains("omux restarted it") == true)
+    }
+
     func testRemoteControlStatusReplacesTheCommandNote() {
         let m = model()
         m.ingest([

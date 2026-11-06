@@ -88,6 +88,13 @@ struct TranscriptPanel: View {
             }
             .animation(.easeOut(duration: 0.15), value: pageReady)
                 .onAppear { if runtime.statusState == .working { workingSince = Date() } }
+                .onChange(of: model.restartAsked) { _, _ in
+                    // The user asked Claude Code to restart and it couldn't: omux does it, and the
+                    // saved conversation comes back as it was.
+                    guard provider == .claude, !(store.runtime[tabID]?.exited ?? true) else { return }
+                    store.restart(tabID)
+                    sendNotice = "Claude Code couldn't restart under Remote Control; omux restarted it. Run /remote-control to reconnect."
+                }
                 .onChange(of: runtime.agentConnected) { _, connected in
                     // Codex went away with a prompt still on its way: again once it's back
                     // from its self-update, else back into the box.
@@ -625,7 +632,7 @@ struct TranscriptPanel: View {
             held.append(text)
             model.echo(text, queued: true)
             model.remember(text)
-            ComposeDrafts.text[tabID] = ""; ComposeDrafts.version += 1; ComposeDrafts.save()
+            clearDraft()
             sendNotice = "Held until the dialog is answered"
             if runtime?.statusState != .blocked { releaseHeldWhenDialogGone() }
             return
@@ -742,7 +749,14 @@ struct TranscriptPanel: View {
         sendNotice = nil
         if isAgent, !text.hasPrefix("/") { model.echo(text, queued: store.runtime[tabID]?.statusState == .working) }
         model.remember(text)
+        clearDraft()
+    }
+
+    /// The message is out, or waiting its turn with its text already taken: the box empties,
+    /// attachments included, whichever way it went.
+    private func clearDraft() {
         ComposeDrafts.text[tabID] = ""
+        ComposeDrafts.attachments[tabID] = nil
         ComposeDrafts.version += 1
         ComposeDrafts.save()
     }

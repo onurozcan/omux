@@ -6,6 +6,8 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ### Fixed
 
+- **A refused /restart is done by omux.** Claude Code can't restart itself while Remote Control is connected; when it says so, omux exits it and resumes the conversation, as the message asks. Run /remote-control again afterwards.
+- **An attached image no longer stays in the compose box after sending** when the message went out later: once the agent was up, or once a dialog was answered.
 - **omux no longer redraws the window ten times a second while an agent works.** Claude Code and Codex animate a spinner in the terminal title; each frame counted as a title change and re-rendered everything. With a dozen sessions open that kept the app busy enough to stop answering Accessibility.
 - **Picking "default" in the permission-mode chip** cycled past it and landed back where it started: Claude Code's status line says nothing in the default mode, and the chip only knew the named ones.
 

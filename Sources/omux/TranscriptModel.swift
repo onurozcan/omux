@@ -149,6 +149,9 @@ final class SessionTranscript: ObservableObject {
     /// The file was long, so reading started partway through it.
     @Published private(set) var truncated = false
     @Published private(set) var notice: String?
+    /// Bumped when Claude Code refused a /restart because Remote Control is connected: omux
+    /// does the restart then, the way the message asks, and resumes the conversation.
+    @Published private(set) var restartAsked = 0
     /// The first read is done: what's in `blocks` is the conversation, not a conversation still loading.
     @Published private(set) var loaded = false
     /// When the latest prompt was sent and when the agent last wrote, for "worked for" durations.
@@ -617,6 +620,8 @@ final class SessionTranscript: ObservableObject {
             switch object["subtype"] as? String {
             case "compact_boundary": events.append(.note("Context compacted"))
             case "bridge_status": if let text = object["content"] as? String, !text.isEmpty { events.append(.bridge(text)) }
+            // What a slash command printed, the way Claude Code 2.1 records it.
+            case "local_command": if let text = object["content"] as? String, let out = element("local-command-stdout", in: text) { events.append(.commandOutput(out)) }
             default: break
             }
         default:
@@ -738,6 +743,10 @@ final class SessionTranscript: ObservableObject {
         case "resume": return "Resumed a conversation"
         default: return "Ran /\(name)" + (args.isEmpty ? "" : " " + args)
         }
+    }
+
+    nonisolated static func isRestartRefusal(_ output: String) -> Bool {
+        output.contains("Can't restart while Remote Control is connected")
     }
 
     /// The first line of a command's output, short enough for a note.
@@ -885,6 +894,15 @@ final class SessionTranscript: ObservableObject {
                    !list[index].text.hasPrefix("Model changed"), !list[index].text.hasPrefix("Effort changed") {
                     list[index].text = summary
                     touched.insert(index)
+                }
+                // Claude Code can't restart itself under Remote Control; omux can. Only for a
+                // refusal that just happened, not one read back from the file.
+                if Self.isRestartRefusal(output), loaded {
+                    if let index = commandNote, list.indices.contains(index) {
+                        list[index].text = "Claude Code can't restart itself while Remote Control is connected. omux restarted it and resumed the conversation; run /remote-control again to reconnect."
+                        touched.insert(index)
+                    }
+                    restartAsked += 1
                 }
                 commandNote = nil
             case .todos(let todos, let time):
@@ -1064,6 +1082,8 @@ final class SessionTranscript: ObservableObject {
     /// Feeds transcript records straight in, for tests and for anything that already has them.
     func ingest(_ objects: [[String: Any]]) {
         apply(objects.flatMap { Self.events(of: $0) })
+        // As after a file's first read: what comes next is live.
+        loaded = true
     }
 
     /// Shows an overview omux built from the agent's files, in place of the terminal dialog.
