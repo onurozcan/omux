@@ -283,8 +283,6 @@ final class Store: ObservableObject {
     /// A session dropped on `edge` of `target`'s pane: moved there if it's among the panes,
     /// otherwise added there from the sidebar. Only within one project.
     func dropSession(_ id: UUID, on target: UUID, edge: Edge) {
-        NSLog("[omux-drop] %@ on %@ edge=%@ canvas=%@", id.uuidString, target.uuidString, String(describing: edge),
-              layout(near: id).map { $0.ids.map(\.uuidString).joined(separator: ",") } ?? "none")
         guard let gid = group(containing: id)?.id, group(containing: target)?.id == gid else {
             Self.showError("Panes hold one project", "Sessions of different projects can't share the window.")
             return
