@@ -2,7 +2,7 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.10.0] - 2026-11-06
 
 ### Added
 
