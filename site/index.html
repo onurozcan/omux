@@ -3,29 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>omux – Claude Code and Codex sessions, side by side</title>
-  <meta name="description" content="omux is a native macOS terminal for running many Claude Code and Codex sessions side by side: projects, worktrees, live status, Allow/Deny from the sidebar, subagents, pull request status, and a files, changes and browser panel.">
+  <title>omux – The native agentic development platform for the Mac</title>
+  <meta name="description" content="omux is the native agentic development platform for the Mac: a 5 MB terminal that runs many Claude Code and Codex sessions side by side, with projects, worktrees, live status, Allow/Deny from the sidebar, subagents, pull request status, and a files, changes and browser panel.">
   <link rel="canonical" href="https://omux.app/">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/">
-  <meta property="og:title" content="omux – Claude Code and Codex sessions, side by side">
-  <meta property="og:description" content="A native macOS terminal for running many Claude Code and Codex sessions side by side. Projects, worktrees, live status, and Allow/Deny from the sidebar.">
+  <meta property="og:title" content="omux – The native agentic development platform for the Mac">
+  <meta property="og:description" content="The native agentic development platform for the Mac: a 5 MB terminal that runs many Claude Code and Codex sessions side by side, each on its own branch.">
   <meta property="og:image" content="https://omux.app/social-preview.png">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="640">
   <meta property="og:image:alt" content="The omux icon next to the app window with three sessions in a sidebar">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="omux – Claude Code and Codex sessions, side by side">
-  <meta name="twitter:description" content="A native macOS terminal for running many Claude Code and Codex sessions side by side.">
+  <meta name="twitter:title" content="omux – The native agentic development platform for the Mac">
+  <meta name="twitter:description" content="The native agentic development platform for the Mac: a 5 MB terminal for many Claude Code and Codex sessions side by side.">
   <meta name="twitter:image" content="https://omux.app/social-preview.png">
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 
   <script type="application/ld+json">
   {
@@ -81,8 +89,8 @@
 
   <section class="hero">
     <div class="container">
-      <h1>A native macOS terminal for running many Claude Code and Codex sessions side by side.</h1>
-      <p class="lede">Sessions are grouped into projects in a sidebar, each one keeps its conversation across relaunches, and each can run in its own Git worktree. See which session is working, which one is done and which one needs you, and answer Allow or Deny without switching to it.</p>
+      <h1>The agentic development platform that's a 5 MB Mac app.</h1>
+      <p class="lede">Run many Claude Code and Codex sessions side by side in one native terminal. See which one is working, which one is done and which one needs you, give each its own branch, and keep every conversation across relaunches. No Electron, no account, no telemetry.</p>
       <div class="cta-row">
         <a class="btn btn-primary btn-large" href="https://github.com/onurozcan/omux/releases/latest" data-download data-download-label>Download for macOS</a>
         <a class="btn btn-secondary btn-large" href="https://github.com/onurozcan/omux">View on GitHub</a>
@@ -274,6 +282,11 @@ open /Applications/omux.app</code></pre>
       <a href="/cmux-alternative">cmux alternative<span>Two native terminals for agents</span></a>
       <a href="/warp-alternative">Warp alternative<span>Your own agents, no platform</span></a>
       <a href="/herdr-alternative">herdr alternative<span>A window instead of a TUI</span></a>
+      <a href="/t3-code-alternative">T3 Code alternative<span>A terminal, not a control plane</span></a>
+      <a href="/vscode-alternative">VS Code alternative<span>Sessions without the editor</span></a>
+      <a href="/cursor-alternative">Cursor alternative<span>Your own agents, no credits</span></a>
+      <a href="/antigravity-alternative">Antigravity alternative<span>Keep Claude Code and Codex</span></a>
+      <a href="/devin-alternative">Devin alternative<span>Hands on, on your Mac</span></a>
     </div>
   </div>
 </section>
@@ -304,12 +317,12 @@ open /Applications/omux.app</code></pre>
       <a href="https://github.com/onurozcan/omux/blob/main/LICENSE">MIT license</a>
     </nav>
     <nav class="footer-links footer-compare" aria-label="Comparisons">
-      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a>
+      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a><a href="/t3-code-alternative">T3 Code alternative</a><a href="/vscode-alternative">VS Code alternative</a><a href="/cursor-alternative">Cursor alternative</a><a href="/antigravity-alternative">Antigravity alternative</a><a href="/devin-alternative">Devin alternative</a>
     </nav>
     <p class="fineprint">omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI.</p>
   </div>
 </footer>
 
-<script src="main.js"></script>
+<script src="main.js?v=2"></script>
 </body>
 </html>

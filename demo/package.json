@@ -10,7 +10,8 @@
     "render:hype": "remotion render src/index.ts OmuxHype out/omux-hype.mp4",
     "render:hype:webm": "remotion render src/index.ts OmuxHype out/omux-hype.webm --codec=vp8",
     "render:story": "remotion render src/index.ts OmuxStory out/omux-story.mp4",
-    "render:story:webm": "remotion render src/index.ts OmuxStory out/omux-story.webm --codec=vp8"
+    "render:story:webm": "remotion render src/index.ts OmuxStory out/omux-story.webm --codec=vp8",
+    "render:stars": "remotion render src/index.ts OmuxStars out/omux-stars.mp4"
   },
   "dependencies": {
     "@remotion/cli": "4.0.300",

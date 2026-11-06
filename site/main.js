@@ -45,3 +45,38 @@
       // Keep the static fallback.
     });
 })();
+
+// Reports Download and GitHub taps to Google Analytics as `download_click` and
+// `github_click`, with where on the page the link sits. No-op if the tag is
+// blocked or hasn't loaded.
+(function () {
+  function place(a) {
+    var el = a;
+    while (el && el !== document.body) {
+      if (el.tagName === "HEADER") return "header";
+      if (el.tagName === "FOOTER") return "footer";
+      if (el.id) return el.id;
+      if (el.classList && el.classList.contains("hero")) return "hero";
+      el = el.parentElement;
+    }
+    return "body";
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || typeof window.gtag !== "function") return;
+    var href = a.getAttribute("href") || "";
+    var name = null;
+    if (a.hasAttribute("data-download") || /github\.com\/onurozcan\/omux\/releases/.test(href) || /\.(dmg|zip)$/i.test(href)) {
+      name = "download_click";
+    } else if (/^https:\/\/github\.com\/onurozcan\/omux/.test(href)) {
+      name = "github_click";
+    }
+    if (!name) return;
+    window.gtag("event", name, {
+      link_url: a.href,
+      link_text: (a.textContent || "").trim().slice(0, 80),
+      placement: place(a),
+      page_path: location.pathname
+    });
+  });
+})();

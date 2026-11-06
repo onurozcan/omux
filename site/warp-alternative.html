@@ -8,6 +8,14 @@
   <link rel="canonical" href="https://omux.app/warp-alternative">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/warp-alternative">
@@ -17,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does omux include an AI agent?", "acceptedAnswer": {"@type": "Answer", "text": "No. It runs Claude Code and Codex, which you install and sign in to yourself. omux never sees your prompts or your API keys."}}, {"@type": "Question", "name": "Can omux run agents in the cloud?", "acceptedAnswer": {"@type": "Answer", "text": "No. Sessions run on your Mac. For cloud or scheduled agents, Warp and similar platforms are built for that."}}, {"@type": "Question", "name": "Is omux really free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's MIT-licensed and the app has no paid tier. Your only cost is the Claude or Codex plan you use with it."}}]}</script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "omux", "item": "https://omux.app/"}, {"@type": "ListItem", "position": 2, "name": "Warp alternative", "item": "https://omux.app/warp-alternative"}]}</script>
 </head>
@@ -62,10 +70,29 @@
 <div class="glance-row"><span class="glance-label">Free and open source</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
     </div>
 
+    <ul class="facts" aria-label="omux in numbers"><li><strong>5 MB</strong><span>native Swift app, no Electron</span></li><li><strong>0</strong><span>accounts, credits or telemetry</span></li><li><strong>6</strong><span>sessions side by side per project</span></li><li><strong>MIT</strong><span>free and open source</span></li></ul>
+
     <figure class="shot compare-shot">
       <img src="screenshot.png" srcset="screenshot.png 1600w, screenshot@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="987" loading="lazy" alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
       <figcaption>omux: projects and sessions on the left, the agent in the middle, its diff on the right. The session that needs you shows Allow and Deny.</figcaption>
     </figure>
+
+    <h2>Where the agent lives</h2>
+<div class="shape" aria-label="Where the agent lives">
+      <div class="shape-col shape-other">
+        <div class="shape-title">Warp</div>
+        <div class="shape-node">Warp terminal</div><div class="shape-arrow">↓</div><div class="shape-node">Warp's agent and cloud runs</div><div class="shape-arrow">↓</div><div class="shape-node">Warp account and credits</div>
+      </div>
+      <div class="shape-col shape-omux">
+        <div class="shape-title">omux</div>
+        <div class="shape-node">The native agentic development platform for the Mac, about 5 MB</div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-chips"><span class="chip"><i class="dot working"></i>Claude Code</span><span class="chip"><i class="dot needs"></i>Claude Code</span><span class="chip"><i class="dot working"></i>Codex</span><span class="chip"><i class="dot done"></i>Codex</span><span class="chip chip-shell">shell</span></div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-node">The real Claude Code and Codex, on your own plans</div>
+      </div>
+    </div>
+    <p class="shape-legend"><i class="dot working"></i> working <i class="dot needs"></i> needs you <i class="dot done"></i> done</p>
 
     <h2>Side by side</h2>
     <div class="table-wrap">
@@ -81,11 +108,20 @@
 <tr><th scope="row">Conversations after a restart</th><td>Each session resumes its exact conversation</td><td>Warp's own agent sessions persist; CLI agents depend on the agent</td></tr>
 <tr><th scope="row">Git worktrees and pull requests</th><td>One worktree per session, PR status, merge and clean up</td><td>Not a worktree manager</td></tr>
 <tr><th scope="row">Cloud and background agents</th><td><span class="mark no" aria-label="no">✕</span></td><td><span class="mark yes" aria-label="yes">✓</span> cloud runs, triggers from Slack, Linear and GitHub, factories</td></tr>
-<tr><th scope="row">Telemetry</th><td>None</td><td><span class="mark yes" aria-label="yes">✓</span> with settings</td></tr>
-<tr><th scope="row">Terminal features</th><td>Basic: one terminal per session</td><td>Rich: blocks, completions, command search, split panes</td></tr>
+<tr><th scope="row">Telemetry</th><td>None</td><td>Collected, with settings to limit it</td></tr>
+<tr><th scope="row">Terminal features</th><td>A terminal per session, split panes per project; no blocks or completions</td><td>Rich: blocks, completions, command search, split panes</td></tr>
       </tbody>
     </table>
     </div>
+
+    <h2>See omux in 37 seconds</h2>
+    <figure class="shot compare-shot">
+      <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080">
+        <source src="video/omux-story.webm" type="video/webm">
+        <source src="video/omux-story.mp4" type="video/mp4">
+      </video>
+      <figcaption>From scattered terminals to one window: projects, status, Allow and Deny, subagents, panes and pull requests.</figcaption>
+    </figure>
 
     <div class="split">
       <div class="card pick pick-other">
@@ -108,6 +144,8 @@
       <li>Git worktree per session, with pull request status and merge</li>
       <li>Files, Changes (diff with review notes) and Browser panels</li>
       <li>Claude and Codex plan usage limits in the sidebar</li>
+      <li>Split panes: up to six sessions side by side per project, layouts saved</li>
+      <li>An omux command line: list, status, send, new, close and wait on sessions</li>
       <li>macOS notifications with sound</li>
     </ul>
 
@@ -116,7 +154,7 @@
 <details><summary>Can omux run agents in the cloud?</summary><p>No. Sessions run on your Mac. For cloud or scheduled agents, Warp and similar platforms are built for that.</p></details>
 <details><summary>Is omux really free?</summary><p>Yes. It's MIT-licensed and the app has no paid tier. Your only cost is the Claude or Codex plan you use with it.</p></details>
 
-    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/cmux-alternative">cmux alternative</a>, <a href="/herdr-alternative">herdr alternative</a>. Facts about Warp come from its public documentation as of 2026-10-30; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
+    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/cmux-alternative">cmux alternative</a>, <a href="/herdr-alternative">herdr alternative</a>, <a href="/t3-code-alternative">T3 Code alternative</a>, <a href="/vscode-alternative">VS Code alternative</a>, <a href="/cursor-alternative">Cursor alternative</a>, <a href="/antigravity-alternative">Antigravity alternative</a>, <a href="/devin-alternative">Devin alternative</a>. Facts about Warp come from its public documentation as of 2026-11-03; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
   </div>
 </main>
 
@@ -130,11 +168,11 @@
       <a href="https://github.com/onurozcan/omux/blob/main/LICENSE">MIT license</a>
     </nav>
     <nav class="footer-links footer-compare" aria-label="Comparisons">
-      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/herdr-alternative">herdr alternative</a>
+      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/herdr-alternative">herdr alternative</a><a href="/t3-code-alternative">T3 Code alternative</a><a href="/vscode-alternative">VS Code alternative</a><a href="/cursor-alternative">Cursor alternative</a><a href="/antigravity-alternative">Antigravity alternative</a><a href="/devin-alternative">Devin alternative</a>
     </nav>
-    <p class="fineprint">omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-10-30 and may be out of date.</p>
+    <p class="fineprint">omux is the native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-11-03 and may be out of date.</p>
   </div>
 </footer>
-<script src="main.js" defer></script>
+<script src="main.js?v=2" defer></script>
 </body>
 </html>

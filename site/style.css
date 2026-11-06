@@ -283,3 +283,25 @@ ul.plain li { margin-bottom: 0.45em; }
 .tour { padding: 24px 0 8px; }
 .tour h2 { text-align: center; margin: 0; }
 .tour .shot { margin-top: 24px; }
+
+/* Comparison pages: facts strip, "where the agent lives" diagram */
+.facts { list-style: none; margin: 0 0 2rem; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.facts li { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 0.9rem 1rem; }
+.facts strong { display: block; font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); line-height: 1.1; }
+.facts span { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; line-height: 1.35; }
+.shape { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 0.6rem; }
+.shape-col { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 1rem; }
+.shape-omux { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.shape-title { font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.8rem; }
+.shape-omux .shape-title { color: var(--accent); }
+.shape-node { border: 1px solid var(--border-strong); border-radius: 10px; padding: 0.55rem 0.8rem; font-size: 0.92rem; background: var(--surface-2); text-align: center; line-height: 1.4; }
+.shape-arrow { text-align: center; color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+.shape-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.chip { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 0.78rem; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg); white-space: nowrap; }
+.chip-shell { color: var(--muted); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.dot.working { background: #4ade80; } .dot.needs { background: #fbbf24; } .dot.done { background: #60a5fa; }
+.shape-legend { color: var(--muted); font-size: 0.82rem; margin: 0 0 1rem; }
+.shape-legend .dot { margin-left: 10px; } .shape-legend .dot:first-child { margin-left: 0; }
+.compare-shot video { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border-strong); background: #000; }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, 1fr); } .shape { grid-template-columns: 1fr; } }

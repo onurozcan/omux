@@ -8,6 +8,14 @@
   <link rel="canonical" href="https://omux.app/cmux-alternative">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/cmux-alternative">
@@ -17,8 +25,8 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=7">
-  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Which is more mature?", "acceptedAnswer": {"@type": "Answer", "text": "cmux has a broader feature set and a larger community. omux is newer and focused; check both changelogs and pick the one whose direction matches how you work."}}, {"@type": "Question", "name": "Can omux read Ghostty themes?", "acceptedAnswer": {"@type": "Answer", "text": "No. omux has its own themes and font settings. cmux reads your Ghostty configuration."}}, {"@type": "Question", "name": "Does omux have a CLI?", "acceptedAnswer": {"@type": "Answer", "text": "Not beyond open -a omux <folder>. If you need to script your terminal, cmux is the better fit today."}}]}</script>
+  <link rel="stylesheet" href="style.css?v=8">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Which is more mature?", "acceptedAnswer": {"@type": "Answer", "text": "cmux has a broader feature set and a larger community. omux is newer and focused; check both changelogs and pick the one whose direction matches how you work."}}, {"@type": "Question", "name": "Can omux read Ghostty themes?", "acceptedAnswer": {"@type": "Answer", "text": "No. omux has its own themes and font settings. cmux reads your Ghostty configuration."}}, {"@type": "Question", "name": "Does omux have a CLI?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, since 0.9: omux list, status, screen, send, new, close and wait, over a per-launch Unix socket. It is scoped: a session can only steer sessions it started, and the whole thing can be switched off in Settings."}}]}</script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "omux", "item": "https://omux.app/"}, {"@type": "ListItem", "position": 2, "name": "cmux alternative", "item": "https://omux.app/cmux-alternative"}]}</script>
 </head>
 <body>
@@ -57,16 +65,35 @@
 <div class="glance-row"><span class="glance-label">Allow/Deny buttons</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
 <div class="glance-row"><span class="glance-label">Subagent transcripts</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
 <div class="glance-row"><span class="glance-label">Worktrees with PR merge and cleanup</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
-<div class="glance-row"><span class="glance-label">Split panes</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Split panes</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
 <div class="glance-row"><span class="glance-label">SSH workspaces</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
-<div class="glance-row"><span class="glance-label">CLI and socket API</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">CLI and socket API</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
 <div class="glance-row"><span class="glance-label">Free and open source</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
     </div>
+
+    <ul class="facts" aria-label="omux in numbers"><li><strong>5 MB</strong><span>native Swift app, no Electron</span></li><li><strong>0</strong><span>accounts, credits or telemetry</span></li><li><strong>6</strong><span>sessions side by side per project</span></li><li><strong>MIT</strong><span>free and open source</span></li></ul>
 
     <figure class="shot compare-shot">
       <img src="screenshot.png" srcset="screenshot.png 1600w, screenshot@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="987" loading="lazy" alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
       <figcaption>omux: projects and sessions on the left, the agent in the middle, its diff on the right. The session that needs you shows Allow and Deny.</figcaption>
     </figure>
+
+    <h2>Where the agent lives</h2>
+<div class="shape" aria-label="Where the agent lives">
+      <div class="shape-col shape-other">
+        <div class="shape-title">cmux</div>
+        <div class="shape-node">Native Mac window on libghostty</div><div class="shape-arrow">↓</div><div class="shape-node">Workspaces, splits and notifications</div><div class="shape-arrow">↓</div><div class="shape-node">Your own agents</div>
+      </div>
+      <div class="shape-col shape-omux">
+        <div class="shape-title">omux</div>
+        <div class="shape-node">The native agentic development platform for the Mac, about 5 MB</div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-chips"><span class="chip"><i class="dot working"></i>Claude Code</span><span class="chip"><i class="dot needs"></i>Claude Code</span><span class="chip"><i class="dot working"></i>Codex</span><span class="chip"><i class="dot done"></i>Codex</span><span class="chip chip-shell">shell</span></div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-node">The real Claude Code and Codex, on your own plans</div>
+      </div>
+    </div>
+    <p class="shape-legend"><i class="dot working"></i> working <i class="dot needs"></i> needs you <i class="dot done"></i> done</p>
 
     <h2>Side by side</h2>
     <div class="table-wrap">
@@ -83,23 +110,32 @@
 <tr><th scope="row">Pull requests</th><td>PR status per worktree session, create, merge, clean up</td><td>PR status shown in the sidebar</td></tr>
 <tr><th scope="row">Side panels</th><td>Files, Changes (diff with review notes sent to the agent) and Browser</td><td>In-app browser with a scriptable automation API</td></tr>
 <tr><th scope="row">Usage limits</th><td>Claude and Codex plan limits in the sidebar</td><td><span class="mark no" aria-label="no">✕</span></td></tr>
-<tr><th scope="row">Split panes</th><td><span class="mark no" aria-label="no">✕</span></td><td><span class="mark yes" aria-label="yes">✓</span> right and down</td></tr>
+<tr><th scope="row">Split panes</th><td><span class="mark yes" aria-label="yes">✓</span> split right and down on a per-project canvas, dividerless, layouts saved</td><td><span class="mark yes" aria-label="yes">✓</span> right and down</td></tr>
 <tr><th scope="row">Remote machines over SSH</th><td><span class="mark no" aria-label="no">✕</span></td><td><span class="mark yes" aria-label="yes">✓</span> cmux ssh</td></tr>
-<tr><th scope="row">Scripting</th><td><span class="mark no" aria-label="no">✕</span></td><td>CLI and Unix socket API</td></tr>
+<tr><th scope="row">Scripting</th><td><span class="mark yes" aria-label="yes">✓</span> omux CLI over a local socket, scoped so an agent can only steer sessions it started</td><td>CLI and Unix socket API</td></tr>
 <tr><th scope="row">Updates</th><td>In-app, signed, notarized</td><td>In-app via Sparkle, DMG and Homebrew</td></tr>
 <tr><th scope="row">License</th><td>MIT</td><td>GPL-3.0 for the app</td></tr>
       </tbody>
     </table>
     </div>
 
+    <h2>See omux in 37 seconds</h2>
+    <figure class="shot compare-shot">
+      <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080">
+        <source src="video/omux-story.webm" type="video/webm">
+        <source src="video/omux-story.mp4" type="video/mp4">
+      </video>
+      <figcaption>From scattered terminals to one window: projects, status, Allow and Deny, subagents, panes and pull requests.</figcaption>
+    </figure>
+
     <div class="split">
       <div class="card pick pick-other">
         <h2><span class="pick-icon" aria-hidden="true">→</span> Pick cmux if</h2>
-        <ul><li>You want split panes, SSH workspaces, or a terminal you can script from the outside.</li><li>You already use Ghostty and want its rendering and config.</li><li>You run agents beyond Claude Code and Codex and want them all treated the same way.</li></ul>
+        <ul><li>You want SSH workspaces, a browser automation API, or Ghostty rendering.</li><li>You already use Ghostty and want its rendering and config.</li><li>You run agents beyond Claude Code and Codex and want them all treated the same way.</li></ul>
       </div>
       <div class="card pick pick-omux">
         <h2><span class="pick-icon" aria-hidden="true">★</span> Pick omux if</h2>
-        <ul><li>Your sessions are Claude Code and Codex, and you want status, permissions and subagents read from the agents themselves rather than from notifications.</li><li>You want a worktree per session with the pull request's state, the diff and review notes right there.</li><li>You like a smaller, MIT-licensed app with no scripting surface to think about.</li></ul>
+        <ul><li>Your sessions are Claude Code and Codex, and you want status, permissions and subagents read from the agents themselves rather than from notifications.</li><li>You want a worktree per session with the pull request's state, the diff and review notes right there.</li><li>You like a smaller, MIT-licensed app whose CLI is scoped so agents can only touch what they started.</li></ul>
       </div>
     </div>
 
@@ -113,15 +149,17 @@
       <li>Git worktree per session, with pull request status and merge</li>
       <li>Files, Changes (diff with review notes) and Browser panels</li>
       <li>Claude and Codex plan usage limits in the sidebar</li>
+      <li>Split panes: up to six sessions side by side per project, layouts saved</li>
+      <li>An omux command line: list, status, send, new, close and wait on sessions</li>
       <li>macOS notifications with sound</li>
     </ul>
 
     <h2>Questions</h2>
 <details><summary>Which is more mature?</summary><p>cmux has a broader feature set and a larger community. omux is newer and focused; check both changelogs and pick the one whose direction matches how you work.</p></details>
 <details><summary>Can omux read Ghostty themes?</summary><p>No. omux has its own themes and font settings. cmux reads your Ghostty configuration.</p></details>
-<details><summary>Does omux have a CLI?</summary><p>Not beyond open -a omux &lt;folder&gt;. If you need to script your terminal, cmux is the better fit today.</p></details>
+<details><summary>Does omux have a CLI?</summary><p>Yes, since 0.9: omux list, status, screen, send, new, close and wait, over a per-launch Unix socket. It is scoped: a session can only steer sessions it started, and the whole thing can be switched off in Settings.</p></details>
 
-    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/warp-alternative">Warp alternative</a>, <a href="/herdr-alternative">herdr alternative</a>. Facts about cmux come from its public documentation as of 2026-10-30; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
+    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/warp-alternative">Warp alternative</a>, <a href="/herdr-alternative">herdr alternative</a>, <a href="/t3-code-alternative">T3 Code alternative</a>, <a href="/vscode-alternative">VS Code alternative</a>, <a href="/cursor-alternative">Cursor alternative</a>, <a href="/antigravity-alternative">Antigravity alternative</a>, <a href="/devin-alternative">Devin alternative</a>. Facts about cmux come from its public documentation as of 2026-11-03; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
   </div>
 </main>
 
@@ -135,11 +173,11 @@
       <a href="https://github.com/onurozcan/omux/blob/main/LICENSE">MIT license</a>
     </nav>
     <nav class="footer-links footer-compare" aria-label="Comparisons">
-      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a>
+      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a><a href="/t3-code-alternative">T3 Code alternative</a><a href="/vscode-alternative">VS Code alternative</a><a href="/cursor-alternative">Cursor alternative</a><a href="/antigravity-alternative">Antigravity alternative</a><a href="/devin-alternative">Devin alternative</a>
     </nav>
-    <p class="fineprint">omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-10-30 and may be out of date.</p>
+    <p class="fineprint">omux is the native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-11-03 and may be out of date.</p>
   </div>
 </footer>
-<script src="main.js" defer></script>
+<script src="main.js?v=2" defer></script>
 </body>
 </html>

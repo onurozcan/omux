@@ -4,10 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Changelog – omux</title>
-  <meta name="description" content="What changed in each omux release.">
+  <meta name="description" content="What changed in each release of omux, the native agentic development platform for the Mac.">
   <link rel="canonical" href="https://omux.app/changelog">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/changelog">
@@ -17,7 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -41,11 +49,25 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
+<article class="release" id="vUnreleased">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#vUnreleased">Unreleased</a></h2>
+    <span class="badge badge-latest">Latest</span>
+    <p></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/vUnreleased">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+<li class="entry"><span class="chip chip-added">Added</span><div class="entry-text"><strong>Session links.</strong> <code>omux://reveal?tab=&lt;id&gt;</code> brings a session forward, so notifications and agent monitors in other apps can take you to it. A session can also be found by its Claude Code session id or Codex thread id. A link only selects a session.</div></li>
+</ul>
+  </div>
+</article>
 <article class="release" id="v0.9.1">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
     <h2><a href="#v0.9.1">0.9.1</a></h2>
-    <span class="badge badge-latest">Latest</span>
+    
     <p><time datetime="2026-11-01">November 1, 2026</time></p>
     <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.9.1">Release on GitHub</a></p>
   </div>
@@ -292,6 +314,6 @@
     <p class="fineprint">omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI.</p>
   </div>
 </footer>
-<script src="main.js" defer></script>
+<script src="main.js?v=2" defer></script>
 </body>
 </html>

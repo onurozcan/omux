@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Devin alternative: omux, a native Mac app for your own Claude Code and Codex</title>
+  <meta name="description" content="Devin alternative for hands-on agent work: omux is a free, MIT-licensed native macOS app that runs Claude Code and Codex sessions side by side, with live status, Allow/Deny buttons, subagents, split panes and worktrees. Where Devin&#x27;s cloud engineer, Slack handoff and Devin Desktop win, and where omux is better.">
+  <link rel="canonical" href="https://omux.app/devin-alternative">
+  <meta name="theme-color" content="#0F0F0F">
+  <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="omux">
+  <meta property="og:url" content="https://omux.app/devin-alternative">
+  <meta property="og:title" content="Devin alternative: omux, a native Mac app for your own Claude Code and Codex">
+  <meta property="og:description" content="Devin alternative for hands-on agent work: omux is a free, MIT-licensed native macOS app that runs Claude Code and Codex sessions side by side, with live status, Allow/Deny buttons, subagents, split panes and worktrees. Where Devin&#x27;s cloud engineer, Slack handoff and Devin Desktop win, and where omux is better.">
+  <meta property="og:image" content="https://omux.app/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=8">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is omux an autonomous engineer?", "acceptedAnswer": {"@type": "Answer", "text": "No. It's the window you run your own agents in. Claude Code and Codex do the work; omux shows their status, permissions, subagents, diffs and pull requests, and keeps every session's conversation across relaunches."}}, {"@type": "Question", "name": "Can I use omux and Devin together?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Many people hand well-specified tasks to a cloud agent and keep interactive work local. They don't overlap."}}, {"@type": "Question", "name": "Does omux upload my code anywhere?", "acceptedAnswer": {"@type": "Answer", "text": "No. omux has no server and no telemetry. The agents talk to their own providers as they would in any terminal."}}]}</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "omux", "item": "https://omux.app/"}, {"@type": "ListItem", "position": 2, "name": "Devin alternative", "item": "https://omux.app/devin-alternative"}]}</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="omux home">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <span>omux</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="/#features">Features</a>
+      <a href="/#install">Install</a>
+      <a href="https://github.com/onurozcan/omux">GitHub</a>
+      <a class="btn btn-small btn-primary" href="https://github.com/onurozcan/omux/releases/latest" data-download>Download</a>
+    </nav>
+  </div>
+</header>
+
+<main class="section compare">
+  <div class="container narrow">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">omux</a> › Devin alternative</nav>
+    <h1>Devin alternative: run your own agents on your Mac, in the open</h1>
+<p class="lede">Devin from Cognition is an autonomous software engineer. You assign it a task from chat, Slack, Linear, Jira or GitHub, it works on its own cloud machine and comes back with a pull request. Since the Windsurf acquisition it also ships Devin Desktop, an editor, with a free tier, paid plans and team seats.</p>
+<p class="lede">omux is the hands-on end of the spectrum. The Claude Code and Codex sessions run on your Mac, in your checkout, and you watch, answer and steer them in a sidebar that shows which one needs you. Nothing leaves your machine except what the agents themselves send. This page is for deciding how much of the loop you want to hold.</p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/onurozcan/omux/releases/latest" data-download>Download omux for macOS</a>
+      <a class="btn btn-secondary" href="https://devin.ai" rel="nofollow noopener">About Devin</a>
+    </div>
+
+<div class="glance" role="table" aria-label="At a glance">
+      <div class="glance-row glance-head" role="row"><span class="glance-label">At a glance</span><span>omux</span><span>Devin</span></div>
+<div class="glance-row"><span class="glance-label">Runs on your Mac, code stays local</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
+<div class="glance-row"><span class="glance-label">No account</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+<div class="glance-row"><span class="glance-label">Runs your own Claude Code and Codex</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+<div class="glance-row"><span class="glance-label">Agent status and Allow/Deny</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
+<div class="glance-row"><span class="glance-label">Split panes</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+<div class="glance-row"><span class="glance-label">Keeps working when your laptop is closed</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Start tasks from Slack or Linear</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Worktrees and pull requests</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Free and open source</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+    </div>
+
+    <ul class="facts" aria-label="omux in numbers"><li><strong>5 MB</strong><span>native Swift app, no Electron</span></li><li><strong>0</strong><span>accounts, credits or telemetry</span></li><li><strong>6</strong><span>sessions side by side per project</span></li><li><strong>MIT</strong><span>free and open source</span></li></ul>
+
+    <figure class="shot compare-shot">
+      <img src="screenshot.png" srcset="screenshot.png 1600w, screenshot@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="987" loading="lazy" alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
+      <figcaption>omux: projects and sessions on the left, the agent in the middle, its diff on the right. The session that needs you shows Allow and Deny.</figcaption>
+    </figure>
+
+    <h2>Where the agent lives</h2>
+<div class="shape" aria-label="Where the agent lives">
+      <div class="shape-col shape-other">
+        <div class="shape-title">Devin</div>
+        <div class="shape-node">Slack, Linear, GitHub or Devin Desktop</div><div class="shape-arrow">↓</div><div class="shape-node">Devin on Cognition's cloud machines</div><div class="shape-arrow">↓</div><div class="shape-node">Cognition account and plan</div>
+      </div>
+      <div class="shape-col shape-omux">
+        <div class="shape-title">omux</div>
+        <div class="shape-node">The native agentic development platform for the Mac, about 5 MB</div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-chips"><span class="chip"><i class="dot working"></i>Claude Code</span><span class="chip"><i class="dot needs"></i>Claude Code</span><span class="chip"><i class="dot working"></i>Codex</span><span class="chip"><i class="dot done"></i>Codex</span><span class="chip chip-shell">shell</span></div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-node">The real Claude Code and Codex, on your own plans</div>
+      </div>
+    </div>
+    <p class="shape-legend"><i class="dot working"></i> working <i class="dot needs"></i> needs you <i class="dot done"></i> done</p>
+
+    <h2>Side by side</h2>
+    <div class="table-wrap">
+    <table class="compare-table">
+      <thead><tr><th scope="col"></th><th scope="col">omux</th><th scope="col">Devin</th></tr></thead>
+      <tbody>
+<tr><th scope="row">What it is</th><td>A session manager for Claude Code and Codex on your Mac</td><td>A cloud software engineer, plus an editor (Devin Desktop)</td></tr>
+<tr><th scope="row">Where the agent runs</th><td>On your Mac, in your checkout</td><td>Devin's cloud machines, or locally in Devin Desktop</td></tr>
+<tr><th scope="row">Whose agent</th><td>Claude Code and Codex, with their own logins</td><td>Devin, on frontier and open models chosen in the app</td></tr>
+<tr><th scope="row">Account and billing</th><td>None; you pay only your Claude or Codex plan</td><td>Cognition account; free tier, Pro, Max, Teams and Enterprise</td></tr>
+<tr><th scope="row">Start a task</th><td>Type in the terminal, or use the omux CLI</td><td>Chat, Slack, Linear, Jira or GitHub</td></tr>
+<tr><th scope="row">Many agents at once</th><td><span class="mark yes" aria-label="yes">✓</span> sessions under projects, split panes per project</td><td><span class="mark yes" aria-label="yes">✓</span> parallel cloud sessions, up to a plan limit</td></tr>
+<tr><th scope="row">Agent status</th><td>Working, needs you, done, from the agents' own signals</td><td>A session list with progress in Devin's app</td></tr>
+<tr><th scope="row">Answer a permission prompt</th><td>Allow and Deny from the sidebar</td><td>Devin asks in its chat when unsure</td></tr>
+<tr><th scope="row">Subagents</th><td>Listed under the session with transcripts</td><td>Not exposed</td></tr>
+<tr><th scope="row">Worktrees and pull requests</th><td>One worktree per session, PR status, merge and clean up</td><td>Devin opens the pull request from its machine</td></tr>
+<tr><th scope="row">Code review</th><td>Changes panel with notes sent to the agent</td><td>Review the PR on GitHub; Devin can review too</td></tr>
+<tr><th scope="row">Works while you're away</th><td>Sessions run as long as your Mac and omux are open</td><td><span class="mark yes" aria-label="yes">✓</span> cloud sessions continue</td></tr>
+<tr><th scope="row">Editing code</th><td><span class="mark no" aria-label="no">✕</span></td><td>Devin Desktop</td></tr>
+<tr><th scope="row">Price and license</th><td>Free, MIT</td><td>Proprietary; free tier and paid plans from about $20 a month</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2>See omux in 37 seconds</h2>
+    <figure class="shot compare-shot">
+      <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080">
+        <source src="video/omux-story.webm" type="video/webm">
+        <source src="video/omux-story.mp4" type="video/mp4">
+      </video>
+      <figcaption>From scattered terminals to one window: projects, status, Allow and Deny, subagents, panes and pull requests.</figcaption>
+    </figure>
+
+    <div class="split">
+      <div class="card pick pick-other">
+        <h2><span class="pick-icon" aria-hidden="true">→</span> Pick Devin if</h2>
+        <ul><li>You want to hand off tasks from Slack or an issue tracker and get a pull request back without watching.</li><li>You want agents on cloud machines that keep going when your laptop is closed.</li><li>Your team wants one managed platform with seats, admin controls and analytics.</li></ul>
+      </div>
+      <div class="card pick pick-omux">
+        <h2><span class="pick-icon" aria-hidden="true">★</span> Pick omux if</h2>
+        <ul><li>You want to steer the work as it happens, in the terminal, with the diff beside the agent.</li><li>You already pay for Claude Code or Codex and don't want a second platform or account.</li><li>You want the code to stay on your machine, and the tool to be free and open source.</li></ul>
+      </div>
+    </div>
+
+    <h2>What omux does for every session</h2>
+    <ul class="checklist">
+      <li>Projects with sessions under them, in a sidebar</li>
+      <li>Shows whether each agent is working, needs you or is done</li>
+      <li>Allow or Deny an agent's permission request without switching to it</li>
+      <li>Lists a session's subagents and opens their transcripts</li>
+      <li>Resumes each Claude Code and Codex conversation after a relaunch</li>
+      <li>Git worktree per session, with pull request status and merge</li>
+      <li>Files, Changes (diff with review notes) and Browser panels</li>
+      <li>Claude and Codex plan usage limits in the sidebar</li>
+      <li>Split panes: up to six sessions side by side per project, layouts saved</li>
+      <li>An omux command line: list, status, send, new, close and wait on sessions</li>
+      <li>macOS notifications with sound</li>
+    </ul>
+
+    <h2>Questions</h2>
+<details><summary>Is omux an autonomous engineer?</summary><p>No. It's the window you run your own agents in. Claude Code and Codex do the work; omux shows their status, permissions, subagents, diffs and pull requests, and keeps every session's conversation across relaunches.</p></details>
+<details><summary>Can I use omux and Devin together?</summary><p>Yes. Many people hand well-specified tasks to a cloud agent and keep interactive work local. They don't overlap.</p></details>
+<details><summary>Does omux upload my code anywhere?</summary><p>No. omux has no server and no telemetry. The agents talk to their own providers as they would in any terminal.</p></details>
+
+    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/cmux-alternative">cmux alternative</a>, <a href="/warp-alternative">Warp alternative</a>, <a href="/herdr-alternative">herdr alternative</a>, <a href="/t3-code-alternative">T3 Code alternative</a>, <a href="/vscode-alternative">VS Code alternative</a>, <a href="/cursor-alternative">Cursor alternative</a>, <a href="/antigravity-alternative">Antigravity alternative</a>. Facts about Devin come from its public documentation as of 2026-11-03; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="https://github.com/onurozcan/omux">GitHub</a>
+      <a href="https://github.com/onurozcan/omux/releases">Releases</a>
+      <a href="/changelog">Changelog</a>
+      <a href="https://github.com/onurozcan/omux/issues">Issues</a>
+      <a href="https://github.com/onurozcan/omux/blob/main/LICENSE">MIT license</a>
+    </nav>
+    <nav class="footer-links footer-compare" aria-label="Comparisons">
+      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a><a href="/t3-code-alternative">T3 Code alternative</a><a href="/vscode-alternative">VS Code alternative</a><a href="/cursor-alternative">Cursor alternative</a><a href="/antigravity-alternative">Antigravity alternative</a>
+    </nav>
+    <p class="fineprint">omux is the native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-11-03 and may be out of date.</p>
+  </div>
+</footer>
+<script src="main.js?v=2" defer></script>
+</body>
+</html>

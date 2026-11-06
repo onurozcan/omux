@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T3 Code alternative: omux, a native Mac app for Claude Code and Codex sessions</title>
+  <meta name="description" content="T3 Code alternative for running coding agents: omux is a 5 MB native macOS app that keeps Claude Code and Codex sessions in a sidebar with live status, Allow/Deny buttons, subagents, split panes, worktrees and pull request status. Where T3 Code&#x27;s mobile apps and branch-per-thread flow win, and where omux is better.">
+  <link rel="canonical" href="https://omux.app/t3-code-alternative">
+  <meta name="theme-color" content="#0F0F0F">
+  <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="omux">
+  <meta property="og:url" content="https://omux.app/t3-code-alternative">
+  <meta property="og:title" content="T3 Code alternative: omux, a native Mac app for Claude Code and Codex sessions">
+  <meta property="og:description" content="T3 Code alternative for running coding agents: omux is a 5 MB native macOS app that keeps Claude Code and Codex sessions in a sidebar with live status, Allow/Deny buttons, subagents, split panes, worktrees and pull request status. Where T3 Code&#x27;s mobile apps and branch-per-thread flow win, and where omux is better.">
+  <meta property="og:image" content="https://omux.app/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=8">
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is T3 Code a terminal?", "acceptedAnswer": {"@type": "Answer", "text": "Not primarily. It talks to agents through their SDKs and shows each task as a thread, with a terminal available when you need one. omux is the other way round: every session is a terminal first, with the sidebar and panels built around it."}}, {"@type": "Question", "name": "Can I use omux and T3 Code together?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. They don't interfere, since each starts its own agent processes. Many people keep a desktop tool for focused work and a phone app for checking in."}}, {"@type": "Question", "name": "Which one is more mature?", "acceptedAnswer": {"@type": "Answer", "text": "T3 Code has the larger community and ships often, and its own site says to expect bugs. omux is a younger, smaller project with a narrower scope. Read both changelogs and pick the one whose direction matches your work."}}]}</script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "omux", "item": "https://omux.app/"}, {"@type": "ListItem", "position": 2, "name": "T3 Code alternative", "item": "https://omux.app/t3-code-alternative"}]}</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="omux home">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <span>omux</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary">
+      <a href="/#features">Features</a>
+      <a href="/#install">Install</a>
+      <a href="https://github.com/onurozcan/omux">GitHub</a>
+      <a class="btn btn-small btn-primary" href="https://github.com/onurozcan/omux/releases/latest" data-download>Download</a>
+    </nav>
+  </div>
+</header>
+
+<main class="section compare">
+  <div class="container narrow">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">omux</a> › T3 Code alternative</nav>
+    <h1>T3 Code alternative: a native Mac terminal instead of a control plane</h1>
+<p class="lede">T3 Code is the open-source control plane for coding agents from T3 Tools: a desktop app, a web app and iOS and Android apps that drive Claude Code, Codex, Antigravity, OpenCode, Cursor and Grok through their SDKs. Every thread gets its own branch, and a button commits, pushes and opens a pull request with a generated title. It's free, MIT-licensed and moving fast.</p>
+<p class="lede">omux is smaller and closer to the metal. It's one native Swift window, about 5 MB, that runs the real Claude Code and Codex terminals side by side under projects, reads their own signals for status, and puts Allow and Deny in the sidebar. No server, no Electron, no reimplemented chat view. This page is a fair look at which shape fits you.</p>
+
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/onurozcan/omux/releases/latest" data-download>Download omux for macOS</a>
+      <a class="btn btn-secondary" href="https://t3.codes" rel="nofollow noopener">About T3 Code</a>
+    </div>
+
+<div class="glance" role="table" aria-label="At a glance">
+      <div class="glance-row glance-head" role="row"><span class="glance-label">At a glance</span><span>omux</span><span>T3 Code</span></div>
+<div class="glance-row"><span class="glance-label">Native macOS app</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+<div class="glance-row"><span class="glance-label">Real terminal per session</span><span class="mark yes" aria-label="yes">✓</span><span class="mark partial" aria-label="partly">~</span></div>
+<div class="glance-row"><span class="glance-label">Agent status</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Allow/Deny from the sidebar</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Split panes</span><span class="mark yes" aria-label="yes">✓</span><span class="mark no" aria-label="no">✕</span></div>
+<div class="glance-row"><span class="glance-label">Branch per task with one-click PR</span><span class="mark partial" aria-label="partly">~</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">iOS and Android apps</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Windows and Linux</span><span class="mark no" aria-label="no">✕</span><span class="mark yes" aria-label="yes">✓</span></div>
+<div class="glance-row"><span class="glance-label">Free and open source</span><span class="mark yes" aria-label="yes">✓</span><span class="mark yes" aria-label="yes">✓</span></div>
+    </div>
+
+    <ul class="facts" aria-label="omux in numbers"><li><strong>5 MB</strong><span>native Swift app, no Electron</span></li><li><strong>0</strong><span>accounts, credits or telemetry</span></li><li><strong>6</strong><span>sessions side by side per project</span></li><li><strong>MIT</strong><span>free and open source</span></li></ul>
+
+    <figure class="shot compare-shot">
+      <img src="screenshot.png" srcset="screenshot.png 1600w, screenshot@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="987" loading="lazy" alt="omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff">
+      <figcaption>omux: projects and sessions on the left, the agent in the middle, its diff on the right. The session that needs you shows Allow and Deny.</figcaption>
+    </figure>
+
+    <h2>Where the agent lives</h2>
+<div class="shape" aria-label="Where the agent lives">
+      <div class="shape-col shape-other">
+        <div class="shape-title">T3 Code</div>
+        <div class="shape-node">Electron desktop, web, iOS and Android</div><div class="shape-arrow">↓</div><div class="shape-node">T3 Code server on your machine</div><div class="shape-arrow">↓</div><div class="shape-node">Agent SDKs: Claude Code, Codex, Cursor, Grok…</div>
+      </div>
+      <div class="shape-col shape-omux">
+        <div class="shape-title">omux</div>
+        <div class="shape-node">The native agentic development platform for the Mac, about 5 MB</div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-chips"><span class="chip"><i class="dot working"></i>Claude Code</span><span class="chip"><i class="dot needs"></i>Claude Code</span><span class="chip"><i class="dot working"></i>Codex</span><span class="chip"><i class="dot done"></i>Codex</span><span class="chip chip-shell">shell</span></div>
+        <div class="shape-arrow">↓</div>
+        <div class="shape-node">The real Claude Code and Codex, on your own plans</div>
+      </div>
+    </div>
+    <p class="shape-legend"><i class="dot working"></i> working <i class="dot needs"></i> needs you <i class="dot done"></i> done</p>
+
+    <h2>Side by side</h2>
+    <div class="table-wrap">
+    <table class="compare-table">
+      <thead><tr><th scope="col"></th><th scope="col">omux</th><th scope="col">T3 Code</th></tr></thead>
+      <tbody>
+<tr><th scope="row">What it is</th><td>A session manager with a real terminal per Claude Code or Codex session</td><td>A control plane that drives agent harnesses through their SDKs, one chat-style thread per task</td></tr>
+<tr><th scope="row">Runs on</th><td>macOS, native Swift, about 5 MB</td><td>macOS, Windows and Linux desktop (Electron), web, iOS and Android</td></tr>
+<tr><th scope="row">Agents</th><td>Claude Code and Codex, plus plain shells</td><td>Claude Code, Codex, Antigravity, OpenCode, Cursor and Grok, with more added often</td></tr>
+<tr><th scope="row">How you see the agent</th><td>Its own terminal UI, exactly as in Terminal</td><td>A thread view rendered by T3 Code; a terminal is available too</td></tr>
+<tr><th scope="row">Agent status</th><td><span class="mark yes" aria-label="yes">✓</span> working, needs you, done, read from the agents' own signals</td><td><span class="mark yes" aria-label="yes">✓</span> per thread, with push notifications on the phone apps</td></tr>
+<tr><th scope="row">Answer a permission prompt</th><td>Allow and Deny buttons in the sidebar and header, without switching</td><td><span class="mark yes" aria-label="yes">✓</span> inside the thread</td></tr>
+<tr><th scope="row">Subagents</th><td>Listed under the session with transcripts</td><td>Shown inside the thread</td></tr>
+<tr><th scope="row">Git</th><td>Optional worktree per session, pull request status, merge and clean up</td><td>A branch per thread, one-button commit, push and PR with generated titles; draft and stacked PRs</td></tr>
+<tr><th scope="row">Diff review</th><td>Changes panel with review notes sent to the agent</td><td>Inline diff review before pushing</td></tr>
+<tr><th scope="row">Split panes</th><td><span class="mark yes" aria-label="yes">✓</span> a resizable canvas per project, up to six sessions</td><td><span class="mark no" aria-label="no">✕</span></td></tr>
+<tr><th scope="row">From your phone</th><td><span class="mark no" aria-label="no">✕</span></td><td><span class="mark yes" aria-label="yes">✓</span> native iOS and Android apps that reach your machine</td></tr>
+<tr><th scope="row">Scripting</th><td><span class="mark yes" aria-label="yes">✓</span> omux CLI over a local socket</td><td>Not a focus</td></tr>
+<tr><th scope="row">Maturity</th><td>Young, small and focused</td><td>Early by its own description, with a large community</td></tr>
+<tr><th scope="row">Price and license</th><td>Free, MIT</td><td>Free, MIT</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2>See omux in 37 seconds</h2>
+    <figure class="shot compare-shot">
+      <video controls preload="none" playsinline poster="screenshot.png" width="1920" height="1080">
+        <source src="video/omux-story.webm" type="video/webm">
+        <source src="video/omux-story.mp4" type="video/mp4">
+      </video>
+      <figcaption>From scattered terminals to one window: projects, status, Allow and Deny, subagents, panes and pull requests.</figcaption>
+    </figure>
+
+    <div class="split">
+      <div class="card pick pick-other">
+        <h2><span class="pick-icon" aria-hidden="true">→</span> Pick T3 Code if</h2>
+        <ul><li>You want to check on and steer agents from your phone, or from a browser on another machine.</li><li>You run agents beyond Claude Code and Codex and want them all in one place.</li><li>You like the branch-per-thread flow with generated pull requests and stacked PRs built in.</li></ul>
+      </div>
+      <div class="card pick pick-omux">
+        <h2><span class="pick-icon" aria-hidden="true">★</span> Pick omux if</h2>
+        <ul><li>You want the real terminal UI of Claude Code and Codex, not a rendering of it, with status and permissions read from the agents themselves.</li><li>You want a 5 MB native app with no server and no Electron, and split panes so several sessions share one project view.</li><li>You prefer a worktree per session with the pull request's state and the diff right next to the agent.</li></ul>
+      </div>
+    </div>
+
+    <h2>What omux does for every session</h2>
+    <ul class="checklist">
+      <li>Projects with sessions under them, in a sidebar</li>
+      <li>Shows whether each agent is working, needs you or is done</li>
+      <li>Allow or Deny an agent's permission request without switching to it</li>
+      <li>Lists a session's subagents and opens their transcripts</li>
+      <li>Resumes each Claude Code and Codex conversation after a relaunch</li>
+      <li>Git worktree per session, with pull request status and merge</li>
+      <li>Files, Changes (diff with review notes) and Browser panels</li>
+      <li>Claude and Codex plan usage limits in the sidebar</li>
+      <li>Split panes: up to six sessions side by side per project, layouts saved</li>
+      <li>An omux command line: list, status, send, new, close and wait on sessions</li>
+      <li>macOS notifications with sound</li>
+    </ul>
+
+    <h2>Questions</h2>
+<details><summary>Is T3 Code a terminal?</summary><p>Not primarily. It talks to agents through their SDKs and shows each task as a thread, with a terminal available when you need one. omux is the other way round: every session is a terminal first, with the sidebar and panels built around it.</p></details>
+<details><summary>Can I use omux and T3 Code together?</summary><p>Yes. They don't interfere, since each starts its own agent processes. Many people keep a desktop tool for focused work and a phone app for checking in.</p></details>
+<details><summary>Which one is more mature?</summary><p>T3 Code has the larger community and ships often, and its own site says to expect bugs. omux is a younger, smaller project with a narrower scope. Read both changelogs and pick the one whose direction matches your work.</p></details>
+
+    <p class="muted">Also compared: <a href="/terminal-alternative">Terminal alternative</a>, <a href="/tmux-alternative">tmux alternative</a>, <a href="/cmux-alternative">cmux alternative</a>, <a href="/warp-alternative">Warp alternative</a>, <a href="/herdr-alternative">herdr alternative</a>, <a href="/vscode-alternative">VS Code alternative</a>, <a href="/cursor-alternative">Cursor alternative</a>, <a href="/antigravity-alternative">Antigravity alternative</a>, <a href="/devin-alternative">Devin alternative</a>. Facts about T3 Code come from its public documentation as of 2026-11-03; if something is out of date, <a href="https://github.com/onurozcan/omux/issues">open an issue</a>.</p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <nav class="footer-links" aria-label="Footer">
+      <a href="https://github.com/onurozcan/omux">GitHub</a>
+      <a href="https://github.com/onurozcan/omux/releases">Releases</a>
+      <a href="/changelog">Changelog</a>
+      <a href="https://github.com/onurozcan/omux/issues">Issues</a>
+      <a href="https://github.com/onurozcan/omux/blob/main/LICENSE">MIT license</a>
+    </nav>
+    <nav class="footer-links footer-compare" aria-label="Comparisons">
+      <span class="muted">Compare:</span><a href="/terminal-alternative">Terminal alternative</a><a href="/tmux-alternative">tmux alternative</a><a href="/cmux-alternative">cmux alternative</a><a href="/warp-alternative">Warp alternative</a><a href="/herdr-alternative">herdr alternative</a><a href="/vscode-alternative">VS Code alternative</a><a href="/cursor-alternative">Cursor alternative</a><a href="/antigravity-alternative">Antigravity alternative</a><a href="/devin-alternative">Devin alternative</a>
+    </nav>
+    <p class="fineprint">omux is the native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of 2026-11-03 and may be out of date.</p>
+  </div>
+</footer>
+<script src="main.js?v=2" defer></script>
+</body>
+</html>
