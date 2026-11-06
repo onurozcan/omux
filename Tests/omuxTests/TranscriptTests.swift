@@ -215,7 +215,7 @@ final class TranscriptTests: XCTestCase {
     }
 
     func testARefusedRestartAsksOmuxToRestartOnlyWhenItJustHappened() {
-        let m = model()
+        let m = SessionTranscript(tab: TabItem(name: "t"), provider: .claude, claudeFile: { nil }, codexThread: { nil })
         let command = object(#"{"type":"user","timestamp":"2026-11-06T19:45:38.743Z","message":{"role":"user","content":"<command-name>/restart</command-name>\n            <command-message>restart</command-message>\n            <command-args></command-args>"}}"#)
         let refusal = object(#"{"type":"system","subtype":"local_command","timestamp":"2026-11-06T19:45:38.744Z","content":"<local-command-stdout>Can't restart while Remote Control is connected. To use the installed version, exit and start Claude Code again, then run /resume.</local-command-stdout>"}"#)
         // Read back from the file at load: history, nothing to do.
