@@ -49,6 +49,11 @@ final class CodexManager: ObservableObject {
     private let catalog = CodexConnection()
     var onThreadChange: ((UUID, String) -> Void)?
     var onStatus: ((UUID, CodexStatus) -> Void)?
+    /// What a session's thread does, for the transcript showing it: items starting and
+    /// completing, turns, and the reply's text as it streams in.
+    enum TranscriptEvent { case item(id: String, type: String, completed: Bool), turn(completed: Bool), delta(item: String, text: String) }
+    private var transcriptListeners: [UUID: (TranscriptEvent) -> Void] = [:]
+    func listen(_ tabID: UUID, _ handler: ((TranscriptEvent) -> Void)?) { transcriptListeners[tabID] = handler }
     @Published private(set) var approvals: [String: [CodexApproval]] = [:]
     @Published private(set) var answering: Set<CodexApproval> = []
     @Published private(set) var limits: [UsageMonitor.Limit] = []
@@ -82,7 +87,9 @@ final class CodexManager: ObservableObject {
         return connection
     }
 
-    func prepare(tabID: UUID, threadID: String?, cwd: String, name: String) async throws -> (threadID: String, command: String) {
+    /// `model` and `effort` are set on the thread here: the TUI attached over `--remote` runs
+    /// turns with the thread's model, and its own `-c model=` flag doesn't reach it.
+    func prepare(tabID: UUID, threadID: String?, cwd: String, name: String, model: String? = nil, effort: String? = nil) async throws -> (threadID: String, command: String) {
         let connection = connection(for: tabID)
         if let previous = retiring[tabID] {
             try await previous.value
@@ -91,12 +98,10 @@ final class CodexManager: ObservableObject {
         }
         try await connection.connect()
         try Task.checkCancellation()
-        let response: [String: Any]
-        if let threadID {
-            response = try await connection.request("thread/resume", params: ["threadId": threadID, "excludeTurns": true])
-        } else {
-            response = try await connection.request("thread/start", params: ["cwd": cwd])
-        }
+        var params: [String: Any] = threadID.map { ["threadId": $0, "excludeTurns": true] } ?? ["cwd": cwd]
+        if let model { params["model"] = model }
+        if let effort { params["config"] = ["model_reasoning_effort": effort] }
+        let response = try await connection.request(threadID == nil ? "thread/start" : "thread/resume", params: params)
         guard let thread = response["thread"] as? [String: Any], let id = thread["id"] as? String,
               let endpoint = connection.endpoint else { throw CodexError.server("Codex didn't return a conversation ID") }
         // Naming materializes a new conversation before a second client (the TUI)
@@ -186,13 +191,18 @@ final class CodexManager: ObservableObject {
         agents[tabID] = nil
     }
 
-    func transcript(threadID: String, tabID: UUID) async throws -> String {
+    /// The thread's latest items, oldest first: messages, commands, file changes and tool calls.
+    func transcriptItems(threadID: String, tabID: UUID) async throws -> [[String: Any]] {
         guard threads[tabID] == threadID || agentOwners[threadID] == tabID,
               let connection = connections[tabID] else { throw CodexError.disconnected }
         let result = try await connection.request("thread/items/list", params: ["threadId": threadID, "limit": 100, "sortDirection": "desc"])
         let entries = result["data"] as? [[String: Any]] ?? []
-        let items = entries.compactMap { $0["item"] as? [String: Any] }
-        return items.reversed().compactMap { item -> String? in
+        return entries.compactMap { $0["item"] as? [String: Any] }.reversed()
+    }
+
+    func transcript(threadID: String, tabID: UUID) async throws -> String {
+        let items = try await transcriptItems(threadID: threadID, tabID: tabID)
+        return items.compactMap { item -> String? in
             switch item["type"] as? String {
             case "agentMessage": return item["text"] as? String
             case "userMessage":
@@ -298,6 +308,18 @@ final class CodexManager: ObservableObject {
               let params = message["params"] as? [String: Any] else { return }
         let thread = params["threadId"] as? String
         if let thread, threads[owner] != thread, agentOwners[thread] != owner { return }
+        if let thread, thread == threads[owner], let listener = transcriptListeners[owner] {
+            switch method {
+            case "item/agentMessage/delta":
+                if let item = (params["itemId"] ?? params["item_id"]) as? String, let delta = params["delta"] as? String { listener(.delta(item: item, text: delta)) }
+            case "item/started", "item/completed":
+                let item = params["item"] as? [String: Any]
+                listener(.item(id: item?["id"] as? String ?? "", type: item?["type"] as? String ?? "", completed: method == "item/completed"))
+            case "turn/started": listener(.turn(completed: false))
+            case "turn/completed": listener(.turn(completed: true))
+            default: break
+            }
+        }
         if let approval = CodexApproval(message: message), completedTurns[approval.threadID] != approval.turnID,
            turns[approval.threadID] == approval.turnID || (turns[approval.threadID] == nil && [.working, .blocked].contains(status[approval.threadID]?.state)) {
             turns[approval.threadID] = approval.turnID

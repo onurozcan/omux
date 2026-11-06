@@ -30,7 +30,7 @@ struct CodexAgents: View {
                     open = false
                 } label: {
                     HStack(spacing: 5) {
-                        Circle().fill(agent.finished ? Color.green : Color.blue).frame(width: 6, height: 6)
+                        Circle().fill(agent.finished ? Palette.done : Palette.working).frame(width: 6, height: 6)
                         Text(agent.name).lineLimit(1)
                         Spacer(minLength: 2)
                         Text(agent.state).foregroundStyle(.secondary)

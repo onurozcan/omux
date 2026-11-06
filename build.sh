@@ -42,6 +42,10 @@ cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" -c "Set :CFBundleName $NAME" \
   -c "Set :NSServices:0:NSMenuItem:default Open in $NAME" -c "Set :NSServices:0:NSPortName $NAME" "$APP/Contents/Info.plist"
 cp Resources/omux.icns "$APP/Contents/Resources/"
+# The Transcript tab's page: markdown and syntax highlighting rendered by WebKit, from local files only.
+if command -v node >/dev/null; then node --check Resources/transcript/transcript.js; fi
+cp -R Resources/transcript "$APP/Contents/Resources/transcript"
+cp -R Resources/icons "$APP/Contents/Resources/icons"
 for bundle in .build/release/*.bundle; do
   [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done

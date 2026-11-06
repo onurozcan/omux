@@ -72,6 +72,9 @@ final class Store: ObservableObject {
     private var pendingCommands: [UUID: UUID] = [:]
     /// A worktree setup command to run before a new Codex session's TUI starts.
     private var codexSetup: [UUID: String] = [:]
+    /// Tabs whose Codex was started again after it updated itself and quit; cleared once its
+    /// TUI is up, so a launch that keeps failing isn't retried forever.
+    private var codexRelaunched: Set<UUID> = []
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -113,6 +116,14 @@ final class Store: ObservableObject {
             }
         }
 
+        // Codex's TUI leaves no trace when it exits (after updating itself, say): the shell
+        // takes over without a word to the terminal. Look for ourselves.
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                for (id, rt) in self.runtime where rt.provider == .codex && rt.agentConnected && !rt.exited { self.refreshBusy(id) }
+            }
+        }
         CodexManager.shared.onStatus = { [weak self] id, status in
             guard let self, self.runtime[id]?.provider == .codex, self.terminals[id] != nil else { return }
             self.applyStatus(status.state, kind: status.kind, message: status.detail, children: [], for: id)
@@ -166,6 +177,14 @@ final class Store: ObservableObject {
     }
 
     var selectedProvider: SessionProvider { selectedTab.map(provider(of:)) ?? .shell }
+
+    /// The provider the transcript follows: the agent running now, else the one the session is
+    /// set up for. A stopped Claude Code session sits in a plain shell, but it is still a Claude
+    /// Code session: its history shows, and a message starts it again.
+    func transcriptProvider(of tab: TabItem) -> SessionProvider {
+        if let live = runtime[tab.id]?.provider, live == .claude || live == .codex { return live }
+        return group(containing: tab.id).map { tab.resolvedProvider(in: $0) } ?? .shell
+    }
 
     var selectedGroup: TabGroup? {
         selectedTabID.flatMap(group(containing:)) ?? groups.first
@@ -421,7 +440,7 @@ final class Store: ObservableObject {
             currentDirectory: dir
         )
         update(tab.id) {
-            $0.provider = provider; $0.agentConnected = false
+            $0.provider = provider; $0.agentConnected = false; $0.agentConnectedAt = nil; $0.tuiReady = false
             $0.exited = false; $0.cwd = dir; $0.title = ""
             $0.statusState = nil; $0.statusKind = nil; $0.statusDetail = nil; $0.statusChildren = []
         }
@@ -459,17 +478,19 @@ final class Store: ObservableObject {
                 if let self, let view, self.terminals[tab.id] === view { self.codexStarts[tab.id] = nil }
             }
             do {
-                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name)
+                let choice = self?.codexChoice(tabID: tab.id) ?? (model: nil, effort: nil)
+                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name, model: choice.model, effort: choice.effort)
                 try Task.checkCancellation()
                 guard let self, let view, self.terminals[tab.id] === view else { return }
                 self.updateTab(tab.id) { $0.codexThreadID = launch.threadID }
                 self.save()
-                self.update(tab.id) { $0.agentConnected = true; $0.busy = false }
+                self.update(tab.id) { $0.agentConnected = true; $0.agentConnectedAt = Date(); $0.busy = false }
                 let setup = self.codexSetup.removeValue(forKey: tab.id)
-                view.send(txt: (setup.map { Self.afterSetup($0, launch.command) } ?? launch.command) + "\n")
+                let command = self.codexFlags(launch.command, tabID: tab.id)
+                view.send(txt: (setup.map { Self.afterSetup($0, command) } ?? command) + "\n")
             } catch {
                 guard !Task.isCancelled, let self, let view, self.terminals[tab.id] === view else { return }
-                self.update(tab.id) { $0.busy = false; $0.statusState = .error; $0.statusDetail = error.localizedDescription }
+                self.update(tab.id) { $0.busy = false; $0.statusState = .error; $0.statusDetail = Self.codexStartFailure(error) }
             }
         }
     }
@@ -537,8 +558,43 @@ final class Store: ObservableObject {
         if submit {
             // A beat later, so the program has taken the paste before Return arrives.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { view.send(txt: "\r") }
+            // An agent's TUI that was busy and read the paste and the Return together takes the
+            // Return as a line break inside the paste, and the prompt sits in its input box; the
+            // next prompt would then be typed onto it. If it's still there a moment later, press
+            // Return again. The box is the last line starting with the agent's prompt mark.
+            if runtime[id]?.provider == .claude || runtime[id]?.provider == .codex {
+                let head = Self.inputHead(of: text)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self, weak view] in
+                    guard let self, let view, self.terminals[id] === view, !(self.runtime[id]?.exited ?? true),
+                          Self.inputHolds(head, in: view.lastLines(12)) else { return }
+                    view.send(txt: "\r")
+                }
+            }
         }
         return true
+    }
+
+    /// The start of a prompt's first line, enough to recognise it on the screen.
+    nonisolated static func inputHead(of text: String) -> String {
+        String((text.split(whereSeparator: \.isNewline).first ?? "").prefix(24)).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Whether the agent's input box, the last screen line starting with Claude Code's ❯ or
+    /// Codex's ›, still holds the prompt.
+    nonisolated static func inputHolds(_ head: String, in lines: [String]) -> Bool {
+        guard head.count >= 3, let box = lines.last(where: { $0.hasPrefix("❯") || $0.hasPrefix("›") }) else { return false }
+        return box.contains(head)
+    }
+
+    /// The last lines on the session's screen, for views that need to see what the program asks.
+    func screenLines(_ id: UUID, count: Int = 12) -> [String] {
+        terminals[id]?.lastLines(count) ?? []
+    }
+
+    /// Raw keys to the program in the session, such as an arrow key or Return.
+    func sendKeys(_ keys: String, to id: UUID) {
+        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return }
+        view.send(txt: keys)
     }
 
     /// Whether the program in the session takes a paste as one block, without acting on its newlines.
@@ -589,20 +645,137 @@ final class Store: ObservableObject {
         let busy = pid > 0 && Self.hasChildProcess(of: pid)
         if runtime[id]?.provider == .codex {
             guard codexStarts[id] == nil else { return }
-            if !busy { update(id) { $0.agentConnected = false; $0.busy = false } }
+            // Just connected: the shell hasn't spawned the TUI yet.
+            if !busy, let since = runtime[id]?.agentConnectedAt, Date().timeIntervalSince(since) < 4 { return }
+            if !busy {
+                update(id) { $0.agentConnected = false; $0.busy = false }
+                // Codex updates itself on launch when a new version is out, then quits with
+                // "Please restart Codex." Do that once, so the session doesn't sit in a shell.
+                if Self.asksForRestart(view.lastLines(8)), !codexRelaunched.contains(id) {
+                    codexRelaunched.insert(id)
+                    start(id)
+                }
+            }
             return
         }
         update(id) { $0.busy = busy }
     }
 
-    private static func hasChildProcess(of pid: pid_t) -> Bool {
+    /// Whether the session's shell runs a child process right now (the agent, a build, …).
+    func shellHasChild(_ id: UUID) -> Bool {
+        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return false }
+        let pid = view.process.shellPid
+        return pid > 0 && Self.hasChildProcess(of: pid)
+    }
+
+    /// Whether an agent runs under the session's shell: `claude` or `codex` themselves, or the
+    /// node that runs them. Not the helpers a login shell spawns while it starts up.
+    func shellRunsAgent(_ id: UUID) -> Bool {
+        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return false }
+        let pid = view.process.shellPid
+        guard pid > 0 else { return false }
+        return Self.descendantNames(of: pid).contains { Self.isAgentProcess($0) }
+    }
+
+    nonisolated static func isAgentProcess(_ name: String) -> Bool {
+        ["claude", "codex", "node", "bun"].contains(name)
+    }
+
+    /// The short names (`p_comm`) of every process under `pid`.
+    private static func descendantNames(of pid: pid_t) -> [String] {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
-        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return false }
+        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return [] }
         var procs = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride + 8)
         size = procs.count * MemoryLayout<kinfo_proc>.stride
-        guard sysctl(&mib, 4, &procs, &size, nil, 0) == 0 else { return false }
-        return procs.prefix(size / MemoryLayout<kinfo_proc>.stride).contains { $0.kp_eproc.e_ppid == pid }
+        guard sysctl(&mib, 4, &procs, &size, nil, 0) == 0 else { return [] }
+        let all = Array(procs.prefix(size / MemoryLayout<kinfo_proc>.stride))
+        let under = Set(descendants(of: pid))
+        return all.filter { under.contains($0.kp_proc.p_pid) }.map { proc in
+            withUnsafePointer(to: proc.kp_proc.p_comm) { $0.withMemoryRebound(to: CChar.self, capacity: 17) { String(cString: $0) } }
+        }
+    }
+
+    /// Whether omux is still bringing the session's agent up: its command not yet typed, or
+    /// Codex not yet connected.
+    func isStarting(_ id: UUID) -> Bool {
+        codexStarts[id] != nil || pendingCommands[id] != nil
+    }
+
+    /// Whether Claude Code has a dialog on the screen that takes Return as its answer: the
+    /// model or effort switch, or the trust question. Its status doesn't say so.
+    func dialogOnScreen(_ id: UUID) -> Bool {
+        Self.showsDialog(screenLines(id, count: 14))
+    }
+
+    nonisolated static func showsDialog(_ lines: [String]) -> Bool {
+        let text = lines.joined(separator: "\n")
+        return text.contains(ClaudeScreen.switchModel) || text.contains(ClaudeScreen.changeEffort) || text.localizedCaseInsensitiveContains(ClaudeScreen.trustFolder)
+    }
+
+    /// Whether the agent's input box is drawn on the session's screen.
+    func composerVisible(_ id: UUID) -> Bool {
+        Self.showsComposer(screenLines(id))
+    }
+
+    /// Codex's own words for a thread another Codex holds open, made actionable.
+    nonisolated static func codexStartFailure(_ error: Error) -> String {
+        let text = error.localizedDescription
+        guard text.contains("already has an active writer") else { return text }
+        return "Another Codex has this conversation open: a terminal, another omux, or an app-server left from a crash. Close it there, or start a new session."
+    }
+
+    /// Codex's "Update ran successfully! Please restart Codex." on its way out.
+    nonisolated static func asksForRestart(_ lines: [String]) -> Bool {
+        lines.contains { $0.localizedCaseInsensitiveContains("restart Codex") }
+    }
+
+    /// Claude Code's `❯` or Codex's `›` input box, at the start of a line.
+    nonisolated static func showsComposer(_ lines: [String]) -> Bool {
+        lines.contains { line in
+            let text = line.drop { $0 == " " || $0 == "\u{a0}" }
+            return text.hasPrefix("❯") || text.hasPrefix("›")
+        }
+    }
+
+    private static func hasChildProcess(of pid: pid_t) -> Bool {
+        !descendants(of: pid).isEmpty
+    }
+
+    /// Every process under `pid`: the shell's child, its children, and so on.
+    private static func descendants(of pid: pid_t) -> [pid_t] {
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
+        var size = 0
+        guard sysctl(&mib, 4, nil, &size, nil, 0) == 0, size > 0 else { return [] }
+        var procs = [kinfo_proc](repeating: kinfo_proc(), count: size / MemoryLayout<kinfo_proc>.stride + 8)
+        size = procs.count * MemoryLayout<kinfo_proc>.stride
+        guard sysctl(&mib, 4, &procs, &size, nil, 0) == 0 else { return [] }
+        let parents = procs.prefix(size / MemoryLayout<kinfo_proc>.stride).map { ($0.kp_proc.p_pid, $0.kp_eproc.e_ppid) }
+        var found: [pid_t] = []
+        var frontier: Set<pid_t> = [pid]
+        while !frontier.isEmpty {
+            let children = parents.filter { frontier.contains($0.1) }.map(\.0)
+            frontier = Set(children).subtracting(found)
+            found.append(contentsOf: frontier)
+        }
+        return found
+    }
+
+    /// The transcript of the session's Claude Code conversation. The tab's own session id first;
+    /// else the id of the `claude` running in the terminal, which Claude Code records per process in
+    /// ~/.claude/sessions/<pid>.json. That covers a `claude` typed into a shell, or `claude --continue`.
+    func claudeTranscriptURL(for id: UUID) -> URL? {
+        guard let tab = tab(id) else { return nil }
+        if let url = Self.claudeTranscriptURL(tab.claudeSessionID.uuidString.lowercased()) { return url }
+        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return nil }
+        let sessions = NSHomeDirectory() + "/.claude/sessions"
+        for pid in Self.descendants(of: view.process.shellPid) {
+            guard let data = FileManager.default.contents(atPath: "\(sessions)/\(pid).json"),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let session = object["sessionId"] as? String else { continue }
+            if let url = Self.claudeTranscriptURL(session.lowercased()) { return url }
+        }
+        return nil
     }
 
     /// Starts the selected provider in an idle shell or resumes its exact saved chat.
@@ -664,14 +837,52 @@ final class Store: ObservableObject {
         let exists = Self.claudeSessionExists(session)
         // No saved conversation: start fresh, or pick up the folder's latest if Settings say so.
         let continueLatest = !exists && UserDefaults.standard.string(forKey: Prefs.startWithoutHistory) == "continue"
-        return SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: exists, continueLatest: continueLatest)
+        var command = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: exists, continueLatest: continueLatest)
+        // The session's own model and effort, else the project's, unless the command names its own.
+        if let model = (tab.model ?? group.model)?.trimmingCharacters(in: .whitespaces), !model.isEmpty, model != "default", !raw.contains("--model") {
+            command += " --model \(Git.quote(model))"
+        }
+        if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
+            command += " --effort \(effort)"
+        }
+        return command
+    }
+
+    /// Codex takes the project's model and effort as config overrides on its command line.
+    /// The session's model and effort for Codex, else the project's; nil for the defaults.
+    private func codexChoice(tabID: UUID) -> (model: String?, effort: String?) {
+        guard let group = group(containing: tabID) else { return (nil, nil) }
+        let item = tab(tabID)
+        var model = (item?.model ?? group.model)?.trimmingCharacters(in: .whitespaces)
+        if model?.isEmpty == true || model == "default" { model = nil }
+        var effort = item?.effort ?? group.effort
+        if effort?.isEmpty == true || effort == "default" || effort == "auto" { effort = nil }
+        return (model, effort)
+    }
+
+    /// The same choice on the TUI's command line, for what it shows in its status line.
+    private func codexFlags(_ command: String, tabID: UUID) -> String {
+        let choice = codexChoice(tabID: tabID)
+        var flags: [String] = []
+        if let model = choice.model { flags.append("-c model=\(Git.quote(model))") }
+        if let effort = choice.effort { flags.append("-c model_reasoning_effort=\(Git.quote(effort))") }
+        return flags.isEmpty ? command : command + " " + flags.joined(separator: " ")
     }
 
     /// Claude Code writes each conversation to ~/.claude/projects/<project>/<session>.jsonl.
     private static func claudeSessionExists(_ session: String) -> Bool {
+        claudeTranscriptURL(session) != nil
+    }
+
+    /// The transcript file of a Claude Code session, once it has written one.
+    static func claudeTranscriptURL(_ session: String) -> URL? {
         let projects = NSHomeDirectory() + "/.claude/projects"
-        guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: projects) else { return false }
-        return dirs.contains { FileManager.default.fileExists(atPath: "\(projects)/\($0)/\(session).jsonl") }
+        guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: projects) else { return nil }
+        for dir in dirs {
+            let path = "\(projects)/\(dir)/\(session).jsonl"
+            if FileManager.default.fileExists(atPath: path) { return URL(fileURLWithPath: path) }
+        }
+        return nil
     }
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
@@ -755,6 +966,7 @@ final class Store: ObservableObject {
             // Claude Code rewrites the title as its state changes; treat that as activity.
             update(id) {
                 if $0.title != title, !isWatching(id) { $0.hasActivity = true }
+                if $0.title != title { $0.lastActivity = Date() }
                 $0.title = title
             }
             if runtime[id]?.provider == .claude, tab(id)?.autoName == true,
@@ -763,14 +975,21 @@ final class Store: ObservableObject {
             }
         case .directory(let dir):
             update(id) { $0.cwd = dir }
+            // The shell is at its prompt again: whatever ran in it is gone.
+            refreshBusy(id)
         case .exited:
             update(id) { $0.exited = true; $0.statusState = nil; $0.statusKind = nil; $0.statusChildren = []; $0.busy = false }
         case .openPath(let path):
             previewRequest = path
         case .status(let state, let kind, let message, let children):
-            // Codex also emits terminal OSC status. Its protocol is authoritative,
-            // particularly for approval IDs; mixing both can revive stale buttons.
-            guard runtime[id]?.provider != .codex else { return }
+            // Codex also emits terminal OSC status. Its protocol is authoritative, particularly
+            // for approval IDs; mixing both can revive stale buttons. Its first idle does say
+            // that the TUI has drawn its prompt and takes input.
+            if runtime[id]?.provider == .codex {
+                if state == .idle, runtime[id]?.tuiReady == false { update(id) { $0.tuiReady = true } }
+                if state == .idle { codexRelaunched.remove(id) }
+                return
+            }
             applyStatus(state, kind: kind, message: message, children: children, for: id)
         case .notification(let title, let body):
             guard !isWatching(id) else { return }
@@ -781,9 +1000,20 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Marks the session's project as worked in now: an agent reported status. Opening a session
+    /// or using its shell doesn't count. Written at most once a minute, since it's saved with the workspace.
+    private func touchProject(of id: UUID) {
+        guard let group = group(containing: id) else { return }
+        if group.forcedIdle { updateGroup(group.id) { $0.forcedIdle = false } }
+        if let last = group.lastActive, Date().timeIntervalSince(last) < 60 { return }
+        updateGroup(group.id) { $0.lastActive = Date() }
+    }
+
     private func applyStatus(_ state: TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild], for id: UUID) {
+        if state != nil { touchProject(of: id) }
         let previous = runtime[id]?.statusState
         update(id) {
+            if $0.statusState != state || $0.statusDetail != message { $0.lastActivity = Date() }
             $0.statusState = state; $0.statusKind = kind; $0.statusDetail = message; $0.statusChildren = children
             if state == .blocked || state == .done, !isWatching(id) { $0.needsAttention = true }
         }
@@ -921,6 +1151,31 @@ final class Store: ObservableObject {
         }
     }
 
+    /// Makes the session run the other agent, with a model if one was picked: a running session
+    /// restarts into it, a stopped or plain shell session starts it. Each agent keeps its own
+    /// conversation on the session, so coming back to one resumes where it left off; the hand-off
+    /// the compose box sends carries what happened meanwhile.
+    func switchProvider(_ id: UUID, to provider: SessionProvider, model: String?) {
+        guard location(of: id) != nil, provider == .claude || provider == .codex else { return }
+        updateTab(id) {
+            $0.provider = provider
+            $0.command = provider.command
+            $0.model = model
+        }
+        if terminals[id] != nil, !(runtime[id]?.exited ?? true) { restart(id) } else { start(id) }
+    }
+
+    /// Whether the session has a conversation with the agent to resume: Codex's thread, or a
+    /// transcript file for the Claude Code session id.
+    func hasConversation(_ id: UUID, with provider: SessionProvider) -> Bool {
+        guard let tab = tab(id) else { return false }
+        switch provider {
+        case .codex: return tab.codexThreadID != nil
+        case .claude: return Self.claudeSessionExists(tab.claudeSessionID.uuidString.lowercased())
+        default: return false
+        }
+    }
+
     func restart(_ id: UUID) {
         closeCodex(id)
         guard let loc = location(of: id) else { return }
@@ -1032,8 +1287,13 @@ final class Store: ObservableObject {
             let order = moved.compactMap { row -> UUID? in
                 if case .group(let g) = row { return g.id } else { return nil }
             }
-            groups.sort { a, b in (order.firstIndex(of: a.id) ?? 0) < (order.firstIndex(of: b.id) ?? 0) }
-        case .tab(let tab, let fromGroupID):
+            // Projects not in the list (stacked as idle) keep their place after the visible ones.
+            let hidden = groups.enumerated().compactMap { order.contains($0.element.id) ? nil : $0.element.id }
+            let full = order + hidden
+            groups.sort { a, b in (full.firstIndex(of: a.id) ?? 0) < (full.firstIndex(of: b.id) ?? 0) }
+        case .shells, .projects:
+            return
+        case .tab(let tab, let fromGroupID), .nested(let tab, let fromGroupID):
             guard let newIndex = moved.firstIndex(where: { $0.id == tab.id }) else { return }
             var targetID = groups.first?.id
             var position = 0

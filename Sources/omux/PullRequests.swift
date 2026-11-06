@@ -64,15 +64,15 @@ struct PullRequest: Equatable {
 
     var color: Color {
         switch state {
-        case .merged: return .purple
+        case .merged: return Palette.agent
         case .closed: return .secondary
         case .open: break
         }
-        if checksResult == .failed { return .red }
-        if review == .changesRequested { return .orange }
-        if checksResult == .pending { return .blue }
+        if checksResult == .failed { return Palette.error }
+        if review == .changesRequested { return Palette.needs }
+        if checksResult == .pending { return Palette.working }
         if isDraft { return .secondary }
-        return .green
+        return Palette.done
     }
 
     /// Changes worth pulling the user back to the session for.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'">
+<title>Editor</title>
+<link rel="stylesheet" href="highlight-dark.css" id="hl-dark">
+<link rel="stylesheet" href="highlight-light.css" id="hl-light" disabled>
+<link rel="stylesheet" href="editor.css">
+</head>
+<body>
+<div class="scroller" id="scroller">
+  <div class="gutter" id="gutter" aria-hidden="true"></div>
+  <div class="stack" id="stack">
+    <pre class="layer" id="layer"><code class="hljs" id="code"></code></pre>
+    <textarea id="input" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-label="File contents"></textarea>
+  </div>
+</div>
+<script src="highlight.min.js"></script>
+<script src="editor.js"></script>
+</body>
+</html>

@@ -46,6 +46,9 @@ struct TabItem: Identifiable, Codable, Hashable {
     var worktree: Worktree?
     /// The name follows the title Claude Code gives the conversation until the session is renamed.
     var autoName: Bool
+    /// Model and effort chosen for this session from the compose box; applied when it starts.
+    var model: String?
+    var effort: String?
 
     init(name: String, directory: String? = nil, command: String? = nil, worktree: Worktree? = nil) {
         self.name = name
@@ -69,6 +72,8 @@ struct TabItem: Identifiable, Codable, Hashable {
         codexThreadID = try c.decodeIfPresent(String.self, forKey: .codexThreadID)
         worktree = try c.decodeIfPresent(Worktree.self, forKey: .worktree)
         autoName = try c.decodeIfPresent(Bool.self, forKey: .autoName) ?? Self.isDefaultName(name)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
     }
 
     /// A name omux made up, such as "Session 3", as opposed to one the user chose.
@@ -114,6 +119,15 @@ struct TabGroup: Identifiable, Codable, Hashable {
     /// Runs in each new worktree before the session's command, e.g. to copy ignored
     /// files like `.env` or install dependencies. Empty runs nothing.
     var worktreeSetup = ""
+    /// "terminal" or "transcript" for this project; nil follows Settings.
+    var sessionView: String?
+    /// Model and effort new sessions start with; nil leaves the agent's default.
+    var model: String?
+    var effort: String?
+    /// When something last happened in the project; projects quiet for days fold into the idle stack.
+    var lastActive: Date?
+    /// Put in the idle stack by hand; cleared when an agent works in the project again.
+    var forcedIdle = false
     var tabs: [TabItem] = []
 
     init(name: String, directory: String? = nil, tabs: [TabItem] = []) {
@@ -132,6 +146,11 @@ struct TabGroup: Identifiable, Codable, Hashable {
         isCollapsed = try c.decodeIfPresent(Bool.self, forKey: .isCollapsed) ?? false
         useWorktrees = try c.decodeIfPresent(Bool.self, forKey: .useWorktrees) ?? false
         worktreeSetup = try c.decodeIfPresent(String.self, forKey: .worktreeSetup) ?? ""
+        sessionView = try c.decodeIfPresent(String.self, forKey: .sessionView)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive)
+        forcedIdle = try c.decodeIfPresent(Bool.self, forKey: .forcedIdle) ?? false
         tabs = try c.decodeIfPresent([TabItem].self, forKey: .tabs) ?? []
     }
 }
@@ -173,9 +192,15 @@ struct Workspace: Codable {
 struct TabRuntime: Equatable {
     var provider: SessionProvider?
     var agentConnected = false
+    /// When Codex's app-server took the session and its TUI command was typed.
+    var agentConnectedAt: Date?
+    /// Codex's TUI has drawn its prompt (its first idle status line), so it takes input.
+    var tuiReady = false
     var title = ""
     var cwd: String?
     var hasActivity = false
+    /// When the session last did something: output, a status change, a bell.
+    var lastActivity: Date?
     var needsAttention = false
     var exited = false
     /// A program (e.g. claude) is running in the shell, as opposed to an idle prompt.
@@ -199,11 +224,12 @@ struct TabRuntime: Equatable {
 
     /// Claude Code is waiting on a tool permission, which Allow/Deny can answer. It reports plan
     /// approval and peer messages as "permission" too, but their first option isn't a plain
-    /// yes; a tool prompt's message reads "approve <Tool>: …".
+    /// yes; a tool prompt's message reads "approve <Tool>: …", or just "permission prompt" when
+    /// it has no description for the call, as with some long Bash commands.
     var awaitsPermission: Bool {
         guard statusState == .blocked, statusKind == "permission" else { return false }
         guard provider != .codex, let message = statusDetail else { return true }
-        return message.range(of: #"^approve [\w-]+: "#, options: .regularExpression) != nil
+        return message == "permission prompt" || message.range(of: #"^approve [\w-]+: "#, options: .regularExpression) != nil
     }
 
     func statusLine(showFolder: Bool = true) -> String? {
@@ -224,10 +250,10 @@ struct TabRuntime: Equatable {
 
     var statusColor: Color? {
         switch statusState {
-        case .blocked: return .orange
-        case .working: return .blue
-        case .done: return .green
-        case .error: return .red
+        case .blocked: return Palette.needs
+        case .working: return Palette.working
+        case .done: return Palette.done
+        case .error: return Palette.error
         default: return nil
         }
     }

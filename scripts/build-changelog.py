@@ -75,10 +75,18 @@ page = f'''<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Changelog – omux</title>
-  <meta name="description" content="What changed in each omux release.">
+  <meta name="description" content="What changed in each release of omux, the native agentic development platform for the Mac.">
   <link rel="canonical" href="https://omux.app/changelog">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-TYCLVPPKHP"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){{dataLayer.push(arguments);}}
+    gtag('js', new Date());
+    gtag('config', 'G-TYCLVPPKHP');
+  </script>
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/changelog">
@@ -88,7 +96,7 @@ page = f'''<!doctype html>
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
@@ -129,7 +137,7 @@ page = f'''<!doctype html>
     <p class="fineprint">omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI.</p>
   </div>
 </footer>
-<script src="main.js" defer></script>
+<script src="main.js?v=2" defer></script>
 </body>
 </html>
 '''

@@ -250,6 +250,11 @@ struct FilePanel: View {
 struct FilePreview: View {
     let url: URL
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
+    @AppStorage(Prefs.theme) private var themeName = Theme.dark.rawValue
+    /// Markdown shows rendered until the pencil switches it to the editor.
+    @State private var editingMarkdown = false
+
+    private var theme: Theme { Theme(rawValue: themeName) ?? .dark }
 
     private static let images: Set<String> = ["png", "jpg", "jpeg", "heic", "bmp", "tiff", "tif", "webp", "svg"]
     private static let media: Set<String> = ["mp4", "mov", "m4v", "mp3", "m4a", "wav", "aac", "aiff"]
@@ -268,6 +273,13 @@ struct FilePreview: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if isMarkdown, isSmall {
+                    Button { editingMarkdown.toggle() } label: {
+                        Image(systemName: editingMarkdown ? "doc.richtext" : "pencil")
+                            .foregroundStyle(editingMarkdown ? Color.accentColor : Color.secondary)
+                    }
+                    .help(editingMarkdown ? "Show rendered" : "Edit the markdown")
+                }
                 if isText {
                     Button { wrapLines.toggle() } label: {
                         Image(systemName: "arrow.turn.down.left")
@@ -288,6 +300,7 @@ struct FilePreview: View {
 
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .onChange(of: url) { _, _ in editingMarkdown = false }
     }
 
     private var isMarkdown: Bool { ["md", "markdown"].contains(url.pathExtension.lowercased()) }
@@ -303,11 +316,21 @@ struct FilePreview: View {
         isMarkdown || Self.text.contains(url.pathExtension.lowercased()) || url.lastPathComponent.hasPrefix(".")
     }
 
+    /// Whether a file opens as text in the editor: a text type, under the size limit, sized
+    /// through symlinks. Tests check this where the view tree no longer carries the text.
+    static func previewsAsText(_ url: URL) -> Bool {
+        let preview = FilePreview(url: url)
+        return preview.isText && preview.isSmall && !images.contains(url.pathExtension.lowercased())
+    }
+
     @ViewBuilder
     private var content: some View {
         let ext = url.pathExtension.lowercased()
-        if isMarkdown, isSmall {
+        if isMarkdown, isSmall, !editingMarkdown {
             MarkdownView(text: (try? String(contentsOf: url, encoding: .utf8)) ?? "", wrapCode: wrapLines)
+        } else if isText, isSmall, !Self.images.contains(ext) {
+            // Editable in place: small changes and ⌘S, with the agent's edits showing up live.
+            FileEditorPane(url: url, wrap: wrapLines, theme: theme).id(url)
         } else if Self.images.contains(ext), let image = NSImage(contentsOf: url) {
             Image(nsImage: image)
                 .resizable()

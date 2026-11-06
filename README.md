@@ -1,8 +1,8 @@
 # omux
 
-**A 5 MB native Mac terminal for running fleets of coding agents.**
+**The native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions.**
 
-Written in Swift on SwiftTerm, no Electron, no web view, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
+Written in Swift on SwiftTerm, no Electron, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
 
 ![omux with eight projects in the sidebar, a session running five subagents, a session waiting on Allow or Deny, two Codex sessions, and the Changes tab showing the diff](docs/screenshot.png)
 
@@ -40,10 +40,12 @@ omux turns that into a dashboard.
 | **Panes** | Sessions of a project arranged in the window: split right or down, drag from the sidebar onto an edge, resize, move, maximize. One arrangement per project, saved. |
 | **The `omux` command** | Programs in a session can list the project's sessions, read their screens, and start sessions of their own to send text to. Scoped to the project, children only, every action shown as a banner. [docs/cli.md](docs/cli.md) |
 | **Subagents** | Every subagent of Claude Code or Codex listed with its current tool. Click one to read its transcript. |
+| **Project defaults** | Each project can choose Terminal or Transcript for its sessions, and the model and effort new sessions start with. |
 | **Worktree sessions** (⌥⌘T) | A session on its own branch and folder, so parallel agents never touch each other's files. A per-project setup command runs first, like `cp "$OMUX_REPO/.env" . && npm install`. |
 | **Pull request status** | With the [GitHub CLI](https://cli.github.com): checks, reviews and merges next to the session. Failing checks' logs sent to the agent in one click. Merged pull requests offer to clean up the worktree. |
 | **Changes** (⌥⌘2) | The session's diff against its base branch. Click a line to leave a note, then send all notes to the agent in one message. |
-| **Files** (⌥⌘1) | The session's folder, with previews of code, Markdown, images, PDFs and anything Quick Look shows. ⌘-click a path in the terminal to preview it. |
+| **Files** (⌥⌘1) | The session's folder, with previews of code, Markdown, images, PDFs and anything Quick Look shows. Text files open in a small editor with syntax colors: make a change, ⌘S saves. ⌘-click a path in the terminal to open it. |
+| **Transcript view** (beta) | Settings › Session View shows every session as chat instead of the terminal: your prompts, the agent's replies with highlighted code, tool calls with diffs and output, Allow and Deny cards, and a box that types into the terminal and starts the agent if needed. Read from Claude Code's transcript file or Codex's thread; the terminal keeps running underneath. |
 | **Browser** (⌥⌘3) | A web view per session that opens the local server the session prints. Pick an element to send its HTML, styles and a screenshot to the prompt. |
 | **Images and files in the prompt** | Paste an image or drop files onto the terminal, and the agent gets their paths as attachments. |
 | **Recent conversations** (⇧⌘O) | Claude Code's and Codex's recent conversations, reopened as sessions. |

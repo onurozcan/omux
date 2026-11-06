@@ -1,0 +1,28 @@
+:root {
+  --bg: #161618; --fg: #e6e6e6; --muted: #8d8d93; --line: rgba(128,128,128,0.18); --accent: #2f6fed;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace; --size: 12px; --lh: 1.55;
+  --pad: 12px; --gutter: 44px;
+}
+html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden; }
+.scroller { position: absolute; inset: 0; overflow: auto; display: flex; align-items: flex-start; }
+.gutter { flex: none; width: var(--gutter); box-sizing: border-box; padding: var(--pad) 8px var(--pad) 0; text-align: right;
+  font: var(--size)/var(--lh) var(--mono); color: var(--muted); user-select: none; position: sticky; left: 0; background: var(--bg); z-index: 2; white-space: pre; }
+.gutter span { opacity: 0.55; }
+.gutter span.active { opacity: 1; color: var(--fg); }
+.gutter.hidden { display: none; }
+.stack .current { position: absolute; left: 0; right: 0; background: rgba(128,128,128,0.09); pointer-events: none; }
+.stack { position: relative; flex: 1 0 auto; min-width: 100%; box-sizing: border-box; }
+.layer, #input {
+  margin: 0; box-sizing: border-box; padding: var(--pad); font: var(--size)/var(--lh) var(--mono); tab-size: 4;
+  white-space: pre; word-break: normal; overflow-wrap: normal; min-height: 100%;
+}
+.wrap .layer, .wrap #input { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; }
+.wrap .stack { min-width: 0; width: 100%; flex: 1 1 auto; }
+.layer { position: absolute; inset: 0; pointer-events: none; background: transparent; }
+/* Beats highlight.js's own `pre code.hljs { padding: 1em }`, which pushed the colours a line below the caret. */
+.layer code, pre.layer code.hljs { display: block; background: transparent; padding: 0; font: inherit; white-space: inherit; }
+#input { position: relative; display: block; width: 100%; border: 0; outline: none; resize: none; overflow: hidden;
+  background: transparent; color: transparent; caret-color: var(--fg); }
+#input::selection { background: rgba(47,111,237,0.35); color: transparent; }
+.plain .layer { display: none; }
+.plain #input { color: var(--fg); }

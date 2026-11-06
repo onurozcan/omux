@@ -18,6 +18,10 @@ final class PermissionPromptTests: XCTestCase {
         XCTAssertTrue(runtime("approve Bash: ls -la").awaitsPermission)
         XCTAssertTrue(runtime("approve mcp__github__create_issue: x").awaitsPermission)
         XCTAssertTrue(runtime(nil).awaitsPermission)
+        // Claude Code's generic label, used when it has no description for the call.
+        XCTAssertTrue(runtime("permission prompt").awaitsPermission)
+        XCTAssertFalse(runtime("awaiting input").awaitsPermission)
+        XCTAssertFalse(runtime("awaiting input: build-bot").awaitsPermission)
         XCTAssertFalse(runtime("approve plan").awaitsPermission)
         XCTAssertFalse(runtime("approve message from build-bot").awaitsPermission)
         XCTAssertTrue(runtime("Approve file changes in Codex", provider: .codex).awaitsPermission)

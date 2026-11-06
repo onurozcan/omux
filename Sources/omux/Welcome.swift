@@ -84,7 +84,7 @@ struct WelcomeSheet: View {
         HStack(alignment: .top, spacing: 8) {
             switch path {
             case .none: ProgressView().controlSize(.small).frame(width: 16)
-            case .some(.some): Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            case .some(.some): Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.done)
             case .some(nil): Image(systemName: "xmark.circle").foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 2) {
@@ -105,7 +105,7 @@ struct WelcomeSheet: View {
             HStack(spacing: 10) {
                 switch notifications {
                 case .authorized?, .provisional?:
-                    Label("Enabled", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Label("Enabled", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.done)
                 case .denied?:
                     Label("Turned off for omux", systemImage: "xmark.circle").foregroundStyle(.secondary)
                     Button("Open System Settings") {
@@ -148,7 +148,7 @@ struct WelcomeSheet: View {
             Text(name).frame(width: 52, alignment: .leading)
             if !limits.isEmpty {
                 Label(limits.map { "\($0.label) \($0.percent)%" }.joined(separator: "  "), systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Palette.done)
             } else if let error {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

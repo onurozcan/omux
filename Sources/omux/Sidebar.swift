@@ -1,15 +1,28 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// One row of the flat sidebar list: a project header or a session.
+/// One row of the flat sidebar list: a project header, a session, or a stack of idle shells.
 enum SidebarRow: Identifiable, Hashable {
     case group(TabGroup)
     case tab(TabItem, groupID: UUID)
+    /// A shell listed under its stack, indented with a guide line.
+    case nested(TabItem, groupID: UUID)
+    /// Idle shells of a project folded into one row; `expanded` lists them below it.
+    case shells(groupID: UUID, tabs: [TabItem], expanded: Bool)
+    /// Projects with nothing running folded into one row at the bottom.
+    case projects(groups: [TabGroup], expanded: Bool)
 
     var id: UUID {
         switch self {
         case .group(let g): return g.id
-        case .tab(let t, _): return t.id
+        case .tab(let t, _), .nested(let t, _): return t.id
+        case .shells(let g, _, _):
+            // Derived from the project's id, so it never collides with a session's.
+            var bytes = g.uuid
+            bytes.15 ^= 0xFF
+            return UUID(uuid: bytes)
+        case .projects:
+            return UUID(uuidString: "00000000-0000-0000-0000-00000000bead")!
         }
     }
 }
@@ -17,13 +30,84 @@ enum SidebarRow: Identifiable, Hashable {
 struct Sidebar: View {
     @EnvironmentObject var store: Store
     let theme: Theme
+    /// Projects whose idle shells are listed instead of stacked.
+    @State private var expandedShells: Set<UUID> = []
+    /// Idle projects listed instead of stacked.
+    @State private var expandedProjects = false
 
-    /// Projects followed by their sessions (hidden while collapsed). A flat list lets
-    /// native drag reorder projects and move sessions between them.
+    /// Active projects first, in the user's order, then the idle ones; two or more idle projects
+    /// fold into one row at the bottom. Within a project, two or more idle shells fold into one
+    /// row, so agents stay in view. The flat list lets native drag reorder and move sessions.
     private var rows: [SidebarRow] {
-        store.groups.flatMap { group in
-            [SidebarRow.group(group)] + (group.isCollapsed ? [] : group.tabs.map { .tab($0, groupID: group.id) })
+        let active = store.groups.filter(isActive)
+        // Idle projects most recently used first, so the one you'll come back to is on top.
+        let idle = store.groups.filter { !isActive($0) }.sorted { lastActivity($0) > lastActivity($1) }
+        var rows = active.flatMap(groupRows)
+        if idle.count >= 2 {
+            // Clicking never reorders: a selected session inside the stack opens the stack instead.
+            let holdsSelection = idle.contains { group in group.tabs.contains { $0.id == store.selectedTabID } }
+            let expanded = expandedProjects || holdsSelection
+            rows.append(.projects(groups: idle, expanded: expanded))
+            if expanded { rows += idle.flatMap(groupRows) }
+        } else {
+            rows += idle.flatMap(groupRows)
         }
+        return rows
+    }
+
+    /// When an agent last worked in the project: status events while the app runs, and the
+    /// transcripts' modification dates for what happened before. Opening a session doesn't count.
+    private func lastActivity(_ group: TabGroup) -> Date {
+        let files = group.tabs.map { TranscriptDates.shared.date(for: $0) }.compactMap { $0 }.max() ?? .distantPast
+        return max(files, group.lastActive ?? .distantPast)
+    }
+
+    /// Projects quiet for this long fold into the idle stack.
+    private static let idleAfter: TimeInterval = 3 * 24 * 3600
+
+    /// A project with something going on, or anything in the last three days: an agent running
+    /// or waiting, a program in a shell, a session asking for attention, or recent use.
+    /// Selection alone doesn't count, so clicks don't reorder.
+    private func isActive(_ group: TabGroup) -> Bool {
+        if group.forcedIdle { return false }
+        if Date().timeIntervalSince(lastActivity(group)) < Self.idleAfter { return true }
+        return group.tabs.contains { tab in
+            guard let rt = store.runtime[tab.id], !rt.exited else { return false }
+            return rt.busy || rt.statusState == .working || rt.statusState == .blocked || rt.needsAttention
+        }
+    }
+
+    private func groupRows(_ group: TabGroup) -> [SidebarRow] {
+        return { () -> [SidebarRow] in
+            guard !group.isCollapsed else { return [.group(group)] }
+            // Most recently used first, so the shell you'll want is at the top of the stack.
+            let idle = group.tabs.filter { isIdleShell($0) }
+                .sorted { (store.runtime[$0.id]?.lastActivity ?? .distantPast) > (store.runtime[$1.id]?.lastActivity ?? .distantPast) }
+            guard idle.count >= 2 else { return [.group(group)] + group.tabs.map { .tab($0, groupID: group.id) } }
+            let expanded = expandedShells.contains(group.id) || idle.contains { $0.id == store.selectedTabID }
+            var rows: [SidebarRow] = [.group(group)]
+            var stacked = false
+            for tab in group.tabs {
+                if idle.contains(tab) {
+                    if !stacked {
+                        rows.append(.shells(groupID: group.id, tabs: idle, expanded: expanded))
+                        if expanded { rows += idle.map { .nested($0, groupID: group.id) } }
+                        stacked = true
+                    }
+                } else {
+                    rows.append(.tab(tab, groupID: group.id))
+                }
+            }
+            return rows
+        }()
+    }
+
+    /// A plain shell with nothing running in it. Selecting one keeps its stack open rather
+    /// than pulling it out, so the list doesn't shuffle under the click.
+    private func isIdleShell(_ tab: TabItem) -> Bool {
+        guard store.provider(of: tab) == .shell else { return false }
+        let rt = store.runtime[tab.id]
+        return rt == nil || rt!.exited || !rt!.busy
     }
 
     var body: some View {
@@ -63,6 +147,38 @@ struct Sidebar: View {
                             // Dragged onto a terminal's edge, the session is shown there in a pane.
                             // (itemProvider keeps the List's own drag, so reordering and clicks still work.)
                             .itemProvider { NSItemProvider(object: tab.id.uuidString as NSString) }
+                    case .nested(let tab, let groupID):
+                        TabRow(tab: tab)
+                            .tag(tab.id)
+                            .padding(.leading, 22)
+                            .overlay(alignment: .leading) {
+                                Rectangle().fill(.primary.opacity(0.12)).frame(width: 1).padding(.leading, 13)
+                            }
+                            .contextMenu { TabMenu(tab: tab, groupID: groupID) }
+                            .itemProvider { NSItemProvider(object: tab.id.uuidString as NSString) }
+                    case .shells(let groupID, let tabs, let expanded):
+                        StackRow(title: "Idle shells", count: tabs.count, expanded: expanded) {
+                            if expanded { expandedShells.remove(groupID) } else { expandedShells.insert(groupID) }
+                        }
+                        .selectionDisabled()
+                        .listRowSeparator(.hidden)
+                        .padding(.leading, 10)
+                        .help(tabs.map(\.name).joined(separator: ", "))
+                        .contextMenu {
+                            Button(expanded ? "Stack idle shells" : "Show idle shells") {
+                                if expanded { expandedShells.remove(groupID) } else { expandedShells.insert(groupID) }
+                            }
+                            Button("Close idle shells") { for tab in tabs { store.requestClose(tab.id) } }
+                        }
+                    case .projects(let groups, let expanded):
+                        StackRow(title: "Idle projects", count: groups.count, expanded: expanded) { expandedProjects.toggle() }
+                            .selectionDisabled()
+                            .listRowSeparator(.hidden)
+                            .padding(.top, 6)
+                            .help(groups.map(\.name).joined(separator: ", "))
+                            .contextMenu {
+                                Button(expanded ? "Stack idle projects" : "Show idle projects") { expandedProjects.toggle() }
+                            }
                     }
                 }
                 .onMove { from, to in store.moveRows(rows, from: from, to: to) }
@@ -98,6 +214,53 @@ struct Sidebar: View {
     }
 }
 
+/// A folded group of idle things, "Idle shells" or "Idle projects", with the count in a badge
+/// and a chevron. Clicking lists them below; clicking again restacks.
+struct StackRow: View {
+    let title: String
+    let count: Int
+    let expanded: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 8)
+            Text(title).foregroundStyle(.secondary).lineLimit(1)
+            Spacer(minLength: 4)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 18, minHeight: 16)
+                .background(.primary.opacity(0.1), in: Capsule())
+        }
+        .font(.system(size: 12))
+        .frame(height: 22)
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: toggle)
+    }
+}
+
+/// Transcript modification dates per session, looked up at most every few minutes: the sidebar
+/// asks on every redraw.
+@MainActor
+final class TranscriptDates {
+    static let shared = TranscriptDates()
+    private var cache: [UUID: (checked: Date, date: Date?)] = [:]
+
+    func date(for tab: TabItem) -> Date? {
+        if let hit = cache[tab.id], Date().timeIntervalSince(hit.checked) < 300 { return hit.date }
+        let url = Store.claudeTranscriptURL(tab.claudeSessionID.uuidString.lowercased())
+        let date = url.flatMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+        cache[tab.id] = (Date(), date)
+        return date
+    }
+}
+
 struct TabRow: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var monitor = AgentMonitor.shared
@@ -130,9 +293,7 @@ struct TabRow: View {
                     }
                     .help("Close session")
                 } else {
-                    Circle()
-                        .fill(rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.35))
-                        .frame(width: 8, height: 8)
+                    StatusDot(color: rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.35), pulsing: rt.statusState == .working, size: 8)
                 }
             }
             .frame(width: 8, height: 14)
@@ -203,9 +364,9 @@ struct TabRow: View {
                         .help("Start or continue this session")
                     }
                 } else if rt.needsAttention {
-                    Image(systemName: "bell.fill").font(.caption).foregroundStyle(.orange)
+                    Image(systemName: "bell.fill").font(.caption).foregroundStyle(Palette.needs)
                 } else if rt.hasActivity {
-                    Circle().fill(.blue).frame(width: 6, height: 6)
+                    Circle().fill(Palette.working).frame(width: 6, height: 6)
                 }
             }
             .frame(height: 18)
@@ -358,6 +519,11 @@ struct GroupMenu: View {
             .disabled(store.groups.first?.id == group.id)
         Button("Move Down") { store.moveGroup(group.id, by: 1) }
             .disabled(store.groups.last?.id == group.id)
+        if group.forcedIdle {
+            Button("Move to Active") { store.updateGroup(group.id) { $0.forcedIdle = false; $0.lastActive = Date() } }
+        } else {
+            Button("Move to Idle") { store.updateGroup(group.id) { $0.forcedIdle = true } }
+        }
         Divider()
         Button("Delete Project", role: .destructive) { store.deleteGroup(group.id) }
     }

@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct OmuxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = Store.shared
+    @AppStorage(Prefs.accent) private var accent = "system"
+    @AppStorage(Prefs.theme) private var themeName = Theme.dark.rawValue
 
     init() { Prefs.importReleaseSettingsIfBeta() }
 
@@ -13,10 +15,14 @@ struct OmuxApp: App {
         Window(Persistence.isBeta ? "omux Beta" : "omux", id: "main") {
             ContentView()
                 .environmentObject(store)
+                .tint(Color(nsColor: Appearance.accent(accent, theme: Theme(rawValue: themeName) ?? .dark)))
                 .frame(minWidth: 720, minHeight: 420)
         }
         .defaultSize(width: 1240, height: 780)
         .windowStyle(.hiddenTitleBar)
+        // Folders and omux:// links go to the app delegate. Left to SwiftUI, an open event closes
+        // the window to route it, and closing the main window is how omux quits.
+        .handlesExternalEvents(matching: [])
         .commands { AppCommands(store: store) }
 
         Settings { SettingsView() }
@@ -50,10 +56,20 @@ enum Prefs {
     static let playAgent = "playAgent"
     /// What ▶ does for an agent with no saved conversation: "fresh" or "continue" (the folder's latest).
     static let startWithoutHistory = "startWithoutHistory"
+    /// How agent sessions show in the main panel: "terminal" (default) or "transcript" (beta).
+    static let sessionView = "sessionView"
+    static let accent = "accent"
+    static let transcriptFont = "transcriptFont"
+    static let transcriptSize = "transcriptSize"
+    static let transcriptWidth = "transcriptWidth"
+    static let transcriptDensity = "transcriptDensity"
+    static let transcriptBubbles = "transcriptBubbles"
+    static let transcriptTimestamps = "transcriptTimestamps"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory]
+                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
+                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -69,49 +85,189 @@ enum Prefs {
 }
 
 struct SettingsView: View {
-    @AppStorage(Prefs.confirmQuit) private var confirmQuit = true
+    var body: some View {
+        TabView {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            AppearanceSettings()
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+            SessionSettings()
+                .tabItem { Label("Sessions", systemImage: "terminal") }
+            NotificationSettings()
+                .tabItem { Label("Notifications", systemImage: "bell") }
+            Form { UpdateSettings() }
+                .formStyle(.grouped)
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        }
+        // A fixed height: the grouped forms scroll inside it, so the tallest tab never pushes
+        // the window off the screen.
+        .frame(width: 540, height: 600)
+    }
+}
+
+/// A one-line explanation under a setting.
+private struct SettingNote: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct GeneralSettings: View {
     @AppStorage(Prefs.showFolderPath) private var showFolderPath = true
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
-    @AppStorage(Prefs.theme) private var theme = Theme.dark.rawValue
-    @AppStorage(Prefs.fontFamily) private var fontFamily = ""
-    @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
-    @AppStorage(Prefs.autoResume) private var autoResume = false
-    @AppStorage(Prefs.notifyStyle) private var notifyStyle = "banner"
-    @AppStorage(Prefs.notifySound) private var notifySound = "Default"
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
-    @AppStorage(Prefs.notifyNeedsYou) private var notifyNeedsYou = true
-    @AppStorage(Prefs.notifyDone) private var notifyDone = false
-    @AppStorage(Prefs.notifyPrograms) private var notifyPrograms = true
-    @AppStorage(Prefs.cliEnabled) private var cliEnabled = true
-    @AppStorage(Prefs.playAgent) private var playAgent = "claude"
-    @AppStorage(Prefs.startWithoutHistory) private var startWithoutHistory = "fresh"
+    @AppStorage(Prefs.confirmQuit) private var confirmQuit = true
 
     var body: some View {
         Form {
-            Section("Appearance") {
-                Picker("Theme", selection: $theme) {
-                    ForEach(Theme.allCases) { Text($0.label).tag($0.rawValue) }
-                }
-                Picker("Font", selection: $fontFamily) {
-                    Text("System Mono").tag("")
-                    ForEach(Fonts.monospaceFamilies, id: \.self) { Text($0).tag($0) }
-                }
-                Stepper("Font size: \(Int(fontSize)) pt", value: $fontSize, in: Fonts.sizes)
-            }
             Section("Sidebar") {
-                Toggle("Show folder path under session name", isOn: $showFolderPath)
-                Picker("Check Claude limits every", selection: $usageInterval) {
-                    Text("1 minute").tag(60.0)
+                Toggle("Show the folder path under each session", isOn: $showFolderPath)
+                Picker("Check Claude usage limits every", selection: $usageInterval) {
+                    Text("Minute").tag(60.0)
                     Text("5 minutes").tag(300.0)
                     Text("30 minutes").tag(1800.0)
                     Text("Hour").tag(3600.0)
                 }
             }
-            Section("Files Panel") {
-                Toggle("Wrap long lines in file preview", isOn: $wrapLines)
+            Section("Files") {
+                Toggle("Wrap long lines in the file preview", isOn: $wrapLines)
             }
-            Section("Sessions") {
-                Picker("▶ in a shell session starts", selection: $playAgent) {
+            Section("Quitting") {
+                Toggle("Ask before quitting while sessions are running", isOn: $confirmQuit)
+                SettingNote("Quitting stops every session. Saved Claude Code and Codex conversations continue on the next launch.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct AppearanceSettings: View {
+    @AppStorage(Prefs.theme) private var theme = Theme.dark.rawValue
+    @AppStorage(Prefs.accent) private var accent = "system"
+    @AppStorage(Prefs.fontFamily) private var fontFamily = ""
+    @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
+    @AppStorage(Prefs.transcriptFont) private var transcriptFont = ""
+    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 13.0
+    @AppStorage(Prefs.transcriptWidth) private var transcriptWidth = "full"
+    @AppStorage(Prefs.transcriptDensity) private var transcriptDensity = "comfortable"
+    @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
+    @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
+
+    private var current: Theme { Theme(rawValue: theme) ?? .dark }
+
+    var body: some View {
+        Form {
+            Section("Theme") {
+                swatches("Dark", Theme.darkThemes)
+                swatches("Light", Theme.lightThemes)
+                SettingNote("Colours for terminals, the transcript view, the file editor and the window.")
+            }
+            Section("Accent") {
+                Picker("Accent colour", selection: $accent) {
+                    ForEach(Appearance.accents, id: \.id) { choice in
+                        HStack(spacing: 8) {
+                            Circle().fill(Color(nsColor: Appearance.accent(choice.id, theme: current))).frame(width: 10, height: 10)
+                            Text(choice.label)
+                        }
+                        .tag(choice.id)
+                    }
+                }
+                SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue.")
+            }
+            Section("Terminal") {
+                Picker("Font", selection: $fontFamily) {
+                    Text("System Mono").tag("")
+                    ForEach(Fonts.monospaceFamilies, id: \.self) { Text($0).tag($0) }
+                }
+                Stepper("Size: \(Int(fontSize)) pt", value: $fontSize, in: Fonts.sizes)
+                SettingNote("Also the font of code in the transcript and the file editor. ⌘+ and ⌘− change the size.")
+            }
+            Section("Transcript") {
+                Picker("Font", selection: $transcriptFont) {
+                    ForEach(Appearance.transcriptFonts, id: \.id) { Text($0.label).tag($0.id) }
+                }
+                Stepper("Size: \(Int(transcriptSize)) pt", value: $transcriptSize, in: Appearance.transcriptSizes)
+                Picker("Width", selection: $transcriptWidth) {
+                    ForEach(Appearance.widths, id: \.id) { Text($0.label).tag($0.id) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Density", selection: $transcriptDensity) {
+                    ForEach(Appearance.densities, id: \.id) { Text($0.label).tag($0.id) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Your messages", selection: $transcriptBubbles) {
+                    ForEach(Appearance.bubbles, id: \.id) { Text($0.label).tag($0.id) }
+                }
+                .pickerStyle(.segmented)
+                Toggle("Show the time under your messages", isOn: $transcriptTimestamps)
+                SettingNote("Applies to every open transcript at once.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// A row of theme cards: background, chrome strip, sample text and six palette colours.
+    private func swatches(_ title: String, _ themes: [Theme]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
+                ForEach(themes) { option in
+                    Button { theme = option.rawValue } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack(spacing: 4) {
+                                Text("Aa").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(nsColor: option.foreground))
+                                Spacer()
+                                ForEach(Array(option.swatch.enumerated()), id: \.offset) { _, color in
+                                    Circle().fill(Color(nsColor: color)).frame(width: 6, height: 6)
+                                }
+                            }
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 7)
+                            .background(Color(nsColor: option.background))
+                            Text(option.label)
+                                .font(.system(size: 10))
+                                .lineLimit(1)
+                                .foregroundStyle(Color(nsColor: option.foreground))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 4)
+                                .background(Color(nsColor: option.chrome))
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(option == current ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: option == current ? 2 : 1))
+                    }
+                    .buttonStyle(.plain)
+                    .help(option.label)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct SessionSettings: View {
+    @AppStorage(Prefs.sessionView) private var sessionView = "terminal"
+    @AppStorage(Prefs.playAgent) private var playAgent = "claude"
+    @AppStorage(Prefs.startWithoutHistory) private var startWithoutHistory = "fresh"
+    @AppStorage(Prefs.autoResume) private var autoResume = false
+    @AppStorage(Prefs.cliEnabled) private var cliEnabled = true
+
+    var body: some View {
+        Form {
+            Section("View") {
+                Picker("Show agent sessions as", selection: $sessionView) {
+                    Text("Terminal").tag("terminal")
+                    Text("Transcript").tag("transcript")
+                }
+                .pickerStyle(.radioGroup)
+                SettingNote(sessionView == "transcript"
+                    ? "Every session is a chat, read from Claude Code's transcript or Codex's thread, with a box that types into the terminal. The terminal keeps running underneath; ⌥⌘P peeks at it. A project can choose its own view in its settings."
+                    : "Every session is its terminal. Transcript shows the same sessions as chat, with a compose box; a project can choose its own view in its settings.")
+            }
+            Section("Starting") {
+                Picker("▶ in a shell starts", selection: $playAgent) {
                     Text("Claude Code").tag("claude")
                     Text("Codex").tag("codex")
                 }
@@ -119,30 +275,36 @@ struct SettingsView: View {
                     Text("Starts fresh").tag("fresh")
                     Text("Continues the folder's latest conversation").tag("continue")
                 }
-                Text("Continuing uses claude --continue; Codex always starts fresh.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Auto-resume agent sessions at launch", isOn: $autoResume)
-                Text("Off: restored sessions stay stopped until you press ▶. Clicking one only opens its shell.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Confirm before quitting while sessions are running", isOn: $confirmQuit)
-                Text("Quitting stops every session. Saved Claude Code and Codex conversations can be continued on the next launch.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Toggle("Give sessions the omux command", isOn: $cliEnabled)
-                Text("Programs in a session can run `omux` to list the project's sessions, read their screens, and start sessions of their own to send text to. Takes effect for sessions started after the change.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                SettingNote("Continuing runs claude --continue. Codex always starts fresh.")
+                Toggle("Resume agent sessions at launch", isOn: $autoResume)
+                SettingNote("Off: restored sessions stay stopped until you press ▶. Clicking one only opens its shell.")
             }
-            Section("Notifications") {
-                Toggle("When a session needs you", isOn: $notifyNeedsYou)
+            Section("Integration") {
+                Toggle("Give sessions the omux command", isOn: $cliEnabled)
+                SettingNote("Programs in a session can run omux to list the project's sessions, read their screens, and start sessions of their own. Applies to sessions started after the change.")
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct NotificationSettings: View {
+    @AppStorage(Prefs.notifyNeedsYou) private var notifyNeedsYou = true
+    @AppStorage(Prefs.notifyDone) private var notifyDone = false
+    @AppStorage(Prefs.notifyPrograms) private var notifyPrograms = true
+    @AppStorage(Prefs.notifyStyle) private var notifyStyle = "banner"
+    @AppStorage(Prefs.notifySound) private var notifySound = "Default"
+
+    var body: some View {
+        Form {
+            Section("Notify me") {
+                Toggle("When a session needs me", isOn: $notifyNeedsYou)
                 Toggle("When a session finishes", isOn: $notifyDone)
                 Toggle("When a program in a session sends one", isOn: $notifyPrograms)
-                Text("Only for sessions you aren't looking at. Programs send them with OSC 9 or OSC 777: set Claude Code's notification channel to ghostty (/config) to get its plugins' notifications too.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Picker("Style", selection: $notifyStyle) {
+                SettingNote("Only for sessions you aren't looking at. Programs send them with OSC 9 or OSC 777; set Claude Code's notification channel to ghostty (/config) to get its plugins' notifications too.")
+            }
+            Section("Style") {
+                Picker("Show as", selection: $notifyStyle) {
                     Text("Banner and sound").tag("banner")
                     Text("Sound only").tag("sound")
                 }
@@ -153,10 +315,8 @@ struct SettingsView: View {
                     Button("Play") { Notifier.shared.playSound() }.controlSize(.small)
                 }
             }
-            UpdateSettings()
         }
         .formStyle(.grouped)
-        .frame(width: 460)
     }
 }
 
@@ -190,8 +350,8 @@ private struct WindowChrome: NSViewRepresentable {
                     MainActor.assumeIsolated { Self.configure(window) }
                 })
             }
-            observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { _ in
-                MainActor.assumeIsolated { AppDelegate.mainWindowWillClose() }
+            observers.append(NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak window] _ in
+                MainActor.assumeIsolated { AppDelegate.mainWindowWillClose(window) }
             })
         }
 
@@ -268,7 +428,9 @@ struct ContentView: View {
                                 .background(Color(nsColor: theme.chrome))
                         } else if let id = store.selectedTabID, let term = store.terminal(for: id) {
                             DropIntoPane(target: id) { hooks in
-                                TerminalHost(termView: term, theme: theme, onDragEdge: hooks.edgeChanged, onDropSession: hooks.dropped)
+                                SessionSurface(tabID: id, theme: theme, hooks: hooks) {
+                                    TerminalHost(termView: term, theme: theme, onDragEdge: hooks.edgeChanged, onDropSession: hooks.dropped)
+                                }
                             }
                         } else {
                             ContentUnavailableView("No session", systemImage: "terminal", description: Text("Press ⌘T to start one."))
@@ -309,7 +471,13 @@ struct ContentView: View {
         .sheet(isPresented: $store.showWelcome) { WelcomeSheet().environmentObject(store) }
         .sheet(item: $store.editingTabID) { TabEditSheet(tabID: $0).environmentObject(store) }
         .sheet(item: $store.editingGroupID) { GroupEditSheet(groupID: $0).environmentObject(store) }
-        .onAppear { AppDelegate.openWindow = openWindow }
+        .onAppear {
+            AppDelegate.openWindow = openWindow
+            // The transcript's page is loaded before the first session asks for it.
+            if UserDefaults.standard.string(forKey: Prefs.sessionView) == "transcript" || store.groups.contains(where: { $0.sessionView == "transcript" }) {
+                TranscriptPages.shared.warm("single")
+            }
+        }
     }
 }
 
@@ -333,9 +501,7 @@ struct SessionHeader: View {
                 Spacer()
             } else if let tab = store.selectedTab {
                 let rt = store.runtime[tab.id] ?? TabRuntime()
-                Circle()
-                    .fill(rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
+                StatusDot(color: rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4), pulsing: rt.statusState == .working, size: 8)
                 Text(tab.name)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
@@ -414,10 +580,13 @@ struct PaneTree: View {
     var body: some View {
         switch node {
         case .session(let id):
+            // The selected pane gets a light border; the others a hairline.
+            let selected = store.selectedTabID == id
             SplitPane(tabID: id, theme: theme)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.primary.opacity(0.1), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.primary.opacity(0.45) : Color.primary.opacity(0.1), lineWidth: 1))
                 .padding(4)
+                .animation(.easeOut(duration: 0.12), value: selected)
         case .split(let axis, let fraction, let first, let second):
             GeometryReader { geo in
                 let total = axis == .horizontal ? geo.size.width : geo.size.height
@@ -466,9 +635,7 @@ struct SplitPane: View {
             HStack(spacing: 8) {
                 if let tab = store.tab(tabID) {
                     let rt = store.runtime[tabID] ?? TabRuntime()
-                    Circle()
-                        .fill(rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4))
-                        .frame(width: 7, height: 7)
+                    StatusDot(color: rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4), pulsing: rt.statusState == .working, size: 7)
                     Text(tab.name)
                         .font(.system(size: 11, weight: selected ? .semibold : .regular))
                         .lineLimit(1)
@@ -505,16 +672,20 @@ struct SplitPane: View {
                 Rectangle().fill(selected ? Color.accentColor.opacity(0.8) : .primary.opacity(0.08)).frame(height: 1)
             }
             if let term = store.terminal(for: tabID) {
-                TerminalHost(termView: term, theme: theme, onClick: {
-                    if store.selectedTabID != tabID { store.selectedTabID = tabID }
-                }, onDragEdge: hooks.edgeChanged, onDropSession: hooks.dropped)
+                SessionSurface(tabID: tabID, theme: theme, slot: tabID.uuidString, hooks: hooks) {
+                    TerminalHost(termView: term, theme: theme, onClick: {
+                        if store.selectedTabID != tabID { store.selectedTabID = tabID }
+                    }, onDragEdge: hooks.edgeChanged, onDropSession: hooks.dropped)
+                }
+                .onTapGesture { if store.selectedTabID != tabID { store.selectedTabID = tabID } }
             } else {
                 Color(nsColor: theme.background)
             }
         }
         }
         .onChange(of: store.selectedTabID) { _, id in
-            if id == tabID, let term = store.terminal(for: tabID), term.window?.firstResponder !== term {
+            if id == tabID, !SessionViewMode.showsTranscript(tabID, store: store),
+               let term = store.terminal(for: tabID), term.window?.firstResponder !== term {
                 term.window?.makeFirstResponder(term)
             }
         }
@@ -522,7 +693,9 @@ struct SplitPane: View {
 
     private func focus() {
         store.selectedTabID = tabID
-        if let term = store.terminal(for: tabID) { term.window?.makeFirstResponder(term) }
+        if !SessionViewMode.showsTranscript(tabID, store: store), let term = store.terminal(for: tabID) {
+            term.window?.makeFirstResponder(term)
+        }
     }
 }
 
@@ -571,6 +744,15 @@ struct DropIntoPane<Content: View>: View {
             })
             .overlay { highlight }
             .onDrop(of: [.plainText], delegate: PaneDropDelegate(target: target, edge: $dropEdge, size: size, store: store))
+            // A drop a child takes (a file onto the compose box) never reports exiting, so the
+            // highlight would stay; it goes once the mouse is up.
+            .task(id: dropEdge != nil) {
+                guard dropEdge != nil else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    if NSEvent.pressedMouseButtons == 0 { dropEdge = nil; return }
+                }
+            }
     }
 
     /// Where the dragged session would land: the half of this pane on that edge.
@@ -602,7 +784,8 @@ struct PaneDropDelegate: DropDelegate {
     let size: CGSize
     let store: Store
 
-    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [.plainText]) }
+    /// A session from the sidebar, not a file or image dragged in from elsewhere.
+    func validateDrop(info: DropInfo) -> Bool { info.hasItemsConforming(to: [.plainText]) && !info.hasItemsConforming(to: [.fileURL, .image]) }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         edge = Self.edge(at: info.location, in: size)
@@ -666,6 +849,11 @@ struct AppCommands: Commands {
             Button("Files") { store.showPanel(.files) }.keyboardShortcut("1", modifiers: [.command, .option])
             Button("Changes") { store.showPanel(.changes) }.keyboardShortcut("2", modifiers: [.command, .option])
             Button("Browser") { store.showPanel(.browser) }.keyboardShortcut("3", modifiers: [.command, .option])
+            Button("Terminal Behind Transcript") {
+                guard let id = store.selectedTabID else { return }
+                if TerminalPeek.shared.tabs.contains(id) { TerminalPeek.shared.hide(id) } else { TerminalPeek.shared.show(id, store: store) }
+            }
+            .keyboardShortcut("p", modifiers: [.command, .option])
             Divider()
             Button(store.selectedTabID.map { store.splitIDs.contains($0) } == true ? "Remove from Side by Side" : "Show Side by Side") {
                 if let id = store.selectedTabID { store.toggleSplit(id) }
@@ -714,7 +902,7 @@ final class ServiceProvider: NSObject {
         let urls = pboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            AppDelegate.openWindow?(id: "main")
+            AppDelegate.showMainWindow()
             urls.forEach { Store.shared.openFolder($0.path) }
         }
     }
@@ -725,6 +913,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = ServiceProvider()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ShellPath.warmUp()
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
         Notifier.shared.activate()
@@ -738,10 +927,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// Brings the main window forward, opening it only when none is up.
+    @MainActor static func showMainWindow() {
+        if let window = NSApp.windows.first(where: { $0.isVisible && !($0 is NSPanel) && $0.identifier?.rawValue.hasPrefix("main") == true })
+            ?? NSApp.windows.first(where: { $0.isVisible && !($0 is NSPanel) && $0.contentView != nil && $0.styleMask.contains(.titled) }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow?(id: "main")
+        }
+    }
+
     /// Closing the main window quits omux, which stops every session, instead of leaving them
     /// running with no window. If the quit is cancelled in the confirmation, the window comes back.
-    @MainActor static func mainWindowWillClose() {
+    /// When a folder is opened from Finder, the Dock or `open -a omux`, SwiftUI also makes a window
+    /// it never shows to route the event and closes it at once; that close must not quit omux.
+    @MainActor static func mainWindowWillClose(_ window: NSWindow?) {
+        guard let window, window.isVisible else { return }
         DispatchQueue.main.async {
+            // Another window of the app is still up: this wasn't the last one.
+            if NSApp.windows.contains(where: { $0 !== window && $0.isVisible && !($0 is NSPanel) && $0.styleMask.contains(.titled) }) { return }
             NSApp.terminate(nil)
             // Still here: the quit was cancelled.
             openWindow?(id: "main")
@@ -756,12 +960,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let folders = urls.filter(\.isFileURL)
         guard !folders.isEmpty else { return }
-        Self.openWindow?(id: "main")
+        Self.showMainWindow()
         folders.forEach { Store.shared.openFolder($0.path) }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { Self.openWindow?(id: "main") }
+        if !hasVisibleWindows { Self.showMainWindow() }
         return true
     }
 

@@ -6,7 +6,7 @@ enum CodexError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "Couldn't connect to Codex. Install Codex CLI 0.165.0 or later and check that codex is on your login shell's PATH."
+        case .unavailable: return "Couldn't connect to Codex. Install Codex CLI 0.165.0 or later and check that `codex` runs in your shell."
         case .disconnected: return "The Codex connection closed. Restart this session to reconnect to its saved conversation."
         case .timeout: return "Codex didn't respond in time. Try restarting this session."
         case .server(let message): return message
@@ -67,9 +67,12 @@ final class CodexConnection {
         let digest = SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
         let child = Process()
         child.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
-        child.arguments = ["-lc", "exec codex app-server --listen \(endpoint) --ws-auth capability-token --ws-token-sha256 \(digest) -c 'analytics.enabled=false'"]
+        // Under a shell that watches omux: an app-server left behind by a crash or a kill would
+        // hold its thread's writer lock, and the next omux couldn't resume the conversation.
+        child.arguments = ["-lc", Self.watchedCommand("codex app-server --listen \(endpoint) --ws-auth capability-token --ws-token-sha256 \(digest) -c 'analytics.enabled=false'", parent: getpid())]
         var env = environment ?? ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + (env["PATH"] ?? "/usr/bin:/bin")
+        // The user's shell PATH: from the Dock, omux's own has no nvm or ~/.local/bin on it.
+        env["PATH"] = await ShellPath.load()
         child.environment = env
         child.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
         child.standardInput = FileHandle.nullDevice
@@ -175,6 +178,11 @@ final class CodexConnection {
     private func finish(_ id: Int, result: Result<[String: Any], Error>) {
         deadlines.removeValue(forKey: id)?.cancel()
         pending.removeValue(forKey: id)?.resume(with: result)
+    }
+
+    /// `command` in the background, killed when `parent` is gone or the shell is told to stop.
+    nonisolated static func watchedCommand(_ command: String, parent: pid_t) -> String {
+        "\(command) & child=$!; trap 'kill $child 2>/dev/null; exit' TERM INT HUP; while kill -0 \(parent) 2>/dev/null; do sleep 1; done; kill $child 2>/dev/null"
     }
 
     func close(notify: Bool = false) {

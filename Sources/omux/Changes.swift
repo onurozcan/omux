@@ -292,9 +292,9 @@ struct ChangesPanel: View {
     private func row(_ line: DiffLine) -> some View {
         let (sign, signColor, background): (String, Color, Color) = {
             switch line.kind {
-            case .added: return ("+", .green, Color.green.opacity(0.13))
-            case .removed: return ("−", .red, Color.red.opacity(0.13))
-            case .hunk: return ("", .secondary, Color.blue.opacity(0.08))
+            case .added: return ("+", Palette.done, Palette.done.opacity(0.13))
+            case .removed: return ("−", Palette.error, Palette.error.opacity(0.13))
+            case .hunk: return ("", .secondary, Palette.working.opacity(0.08))
             case .info: return ("", .secondary, .clear)
             case .context: return ("", .secondary, .clear)
             }
@@ -485,8 +485,8 @@ struct Stat: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if let added, added > 0 { Text("+\(added)").foregroundStyle(.green) }
-            if let removed, removed > 0 { Text("−\(removed)").foregroundStyle(.red) }
+            if let added, added > 0 { Text("+\(added)").foregroundStyle(Palette.done) }
+            if let removed, removed > 0 { Text("−\(removed)").foregroundStyle(Palette.error) }
             if added == nil { Text("binary").foregroundStyle(.tertiary) }
         }
         .font(.system(size: 10, design: .monospaced))
@@ -505,9 +505,9 @@ extension ChangedFile {
 
     var statusColor: Color {
         switch status {
-        case .modified: return .orange
-        case .added, .untracked: return .green
-        case .deleted: return .red
+        case .modified: return Palette.needs
+        case .added, .untracked: return Palette.done
+        case .deleted: return Palette.error
         }
     }
 }

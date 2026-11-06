@@ -34,14 +34,14 @@ struct UsageView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hovered == limit.id ? limit.resetText : "\(limit.label) \(limit.percent)%")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(hovered == limit.id ? .primary : .secondary)
+                        .foregroundStyle(hovered == limit.id ? .primary : limit.percent >= 90 ? Palette.error : limit.percent >= 70 ? Palette.needs : .secondary)
                         .lineLimit(1)
                         .fixedSize()
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(.quaternary)
+                            Capsule().fill(.primary.opacity(0.08))
                             Capsule().fill(limit.tint)
-                                .frame(width: geo.size.width * CGFloat(min(limit.percent, 100)) / 100)
+                                .frame(width: max(2, geo.size.width * CGFloat(min(limit.percent, 100)) / 100))
                         }
                     }
                     .frame(height: 3)

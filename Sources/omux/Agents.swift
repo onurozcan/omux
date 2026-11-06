@@ -24,7 +24,7 @@ struct SubAgent: Identifiable, Equatable {
         return seconds >= 3600 ? "\(seconds / 3600)h \(seconds % 3600 / 60)m" : String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
-    var color: Color { blocked ? .orange : finished ? .green : .blue }
+    var color: Color { blocked ? Palette.needs : finished ? Palette.done : Palette.working }
 
     /// The tool it's using, for tight spaces: "Grep".
     var shortActivity: String {
@@ -438,7 +438,7 @@ struct AgentRows: View {
                             Spacer(minLength: 4)
                             Text(agent.shortActivity)
                                 .font(.system(size: 10))
-                                .foregroundStyle(agent.blocked ? Color.orange : Color.secondary)
+                                .foregroundStyle(agent.blocked ? Palette.needs : Color.secondary)
                         }
                         .padding(.leading, CGFloat(min(agent.depth, 3) - 1) * 10)
                         .padding(.horizontal, 4)
@@ -550,7 +550,7 @@ struct AgentList: View {
             }
             HStack(spacing: 4) {
                 Text(agent.blocked ? "Needs permission" : agent.finished ? "Done" : agent.activity ?? "Starting…")
-                    .foregroundStyle(agent.blocked ? Color.orange : agent.finished ? Color.green : Color.secondary)
+                    .foregroundStyle(agent.blocked ? Palette.needs : agent.finished ? Palette.done : Color.secondary)
                     .lineLimit(1)
                 Text("· \(agent.toolCount) tool\(agent.toolCount == 1 ? "" : "s")")
                 if agent.background { Text("· background") }
@@ -642,12 +642,12 @@ struct AgentTranscriptView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Circle()
-                        .fill(entry.isError ? Color.red : entry.result == nil ? Color.blue : Color.green)
+                        .fill(entry.isError ? Palette.error : entry.result == nil ? Palette.working : Palette.done)
                         .frame(width: 6, height: 6)
                     Text(entry.title).lineLimit(3)
                 }
                 Text("⎿  " + (entry.result ?? "Running…"))
-                    .foregroundStyle(entry.isError ? Color.red : entry.result == nil ? Color.blue : Color.secondary)
+                    .foregroundStyle(entry.isError ? Palette.error : entry.result == nil ? Palette.working : Color.secondary)
                     .lineLimit(2)
                     .padding(.leading, 12)
             }

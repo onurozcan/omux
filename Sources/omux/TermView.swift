@@ -419,14 +419,19 @@ struct TerminalHost: NSViewRepresentable {
         container.onDragEdge = onDragEdge
         container.onDropSession = onDropSession
         container.layer?.backgroundColor = theme.background.cgColor
+        // Under a transcript the terminal keeps its size and screen but doesn't draw.
+        let visible = context.environment.terminalVisible
+        if termView.isHidden == visible { termView.isHidden = !visible }
         guard context.coordinator.currentID != termView.tabID || termView.superview !== container else { return }
         context.coordinator.currentID = termView.tabID
         container.subviews.forEach { $0.removeFromSuperview() }
         termView.frame = container.bounds
         termView.autoresizingMask = [.width, .height]
         container.addSubview(termView)
-        DispatchQueue.main.async {
-            termView.window?.makeFirstResponder(termView)
+        if visible {
+            DispatchQueue.main.async {
+                termView.window?.makeFirstResponder(termView)
+            }
         }
     }
 }

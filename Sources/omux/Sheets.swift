@@ -202,6 +202,9 @@ struct GroupEditSheet: View {
     @State private var provider = SessionProvider.claude
     @State private var useWorktrees = false
     @State private var worktreeSetup = ""
+    @State private var sessionView = ""
+    @State private var model = ""
+    @State private var effort = ""
 
     var body: some View {
         Form {
@@ -218,6 +221,19 @@ struct GroupEditSheet: View {
             }
             if provider == .custom {
                 TextField("Command", text: $command)
+            }
+            if provider == .claude || provider == .codex {
+                TextField("Model", text: $model, prompt: Text(provider == .codex ? "Codex's default" : "claude-opus-5-5, or the plan's default"))
+                    .font(.system(.body, design: .monospaced))
+                Picker("Effort", selection: $effort) {
+                    Text("Default").tag("")
+                    ForEach(provider == .codex ? ["low", "medium", "high", "xhigh"] : ["auto", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0).tag($0) }
+                }
+            }
+            Picker("Show sessions as", selection: $sessionView) {
+                Text("Settings' choice").tag("")
+                Text("Terminal").tag("terminal")
+                Text("Transcript").tag("transcript")
             }
             Text("Applies when a session starts. Existing sessions keep running.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -243,6 +259,9 @@ struct GroupEditSheet: View {
             provider = command == group.provider.command ? group.provider : .custom
             useWorktrees = group.useWorktrees
             worktreeSetup = group.worktreeSetup
+            sessionView = group.sessionView ?? ""
+            model = group.model ?? ""
+            effort = group.effort ?? ""
         }
     }
 
@@ -254,6 +273,10 @@ struct GroupEditSheet: View {
             group.provider = provider == .custom ? SessionProvider.infer(command: command) : provider
             group.useWorktrees = useWorktrees
             group.worktreeSetup = worktreeSetup.trimmingCharacters(in: .whitespacesAndNewlines)
+            group.sessionView = sessionView.isEmpty ? nil : sessionView
+            let trimmedModel = model.trimmingCharacters(in: .whitespaces)
+            group.model = trimmedModel.isEmpty ? nil : trimmedModel
+            group.effort = effort.isEmpty ? nil : effort
         }
         dismiss()
     }

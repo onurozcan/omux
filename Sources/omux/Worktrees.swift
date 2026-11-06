@@ -233,7 +233,7 @@ struct WorktreeSheet: View {
             }
             if loaded && repo == nil {
                 Label("\(group?.directory ?? "This project's folder") isn't a Git repository.", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.needs)
             } else {
                 Form {
                     TextField("Name", text: $name)
@@ -278,7 +278,7 @@ struct WorktreeSheet: View {
             if let error {
                 Text(error)
                     .font(.callout)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Palette.error)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -340,8 +340,8 @@ struct BranchChip: View {
                 Text(worktree.branch).lineLimit(1)
                 if changes.tabID == tabID, !changes.files.isEmpty {
                     let totals = changes.files.totals
-                    Text("+\(totals.added)").foregroundStyle(.green)
-                    Text("−\(totals.removed)").foregroundStyle(.red)
+                    Text("+\(totals.added)").foregroundStyle(Palette.done)
+                    Text("−\(totals.removed)").foregroundStyle(Palette.error)
                 }
             }
             .padding(.horizontal, 7)

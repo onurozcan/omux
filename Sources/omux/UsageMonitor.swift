@@ -12,7 +12,7 @@ final class UsageMonitor: ObservableObject {
         let resetsAt: Date?
 
         var tint: Color {
-            percent >= 90 ? .red : percent >= 70 ? .orange : .accentColor
+            percent >= 90 ? Palette.error : percent >= 70 ? Palette.needs : Palette.quiet
         }
 
         var resetText: String {

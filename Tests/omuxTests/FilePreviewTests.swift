@@ -24,8 +24,11 @@ final class FilePreviewTests: XCTestCase {
         try fm.createSymbolicLink(at: smallLink, withDestinationURL: small)
         try fm.createSymbolicLink(at: bigLink, withDestinationURL: big)
 
-        XCTAssertTrue(shows("small-marker", for: small))
-        XCTAssertTrue(shows("small-marker", for: smallLink))
+        // Small text opens in the editor, which reads the file when shown, not when built.
+        XCTAssertTrue(FilePreview.previewsAsText(small))
+        XCTAssertTrue(FilePreview.previewsAsText(smallLink))
+        XCTAssertFalse(FilePreview.previewsAsText(big))
+        XCTAssertFalse(FilePreview.previewsAsText(bigLink))
         XCTAssertFalse(shows("big-marker", for: big))
         XCTAssertFalse(shows("big-marker", for: bigLink))
     }
