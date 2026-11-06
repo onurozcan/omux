@@ -586,7 +586,9 @@ struct ComposeBox: View {
         guard provider == .claude, !(store.runtime[tabID]?.exited ?? true) else { mode = nil; return }
         let text = store.screenLines(tabID, count: 6).joined(separator: " ")
         if let found = ClaudeScreen.modes.first(where: { text.localizedCaseInsensitiveContains($0.0) }) { mode = found.1 }
-        else if text.contains(ClaudeScreen.modeHint) || text.contains("⏵") { mode = "default" }
+        // The default mode has no marker, and no shift+tab hint either: it's what the status
+        // line shows nothing about.
+        else { mode = "default" }
     }
 }
 

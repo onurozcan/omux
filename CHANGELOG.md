@@ -2,6 +2,12 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- **Picking "default" in the permission-mode chip** cycled past it and landed back where it started: Claude Code's status line says nothing in the default mode, and the chip only knew the named ones.
+
 ## [0.10.0] - 2026-11-06
 
 ### Added
