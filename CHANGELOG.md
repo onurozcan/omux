@@ -2,6 +2,12 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- **Keep awake.** Settings › Sessions › Keep Awake keeps the Mac awake while agents work, even with the lid closed and the Mac in a bag. It starts when a session's agent starts working or needs you, and stops on its own when the Mac gets hot, the battery falls to 10%, or the screen has been dark for the time limit (3 hours by default). By default the Mac stays awake after agents finish, so you can keep going from your phone; a setting lets it sleep as soon as they do. While it's on, a small cup glows next to the usage limits; click it for details, Screen Off and Turn Off (and Turn On again). While it holds, View › Screen Off darkens the screens while agents keep working, without locking the Mac, and closing the lid plays the same short animation on MacBooks with a lid angle sensor. Closing the lid needs a small helper that runs as root, registered once with System Settings › Login Items: it only turns `pmset disablesleep` on and off, answers only omux, never touches the network, and lets the Mac sleep within two minutes if omux quits, crashes or hangs. Off by default.
+
 ## [0.10.1] - 2026-11-07
 
 ### Changed

@@ -50,6 +50,7 @@ struct UsageView: View {
                 .help(limit.resetText)
             }
             Spacer(minLength: 0)
+            AwakeIndicator()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
