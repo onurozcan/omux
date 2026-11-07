@@ -74,11 +74,14 @@ enum Prefs {
     /// The light shows a single dot instead of three.
     static let edgeLightCompact = "edgeLightCompact"
 
+    /// The settings a beta build takes over from the release app. The edge light's side and
+    /// position stay out: a release and a beta running side by side would otherwise draw two
+    /// lights on the same spot, with only the top one showing.
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
                       sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps,
-                      edgeLight, edgeLightSide, edgeLightY, edgeLightCompact]
+                      edgeLight, edgeLightCompact]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.

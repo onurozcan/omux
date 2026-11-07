@@ -13,12 +13,14 @@ struct EdgeLightState: Equatable {
         let store = Store.shared
         let live = store.runtime.values.filter { !$0.exited }
         let working = live.contains { $0.statusState == .working }
-        let waiting = live.contains { [.blocked, .done, .error].contains($0.statusState) }
+        // needsAttention is the app's own "waits for you", what the Dock badge counts: it clears
+        // once the session is looked at, which a raw .done or .blocked state wouldn't.
+        let waiting = live.contains(where: \.needsAttention)
         return EdgeLightState(working: working, waiting: waiting, idle: store.runningSessionCount == 0)
     }
 }
 
-/// A small always-on-top traffic light glued to a screen edge (Settings › Status Light).
+/// A small always-on-top traffic light glued to a screen edge (Settings › Notifications › Status Light).
 /// Off by default; the panel only exists while the setting is on.
 @MainActor
 final class EdgeLight: NSObject {
@@ -83,7 +85,8 @@ final class EdgeLight: NSObject {
         self.view = view
 
         let savedY = UserDefaults.standard.object(forKey: Prefs.edgeLightY) as? Double
-        place(y: savedY.map { CGFloat($0) } ?? (screen.visibleFrame.midY - size.height / 2))
+        let midY = screen?.visibleFrame.midY ?? 0
+        place(y: savedY.map { CGFloat($0) } ?? (midY - size.height / 2))
         panel.orderFrontRegardless()
 
         storeObserver = Store.shared.objectWillChange.sink { [weak self] _ in self?.queueRefresh() }
@@ -109,15 +112,16 @@ final class EdgeLight: NSObject {
     }
 
     /// The panel's screen once it's shown; before that the one with the key window, so the
-    /// light opens where the user is rather than on the primary display.
-    private var screen: NSScreen {
-        (panel?.isVisible == true ? panel?.screen : nil) ?? NSScreen.main ?? NSScreen.screens[0]
+    /// light opens where the user is rather than on the primary display. nil for the moment a
+    /// closed-lid MacBook has no display at all, as when its external one is unplugged.
+    private var screen: NSScreen? {
+        (panel?.isVisible == true ? panel?.screen : nil) ?? NSScreen.main ?? NSScreen.screens.first
     }
 
-    /// Glues the panel to the chosen edge and keeps its vertical position on screen.
+    /// Glues the panel to the chosen edge and keeps its vertical position on screen. With no
+    /// screen the light stays where it was; the next screen change places it again.
     func place(y: CGFloat) {
-        guard let panel else { return }
-        let vf = screen.visibleFrame
+        guard let panel, let vf = screen?.visibleFrame else { return }
         let size = panel.frame.size
         let x = side == .right ? vf.maxX - size.width : vf.minX
         let clampedY = min(max(y, vf.minY), vf.maxY - size.height)
@@ -130,7 +134,7 @@ final class EdgeLight: NSObject {
     }
 
     func bringOmuxForward() {
-        AppDelegate.openWindow?(id: "main")
+        AppDelegate.showMainWindow()
         NSApp.activate()
     }
 
@@ -204,6 +208,20 @@ final class EdgeLightView: NSView {
 
     /// The first click counts even while omux isn't the active app.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// VoiceOver's press is the click: the mouse path lives in mouseDown's tracking loop.
+    override func accessibilityPerformPress() -> Bool {
+        guard let c = controller else { return false }
+        c.bringOmuxForward()
+        return true
+    }
+
+    /// VoiceOver's "show menu" is the right-click.
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard let menu = contextMenu() else { return false }
+        menu.popUp(positioning: nil, at: NSPoint(x: bounds.midX, y: bounds.midY), in: self)
+        return true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         // Deliberately black regardless of theme, like the notch it imitates.
@@ -288,7 +306,13 @@ final class EdgeLightView: NSView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let c = controller else { return }
+        guard let menu = contextMenu() else { return }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    /// Snap to either edge, compact, hide. nil once the controller is gone.
+    private func contextMenu() -> NSMenu? {
+        guard let c = controller else { return nil }
         let menu = NSMenu()
         let left = menu.addItem(withTitle: "Snap to Left Edge", action: #selector(EdgeLight.snapLeft), keyEquivalent: "")
         let right = menu.addItem(withTitle: "Snap to Right Edge", action: #selector(EdgeLight.snapRight), keyEquivalent: "")
@@ -300,6 +324,6 @@ final class EdgeLightView: NSView {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Hide", action: #selector(EdgeLight.hideFromMenu), keyEquivalent: "")
         for item in menu.items { item.target = c }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+        return menu
     }
 }
