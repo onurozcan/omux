@@ -5,6 +5,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ## [Unreleased]
 
 ### Changed
+- **Projects in the sidebar sit in the order they were last put to work.** When an agent starts a turn in a project, after a prompt, an answered permission or its start, the project moves to the top and the others shift down. Status ticks during a turn don't reorder, so two projects working side by side hold their places. Dragging a project or Move Up/Down still works and holds until the next turn starts somewhere.
 - **▶ in a plain shell of a project with history resumes its latest conversation.** A new shell in a project whose sessions were all closed used to start Claude Code from nothing; it now picks up the folder's newest conversation, skipping one that another session holds. New sessions made from the + button still start fresh.
 
 ### Fixed

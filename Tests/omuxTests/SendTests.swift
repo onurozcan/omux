@@ -74,6 +74,19 @@ final class SendTests: XCTestCase {
         XCTAssertNil(Store.latestClaudeConversation(in: "/Users/me/other", projects: projects))
     }
 
+    /// A project moves to the top of the sidebar when its agent starts a turn: as it comes up,
+    /// or going to work after a prompt or an answered permission. Not on every status tick.
+    func testAProjectIsPutToWorkWhenItsAgentStartsATurn() {
+        XCTAssertTrue(Store.startsTurn(from: nil, to: .idle))
+        XCTAssertTrue(Store.startsTurn(from: .idle, to: .working))
+        XCTAssertTrue(Store.startsTurn(from: .done, to: .working))
+        XCTAssertTrue(Store.startsTurn(from: .blocked, to: .working))
+        XCTAssertFalse(Store.startsTurn(from: .working, to: .working))
+        XCTAssertFalse(Store.startsTurn(from: .working, to: .blocked))
+        XCTAssertFalse(Store.startsTurn(from: .working, to: .done))
+        XCTAssertFalse(Store.startsTurn(from: .done, to: nil))
+    }
+
     func testShellPathKeepsOrderAndDropsDuplicates() {
         XCTAssertEqual(ShellPath.joined(["/a", "", "/b", "/a", "/c"]), "/a:/b:/c")
         XCTAssertTrue(ShellPath.current.split(separator: ":").contains("/usr/bin"))

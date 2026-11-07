@@ -1060,18 +1060,29 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Marks the session's project as worked in now: an agent reported status. Opening a session
-    /// or using its shell doesn't count. Written at most once a minute, since it's saved with the workspace.
-    private func touchProject(of id: UUID) {
-        guard let group = group(containing: id) else { return }
+    /// Marks the session's project as worked in: an agent reported status. Opening a session or
+    /// using its shell doesn't count. When the agent starts a turn, the project moves to the top
+    /// of the sidebar: the projects sit in the order they were last put to work, the latest first.
+    /// Status ticks during the turn, or a second project working alongside, don't reorder them.
+    private func touchProject(of id: UUID, activated: Bool) {
+        guard let group = group(containing: id), let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
         if group.forcedIdle { updateGroup(group.id) { $0.forcedIdle = false } }
-        if let last = group.lastActive, Date().timeIntervalSince(last) < 60 { return }
+        guard activated else { return }
         updateGroup(group.id) { $0.lastActive = Date() }
+        if index > 0 { groups.move(fromOffsets: [index], toOffset: 0) }
+    }
+
+    /// Whether a status change is the agent starting a turn: from nothing, as it comes up, or
+    /// into working from any other state, as after a prompt or an answered permission.
+    nonisolated static func startsTurn(from previous: TabRuntime.StatusState?, to state: TabRuntime.StatusState?) -> Bool {
+        guard let state else { return false }
+        if previous == nil { return true }
+        return state == .working && previous != .working
     }
 
     private func applyStatus(_ state: TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild], for id: UUID) {
-        if state != nil { touchProject(of: id) }
         let previous = runtime[id]?.statusState
+        if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state)) }
         update(id) {
             if $0.statusState != state || $0.statusDetail != message { $0.lastActivity = Date() }
             $0.statusState = state; $0.statusKind = kind; $0.statusDetail = message; $0.statusChildren = children
