@@ -36,7 +36,7 @@ struct TranscriptPanel: View {
     @State private var held: [String] = []
     /// Prompts waiting for the agent to come up, sent in order once it has: the hand-off
     /// written on a switch, then what the user typed meanwhile.
-    @State private var starting: [String] = []
+    @State private var starting: [(text: String, echoed: Bool)] = []
     @AppStorage(Prefs.accent) private var accentChoice = "system"
     @AppStorage(Prefs.transcriptFont) private var transcriptFont = ""
     @AppStorage(Prefs.transcriptSize) private var transcriptSize = 13.0
@@ -101,7 +101,7 @@ struct TranscriptPanel: View {
                     guard !connected, provider == .codex, let text = model.takeUnsent() else { return }
                     if store.isStarting(tabID) {
                         sendNotice = "Codex updated itself; sending again once it's back…"
-                        startAndSend(text, agentName: "Codex")
+                        startAndSend(text, agentName: "Codex", echoed: false)
                         return
                     }
                     ComposeDrafts.text[tabID] = text
@@ -650,24 +650,35 @@ struct TranscriptPanel: View {
         // No agent yet, or a plain shell: start the agent the way ▶ does, then type the prompt.
         let agentName = isAgent ? provider.label : (UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? "Codex" : "Claude Code")
         sendNotice = "Starting \(agentName)…"
-        startAndSend(text, agentName: agentName)
+        // The prompt leaves the box now and shows as sending. Left in the box while the agent
+        // starts, it looked stuck, and Return again sent it a second time.
+        if isAgent { model.echo(text, queued: !starting.isEmpty) }
+        model.remember(text)
+        clearDraft()
+        startAndSend(text, agentName: agentName, echoed: isAgent)
     }
 
     /// Starts the agent (a no-op while it's already starting) and types the prompt once its
     /// input box is up. An agent that comes and went first is started again when Codex asked
     /// for that after updating itself; otherwise the prompt stays for the user.
-    private func startAndSend(_ text: String, agentName: String) {
-        starting.append(text)
+    private func startAndSend(_ text: String, agentName: String, echoed: Bool) {
+        starting.append((text, echoed))
         // A wait is already on; it sends this too, after what came before it.
         guard starting.count == 1 else { return }
         store.start(tabID)
         Task { @MainActor in
             defer { starting = [] }
+            // The agent never took the prompts: their echoes go, and the text comes back to the box.
+            @MainActor func giveBack() {
+                _ = model.takeUnsent()
+                ComposeDrafts.text[tabID] = starting.map(\.text).joined(separator: "\n\n")
+                ComposeDrafts.version += 1
+            }
             var sawAgent = false
             for _ in 0..<240 {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let rt = store.runtime[tabID], !rt.exited else { continue }
-                if rt.statusState == .error { sendNotice = "Couldn't start: " + (rt.statusDetail ?? "see the terminal"); return }
+                if rt.statusState == .error { giveBack(); sendNotice = "Couldn't start: " + (rt.statusDetail ?? "see the terminal"); return }
                 // The prompt goes into the agent's input box, not a shell: Codex's TUI exits
                 // on its own after updating itself, and would take the text with it. Its box
                 // on the screen is the sure sign it's up. Claude Code reports its status as
@@ -679,8 +690,17 @@ struct TranscriptPanel: View {
                     for (index, queued) in starting.enumerated() {
                         // The agent is busy with the first one: the next lands in its queue,
                         // once it has settled into the turn (typed right away, it's dropped).
-                        if index > 0 { try? await Task.sleep(for: .seconds(2.5)) }
-                        if store.sendText(queued, to: tabID, submit: true) { sent(queued) }
+                        if index > 0 {
+                            try? await Task.sleep(for: .seconds(2.5))
+                            // The last one still sits in the box: its Return was lost to the
+                            // TUI's start-up. Again, or the next would be typed onto it.
+                            if Store.inputHolds(Store.inputHead(of: starting[index - 1].text), in: store.screenLines(tabID)) {
+                                store.sendKeys("\r", to: tabID)
+                                try? await Task.sleep(for: .seconds(1))
+                            }
+                        }
+                        guard store.sendText(queued.text, to: tabID, submit: true) else { continue }
+                        if queued.echoed { sendNotice = nil } else { sent(queued.text) }
                     }
                     return
                 }
@@ -695,10 +715,12 @@ struct TranscriptPanel: View {
                     sendNotice = "\(agentName) updated itself; starting it again…"
                     continue
                 }
-                sendNotice = "\(agentName) quit before taking the prompt. Its last words are in the terminal."
+                giveBack()
+                sendNotice = "\(agentName) quit before taking the prompt. Its last words are in the terminal; the prompt is back in the box."
                 return
             }
-            sendNotice = "The session didn't report ready. Send again once it's at the prompt."
+            giveBack()
+            sendNotice = "The session didn't report ready. The prompt is back in the box; send it once the agent is at its prompt."
         }
     }
 
