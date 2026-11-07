@@ -532,9 +532,18 @@ final class Store: ObservableObject {
         update(id) { $0.exited = true; $0.statusState = nil; $0.busy = false; $0.agentConnected = false }
     }
 
+    /// The last scan of mentioned paths: which session, at what output, and when.
+    private var mentionScan: (tab: UUID, output: UInt64, at: Date)?
+
     /// Rescans the selected session's scrollback for file paths and local URLs (background, cheap).
     func scanMentionedPaths() {
-        guard let id = selectedTabID, let view = terminals[id] else { mentionedPaths = []; mentionedURLs = []; return }
+        guard let id = selectedTabID, let view = terminals[id] else { mentionedPaths = []; mentionedURLs = []; mentionScan = nil; return }
+        // Copying the whole scrollback is the dear part, so skip it while the screen has had no
+        // new output since the last scan of this session. Every 30 seconds it runs anyway, for
+        // a file that appeared or went away without a word on the screen.
+        let output = view.outputGeneration
+        if let last = mentionScan, last.tab == id, last.output == output, Date().timeIntervalSince(last.at) < 30 { return }
+        mentionScan = (id, output, Date())
         // Read the buffer on the main actor; match and check files off it.
         let text = view.scrollbackText()
         Task { [weak self] in
@@ -587,6 +596,12 @@ final class Store: ObservableObject {
     /// The last lines on the session's screen, for views that need to see what the program asks.
     func screenLines(_ id: UUID, count: Int = 12) -> [String] {
         terminals[id]?.lastLines(count) ?? []
+    }
+
+    /// How much output the session has had; it changes whenever something new reached the
+    /// screen. Pollers compare it with the value they last read at. nil without a terminal.
+    func outputGeneration(_ id: UUID) -> UInt64? {
+        terminals[id]?.outputGeneration
     }
 
     /// Raw keys to the program in the session, such as an arrow key or Return.
@@ -796,6 +811,15 @@ final class Store: ObservableObject {
             let agent: SessionProvider = UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? .codex : .claude
             groups[loc.group].tabs[loc.tab].provider = agent
             groups[loc.group].tabs[loc.tab].command = agent.command
+            // A folder that already has conversations goes on from its latest one, not from
+            // nothing: the project's history outlives the sessions that were closed. One that
+            // another session holds stays with it.
+            if agent == .claude, let folder = runtime[id]?.cwd ?? directory(of: groups[loc.group].tabs[loc.tab]) {
+                let taken = Set(groups.flatMap(\.tabs).filter { $0.id != id }.map(\.claudeSessionID))
+                if let latest = Self.latestClaudeConversation(in: folder, taken: taken) {
+                    groups[loc.group].tabs[loc.tab].claudeSessionID = latest
+                }
+            }
         }
         let tab = groups[loc.group].tabs[loc.tab]
         if let view = terminals[id], !(runtime[id]?.exited ?? true) {
@@ -874,6 +898,31 @@ final class Store: ObservableObject {
         if let model = choice.model { flags.append("-c model=\(Git.quote(model))") }
         if let effort = choice.effort { flags.append("-c model_reasoning_effort=\(Git.quote(effort))") }
         return flags.isEmpty ? command : command + " " + flags.joined(separator: " ")
+    }
+
+    /// Claude Code's folder name for a project: its path with everything but ASCII letters
+    /// and digits turned into "-".
+    nonisolated static func claudeProjectFolder(for directory: String) -> String {
+        let path = ((directory as NSString).expandingTildeInPath as NSString).standardizingPath
+        return String(path.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+    }
+
+    /// The folder's newest Claude conversation that has something in it, skipping the ones
+    /// `taken` by other sessions. nil for a folder Claude Code has never run in.
+    nonisolated static func latestClaudeConversation(in directory: String, taken: Set<UUID> = [],
+                                                      projects: String = NSHomeDirectory() + "/.claude/projects") -> UUID? {
+        let folder = projects + "/" + claudeProjectFolder(for: directory)
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: folder) else { return nil }
+        var latest: (id: UUID, date: Date)?
+        for name in names where name.hasSuffix(".jsonl") {
+            guard let id = UUID(uuidString: String(name.dropLast(6))), !taken.contains(id),
+                  let attributes = try? fm.attributesOfItem(atPath: folder + "/" + name),
+                  (attributes[.size] as? Int ?? 0) > 0,
+                  let date = attributes[.modificationDate] as? Date else { continue }
+            if latest.map({ date > $0.date }) ?? true { latest = (id, date) }
+        }
+        return latest?.id
     }
 
     /// Claude Code writes each conversation to ~/.claude/projects/<project>/<session>.jsonl.

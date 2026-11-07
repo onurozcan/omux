@@ -44,6 +44,8 @@ struct ComposeBox: View {
     @State private var selected = 0
     @State private var historyIndex: Int?
     @State private var mode: String?
+    /// The screen output `readMode` last read the status line at.
+    @State private var modeRead = ScreenReadMemo<UInt64>()
     @State private var commands = CommandIndex()
     @State private var files: FileIndex?
     @State private var saveWork: DispatchWorkItem?
@@ -577,20 +579,24 @@ struct ComposeBox: View {
             for _ in 0..<Self.modes.count {
                 store.sendKeys("\u{1b}[Z", to: tabID)
                 try? await Task.sleep(for: .milliseconds(350))
-                readMode()
+                readMode(force: true)
                 if mode == target { return }
             }
         }
     }
 
     /// Claude Code's permission mode, from its status line on screen.
-    private func readMode() {
-        guard provider == .claude, !(store.runtime[tabID]?.exited ?? true) else { mode = nil; return }
+    private func readMode(force: Bool = false) {
+        guard provider == .claude, !(store.runtime[tabID]?.exited ?? true) else { modeRead.key = nil; if mode != nil { mode = nil }; return }
+        // The status line only changes with new output: none since the last read, same mode.
+        let output = store.outputGeneration(tabID)
+        if !force, mode != nil, let output, output == modeRead.key { return }
+        modeRead.key = output
         let text = store.screenLines(tabID, count: 6).joined(separator: " ")
-        if let found = ClaudeScreen.modes.first(where: { text.localizedCaseInsensitiveContains($0.0) }) { mode = found.1 }
         // The default mode has no marker, and no shift+tab hint either: it's what the status
         // line shows nothing about.
-        else { mode = "default" }
+        let found = ClaudeScreen.modes.first(where: { text.localizedCaseInsensitiveContains($0.0) })?.1 ?? "default"
+        if mode != found { mode = found }
     }
 }
 

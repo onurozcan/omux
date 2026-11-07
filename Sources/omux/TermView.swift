@@ -1,4 +1,5 @@
 import AppKit
+import os
 import SwiftTerm
 import SwiftUI
 
@@ -60,6 +61,13 @@ final class TermView: LocalProcessTerminalView {
     var onEvent: ((TermEvent) -> Void)?
     private let events = ProcessEvents()
     private var oscObservation: TerminalOscObservation?
+    /// Bumped after every batch of output the terminal applies, on SwiftTerm's parse thread.
+    private let outputCounter = OSAllocatedUnfairLock<UInt64>(initialState: 0)
+
+    /// Changes whenever new output has reached the screen. Views that poll the screen keep the
+    /// value they last read at and skip the read when it hasn't moved: an idle session, or one
+    /// in a hidden tab, then costs them nothing.
+    var outputGeneration: UInt64 { outputCounter.withLock { $0 } }
 
     init(tabID: UUID) {
         self.tabID = tabID
@@ -68,6 +76,8 @@ final class TermView: LocalProcessTerminalView {
                    options: TerminalOptions(scrollback: 5000))
         events.owner = self
         processDelegate = events
+        let counter = outputCounter
+        setProcessOutputHandler { counter.withLock { $0 &+= 1 } }
         // Option composes the layout's character (⌥Q is "@" on a Turkish layout) and
         // stays Meta only on keys with no character: arrows, ⌥⏎, ⌥⌫, Escape, Tab.
         optionAsMetaKey = false
@@ -433,5 +443,17 @@ struct TerminalHost: NSViewRepresentable {
                 termView.window?.makeFirstResponder(termView)
             }
         }
+    }
+}
+
+/// What a view last read the screen at, in a box so that remembering it doesn't redraw the view.
+final class ScreenReadMemo<Key: Equatable> {
+    var key: Key?
+
+    /// Remembers `key`; false when the last read was already at it, so there's nothing new to read.
+    func changed(to key: Key) -> Bool {
+        if self.key == key { return false }
+        self.key = key
+        return true
     }
 }

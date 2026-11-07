@@ -50,6 +50,30 @@ final class SendTests: XCTestCase {
         XCTAssertEqual(Store.cleanTitle("⋮ LocaleSwitcher review"), "LocaleSwitcher review")
     }
 
+    /// ▶ in a plain shell picks up the folder's newest conversation: by Claude Code's folder
+    /// name for the path, newest file first, not an empty one, not one another session holds.
+    func testLatestConversationOfAFolder() throws {
+        XCTAssertEqual(Store.claudeProjectFolder(for: "/Users/me/Desktop/omux.app/"), "-Users-me-Desktop-omux-app")
+        let fm = FileManager.default
+        let projects = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
+        let folder = projects + "/-Users-me-app"
+        try fm.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(atPath: projects) }
+        let older = UUID(), newer = UUID(), empty = UUID()
+        func write(_ id: UUID, _ text: String, at date: Date) throws {
+            let path = folder + "/" + id.uuidString.lowercased() + ".jsonl"
+            try text.write(toFile: path, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.modificationDate: date], ofItemAtPath: path)
+        }
+        try write(older, "{}\n", at: Date(timeIntervalSinceNow: -100))
+        try write(newer, "{}\n", at: Date(timeIntervalSinceNow: -10))
+        try write(empty, "", at: Date())
+        try "{}\n".write(toFile: folder + "/agent-notes.jsonl", atomically: true, encoding: .utf8)
+        XCTAssertEqual(Store.latestClaudeConversation(in: "/Users/me/app", projects: projects), newer)
+        XCTAssertEqual(Store.latestClaudeConversation(in: "/Users/me/app", taken: [newer], projects: projects), older)
+        XCTAssertNil(Store.latestClaudeConversation(in: "/Users/me/other", projects: projects))
+    }
+
     func testShellPathKeepsOrderAndDropsDuplicates() {
         XCTAssertEqual(ShellPath.joined(["/a", "", "/b", "/a", "/c"]), "/a:/b:/c")
         XCTAssertTrue(ShellPath.current.split(separator: ":").contains("/usr/bin"))

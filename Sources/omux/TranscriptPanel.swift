@@ -30,6 +30,9 @@ struct TranscriptPanel: View {
     @State private var sendNotice: String?
     /// The reply as it appears on the terminal, ahead of the transcript file.
     @State private var liveText: String?
+    /// The screen output and transcript version `readLive` last read at.
+    @State private var liveRead = ScreenReadMemo<LiveReadKey>()
+    private struct LiveReadKey: Equatable { let output: UInt64?; let version: Int }
     /// The page has drawn the conversation; until then a native stand-in shows the tail.
     @State private var pageReady = false
     /// Prompts held back while Claude Code shows a permission dialog, since Return there would answer it.
@@ -110,7 +113,7 @@ struct TranscriptPanel: View {
                 }
                 .onChange(of: runtime.statusState) { _, state in
                     workingSince = state == .working ? (workingSince ?? Date()) : nil
-                    if state != .working { liveText = nil }
+                    if state != .working { liveText = nil; liveRead.key = nil }
                     // The dialog is gone: what was held goes now, in order.
                     if state != .blocked { releaseHeld() }
                 }
@@ -275,6 +278,8 @@ struct TranscriptPanel: View {
     /// transcript: the text after the last reply marker, up to the prompt box.
     private func readLive() {
         guard provider == .claude, store.runtime[tabID]?.statusState == .working else { if liveText != nil { liveText = nil }; return }
+        // Nothing new on the screen and nothing new in the transcript: the last read still holds.
+        guard liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
         let lines = store.screenLines(tabID, count: 60)
         guard let start = lines.lastIndex(where: { line in
             let t = line.trimmingCharacters(in: .whitespaces)

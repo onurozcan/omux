@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+- **▶ in a plain shell of a project with history resumes its latest conversation.** A new shell in a project whose sessions were all closed used to start Claude Code from nothing; it now picks up the folder's newest conversation, skipping one that another session holds. New sessions made from the + button still start fresh.
+
 ### Fixed
 - **A prompt sent while the agent starts leaves the box right away** and shows as sending. It used to stay in the box until the agent was up, looking stuck, and Return again sent it a second time, so the agent got it twice, or several times, at once. A prompt the agent never took comes back to the box.
 - **Prompts held behind a Claude Code dialog go out one at a time** once it closes, instead of pasted together as one prompt. Queued prompts now say what they wait on: Claude Code reads its queue when the running tool call returns, not only at the end of the turn.

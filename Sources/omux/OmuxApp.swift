@@ -275,7 +275,7 @@ private struct SessionSettings: View {
                     Text("Starts fresh").tag("fresh")
                     Text("Continues the folder's latest conversation").tag("continue")
                 }
-                SettingNote("Continuing runs claude --continue. Codex always starts fresh.")
+                SettingNote("Continuing runs claude --continue. Codex always starts fresh. ▶ in a plain shell of a project that has conversations resumes the latest one either way.")
                 Toggle("Resume agent sessions at launch", isOn: $autoResume)
                 SettingNote("Off: restored sessions stay stopped until you press ▶. Clicking one only opens its shell.")
             }
