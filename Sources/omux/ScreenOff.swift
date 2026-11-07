@@ -1,12 +1,15 @@
 import AppKit
+import Combine
 import ObjectiveC
 import SwiftUI
 
-/// View › Screen Off: the screens go dark while agents keep working. The omux ring draws itself,
+/// View › Screen Off: the screens go dark while agents keep working. Only while Keep Awake holds,
+/// so its heat, battery and time limits apply; when it stops, the displays may sleep again. The omux ring draws itself,
 /// takes one breath and goes out to a point, then the screens stay black and the built-in display's
 /// brightness and the keyboard lights go all the way down; a key or click plays it back. The displays
 /// aren't put to sleep, since that would lock the Mac. With Reduce Motion it's a plain fade. Closing
-/// the lid while Keep Awake holds plays a quick version on the built-in screen (see LidWatcher).
+/// the lid while Keep Awake holds plays a quick version on the built-in screen (see LidWatcher),
+/// which never takes focus or keys, so clamshell use with an external display isn't disturbed.
 @MainActor
 final class ScreenOff {
     static let shared = ScreenOff()
@@ -26,33 +29,50 @@ final class ScreenOff {
     private var observers: [NSObjectProtocol] = []
     private var keyMonitor: Any?
     private var sequence: Task<Void, Never>?
-    private var displaysAsleep = false
     private var lid = false
-    /// Keeps the displays from sleeping while dark: display sleep would lock the Mac.
+    /// Keeps the displays from sleeping while dark: display sleep would lock the Mac. Only while
+    /// Keep Awake holds.
     private var displayActivity: NSObjectProtocol?
+    private var holding: AnyCancellable?
+    private var screensChanged: NSObjectProtocol?
     /// The built-in display's brightness before the lid dimmed it, to put back.
     private var savedBrightness: (display: CGDirectDisplayID, level: Float)?
 
     var isShowing: Bool { !windows.isEmpty }
 
-    /// `lid`: started by closing the lid, so only the built-in screen, and quickly.
+    /// Screen Off is offered only while Keep Awake holds.
+    static var isAvailable: Bool { KeepAwake.shared.isHolding }
+
+    /// `lid`: started by closing the lid, so only the built-in screen, quickly, and without
+    /// taking focus.
     func start(lid: Bool = false) {
-        guard !isShowing else { return }
+        guard !isShowing, Self.isAvailable else { return }
         let screens = lid ? NSScreen.screens.filter(\.isBuiltIn) : NSScreen.screens
         guard !screens.isEmpty else { return }
         self.lid = lid
         model = Model()
-        displayActivity = ProcessInfo.processInfo.beginActivity(options: .idleDisplaySleepDisabled, reason: "omux: Screen Off")
+        beginDisplayActivity()
+        // Keep Awake stopped (heat, battery, time limit, turned off): let the displays sleep as
+        // usual, until it holds again. The screen stays dark until someone comes back.
+        holding = KeepAwake.shared.$decision
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] decision in
+                MainActor.assumeIsolated {
+                    if case .hold = decision { self?.beginDisplayActivity() } else { self?.endDisplayActivity() }
+                }
+            }
         let agents = KeepAwake.shared.activeAgents
         let caption = agents == 0 ? "Screen off" : "\(agents) agent\(agents == 1 ? "" : "s") working · screen off"
         let main = lid ? screens.first : NSScreen.main
         for screen in screens {
-            let window = CurtainWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            let window = CurtainWindow(takesKeys: !lid, contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
             window.level = .screenSaver
             window.isOpaque = false
             window.backgroundColor = .clear
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
             window.isReleasedWhenClosed = false
+            // The lid's curtain only covers; opening the lid takes it away.
+            window.ignoresMouseEvents = lid
             window.contentView = NSHostingView(rootView: BreatheOutView(model: model, caption: caption,
                                                                         showsRing: screen == main,
                                                                         cancel: { [weak self] in self?.wake() }))
@@ -60,20 +80,50 @@ final class ScreenOff {
             window.orderFrontRegardless()
             windows.append(window)
         }
-        windows.first?.makeKey()
-        NSApp.activate()
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] _ in
-            self?.wake()
-            return nil
+        if !lid {
+            // From the menu: a key brings the screen back, so omux takes keys for the moment.
+            windows.first?.makeKey()
+            NSApp.activate()
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] _ in
+                self?.wake()
+                return nil
+            }
+        } else {
+            // A lid closed all the way with an external display removes the built-in screen,
+            // and AppKit would move the curtain onto the external one.
+            screensChanged = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                                                    object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hideOffBuiltInScreen() }
+            }
         }
         let workspace = NSWorkspace.shared.notificationCenter
-        observers.append(workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.displaysAsleep = true }
-        })
         observers.append(workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.wake() }
         })
         sequence = Task { await goDark() }
+    }
+
+    /// In lid mode, takes the curtain off any screen that isn't the built-in one. With the
+    /// built-in screen gone and another one left, someone is working on that one, so the time
+    /// limit stops counting; opening the lid ends the curtain.
+    private func hideOffBuiltInScreen() {
+        for window in windows where window.screen.map({ !$0.isBuiltIn }) ?? true {
+            window.orderOut(nil)
+        }
+        let screens = NSScreen.screens
+        if !screens.isEmpty, !screens.contains(where: \.isBuiltIn) {
+            KeepAwake.shared.setCurtainDark(false)
+        }
+    }
+
+    private func beginDisplayActivity() {
+        guard displayActivity == nil else { return }
+        displayActivity = ProcessInfo.processInfo.beginActivity(options: .idleDisplaySleepDisabled, reason: "omux: Screen Off")
+    }
+
+    private func endDisplayActivity() {
+        if let displayActivity { ProcessInfo.processInfo.endActivity(displayActivity) }
+        displayActivity = nil
     }
 
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
@@ -108,7 +158,11 @@ final class ScreenOff {
             withAnimation(.easeOut(duration: 0.15)) { model.ring = 0; model.backdrop = 1 }
             guard await pause(0.2) else { return }
         }
-        KeepAwake.shared.setCurtainDark(true)
+        // Already on an external display alone (the lid shut all the way during the animation):
+        // nobody is in the dark.
+        if !lid || NSScreen.screens.contains(where: \.isBuiltIn) || NSScreen.screens.isEmpty {
+            KeepAwake.shared.setCurtainDark(true)
+        }
         await dim()
     }
 
@@ -139,12 +193,13 @@ final class ScreenOff {
         windows = []
         observers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         observers = []
+        if let screensChanged { NotificationCenter.default.removeObserver(screensChanged) }
+        screensChanged = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
-        displaysAsleep = false
         lid = false
-        if let displayActivity { ProcessInfo.processInfo.endActivity(displayActivity) }
-        displayActivity = nil
+        holding = nil
+        endDisplayActivity()
     }
 
     /// False if the sequence was cancelled meanwhile.
@@ -174,9 +229,18 @@ final class ScreenOff {
         KeyboardBacklight.shared.restore()
     }
 
-    /// Borderless, but takes keys, so a key press during the animation brings the screen back.
+    /// Borderless, but takes keys, so a key press during the animation brings the screen back
+    /// (not in lid mode, which never makes it key).
     private final class CurtainWindow: NSWindow {
-        override var canBecomeKey: Bool { true }
+        private var takesKeys = true
+
+        convenience init(takesKeys: Bool, contentRect: NSRect, styleMask: NSWindow.StyleMask,
+                         backing: NSWindow.BackingStoreType, defer flag: Bool) {
+            self.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+            self.takesKeys = takesKeys
+        }
+
+        override var canBecomeKey: Bool { takesKeys }
     }
 }
 

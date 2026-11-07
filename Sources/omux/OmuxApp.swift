@@ -67,7 +67,7 @@ enum Prefs {
     static let transcriptTimestamps = "transcriptTimestamps"
     /// Keep the Mac awake while agents work, lid closed included. Off by default.
     static let keepAwake = "keepAwake"
-    /// Keep awake for at most this many seconds per period (default 3 hours).
+    /// Let the Mac sleep once the screen has been dark this many seconds (default 3 hours).
     static let keepAwakeLimit = "keepAwakeLimit"
     /// Let the Mac sleep as soon as no agent is working. Off by default.
     static let keepAwakeReleaseWhenDone = "keepAwakeReleaseWhenDone"
@@ -75,8 +75,6 @@ enum Prefs {
     static let keepAwakePeriod = "keepAwakePeriod"
     /// The "your Mac slept while agents were working" banner was shown.
     static let keepAwakeHintShown = "keepAwakeHintShown"
-    /// For testing only, not in Settings: a time limit in minutes that overrides keepAwakeLimit.
-    static let stayAwakeLimitMinutes = "stayAwakeLimitMinutes"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
@@ -882,8 +880,7 @@ struct AppCommands: Commands {
             Button("Bigger") { Fonts.adjustSize(by: 1) }.keyboardShortcut("+")
             Button("Smaller") { Fonts.adjustSize(by: -1) }.keyboardShortcut("-")
             Button("Default Font Size") { Fonts.adjustSize(by: nil) }.keyboardShortcut("0")
-            Divider()
-            Button("Screen Off") { ScreenOff.shared.start() }
+            ScreenOffMenuItem()
         }
         CommandMenu("Session") {
             Button("Rename") { store.renamingID = store.selectedTabID }.keyboardShortcut("r")

@@ -33,26 +33,43 @@ final class LidAngleSensor {
 
 /// While omux keeps the Mac awake, closing the lid partway plays Screen Off's animation on
 /// the built-in screen and turns its brightness and the keyboard lights down, so the screen goes out with the omux ring
-/// instead of being cut off; opening it again brings the brightness back and plays it back. Reads the sensor twenty times a second, only while Keep Awake holds.
+/// instead of being cut off; opening it again brings the brightness back and plays it back.
+/// Reads the sensor only while Keep Awake holds: four times a second while the lid rests,
+/// twenty while it moves.
 @MainActor
 final class LidWatcher {
     static let shared = LidWatcher()
 
     /// Below this the screen goes dark; above `openAngle` it comes back. The gap keeps it from
     /// flickering when the lid rests near the threshold.
-    static let closingAngle = 80.0
+    nonisolated static let closingAngle = 80.0
     static let openAngle = 90.0
+
+    /// How long until the next read: quick while the lid moves, slow while it rests. Closing it
+    /// briskly takes about half a second from upright to `closingAngle`, so a resting read
+    /// still notices the movement in time for the animation.
+    nonisolated static func interval(angle: Double?, previous: Double?) -> TimeInterval {
+        guard let angle else { return 1 }
+        guard let previous, abs(angle - previous) < 1 else { return 0.05 }
+        return 0.25
+    }
 
     private var sensor: LidAngleSensor?
     private var timer: Timer?
     private var holding: AnyCancellable?
     private var dimmed = false
+    private var lastAngle: Double?
+    /// Reads in a row that got no angle; a few while dimmed bring the screen back, since the
+    /// lid's curtain has no other way out.
+    private var misses = 0
 
     func start() {
         guard holding == nil else { return }
         holding = KeepAwake.shared.$decision
             .map { if case .hold = $0 { return true } else { return false } }
             .removeDuplicates()
+            // After the change, not during @Published's willSet: waking Screen Off re-decides.
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] holds in
                 MainActor.assumeIsolated { holds ? self?.watch() : self?.stopWatching() }
             }
@@ -62,10 +79,23 @@ final class LidWatcher {
         guard timer == nil else { return }
         if sensor == nil { sensor = LidAngleSensor() }
         guard sensor != nil else { return }
-        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.check() }
+        schedule(after: 0.05)
+    }
+
+    private func schedule(after seconds: TimeInterval) {
+        timer?.invalidate()
+        let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.timer != nil else { return }
+                let previous = self.lastAngle
+                let angle = self.check()
+                self.lastAngle = angle
+                guard self.timer != nil else { return }
+                self.schedule(after: Self.interval(angle: angle, previous: previous))
+            }
         }
-        RunLoop.main.add(timer, forMode: .common)
+        timer.tolerance = seconds / 5
+        RunLoop.main.add(timer, forMode: .default)
         self.timer = timer
     }
 
@@ -74,10 +104,21 @@ final class LidWatcher {
         timer = nil
         if dimmed { ScreenOff.shared.wake() }
         dimmed = false
+        lastAngle = nil
+        misses = 0
     }
 
-    private func check() {
-        guard let angle = sensor?.angle() else { return }
+    /// Reads the angle and acts on it; returns what it read.
+    private func check() -> Double? {
+        guard let angle = sensor?.angle() else {
+            misses += 1
+            if dimmed, misses >= 3 {
+                dimmed = false
+                ScreenOff.shared.wake()
+            }
+            return nil
+        }
+        misses = 0
         if !dimmed, angle < Self.closingAngle {
             dimmed = true
             if !ScreenOff.shared.isShowing { ScreenOff.shared.start(lid: true) }
@@ -85,5 +126,6 @@ final class LidWatcher {
             dimmed = false
             ScreenOff.shared.wake()
         }
+        return angle
     }
 }

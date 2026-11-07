@@ -64,19 +64,22 @@ struct AwakeIndicator: View {
             .buttonStyle(.plain)
             .onHover { hovered = $0 }
             .help(needsApproval ? AwakePopover.approvalText(awake.helperStatus)
-                  : active ? "Keeping the Mac awake" : awake.paused ? "Keep Awake is off for now" : "Keep Awake starts when an agent works")
+                  : active ? "Keeping the Mac awake"
+                  : awake.stopReason.flatMap(KeepAwake.stopMessage)
+                  ?? (awake.paused ? "Keep Awake is off for now" : "Keep Awake starts when an agent works"))
             .popover(isPresented: $showing, arrowEdge: .top) {
                 AwakePopover { showing = false }
             }
             .contextMenu {
-                Button("Screen Off") { ScreenOff.shared.start() }
                 if active {
+                    Button("Screen Off") { ScreenOff.shared.start() }
                     Button("Turn Off Keep Awake") { awake.endNow() }
                 } else if awake.paused {
                     Button("Turn On Keep Awake") { awake.resume() }
                 }
             }
-            .accessibilityLabel(active ? "Keeping the Mac awake" : "Keep Awake, off for now")
+            .accessibilityLabel(active ? "Keeping the Mac awake"
+                                : awake.paused ? "Keep Awake, off for now" : "Keep Awake, waiting for an agent")
             .animation(.easeInOut(duration: 0.25), value: active)
         }
     }
@@ -107,10 +110,13 @@ struct AwakePopover: View {
                 if active {
                     Text(agents)
                     TimelineView(.periodic(from: .now, by: 30)) { _ in Text(limitText) }
-                } else if awake.paused {
-                    Text("Your Mac can sleep. Turn it on to keep it awake while agents work.")
                 } else {
-                    Text("It starts when an agent works.")
+                    if let reason = awake.stopReason.flatMap(KeepAwake.stopMessage) { Text(reason) }
+                    if awake.paused {
+                        Text("Your Mac can sleep. Turn it on to keep it awake while agents work.")
+                    } else {
+                        Text("It starts when an agent works.")
+                    }
                 }
             }
             .font(.callout)
@@ -132,13 +138,14 @@ struct AwakePopover: View {
                     }
                 }
             } else if active, !awake.helperHolds {
-                Label("The lid can't close yet: the helper isn't holding sleep off.", systemImage: "exclamationmark.triangle")
+                Label("The lid can't close yet: " + (awake.helperRefusal ?? "the helper isn't holding sleep off."),
+                      systemImage: "exclamationmark.triangle")
                     .font(.callout)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button("Screen Off") { close(); ScreenOff.shared.start() }
+                if active { Button("Screen Off") { close(); ScreenOff.shared.start() } }
                 Spacer()
                 if active {
                     Button("Turn Off") { awake.endNow() }
@@ -183,7 +190,22 @@ struct AwakePopover: View {
     }
 }
 
-/// Settings › Keep Awake.
+/// View › Screen Off, there only while Keep Awake holds, since Screen Off keeps the displays awake.
+/// Hidden while the feature is off.
+struct ScreenOffMenuItem: View {
+    @ObservedObject private var awake = KeepAwake.shared
+    @AppStorage(Prefs.keepAwake) private var enabled = false
+
+    var body: some View {
+        if enabled {
+            Divider()
+            Button("Screen Off") { ScreenOff.shared.start() }
+                .disabled(!awake.isHolding)
+        }
+    }
+}
+
+/// Settings › Sessions › Keep Awake.
 struct KeepAwakeSettings: View {
     @ObservedObject private var awake = KeepAwake.shared
     @AppStorage(Prefs.keepAwake) private var enabled = false
@@ -193,9 +215,7 @@ struct KeepAwakeSettings: View {
     var body: some View {
         Section("Keep Awake") {
             Toggle("Keep Mac awake while agents work", isOn: Binding(get: { enabled }, set: { awake.setEnabled($0) }))
-            Text("Even with the lid closed. Turning it on asks for administrator approval once, in System Settings › Login Items.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            SettingNote("Even with the lid closed. Turning it on asks for administrator approval once, in System Settings › Login Items.")
             if enabled { KeepAwakeHelperStatus() }
             Picker("Stop after the screen is dark for", selection: $limit) {
                 Text("1 hour").tag(3600.0)
@@ -207,12 +227,8 @@ struct KeepAwakeSettings: View {
             .disabled(!enabled)
             Toggle("Let Mac sleep when all agents finish", isOn: $releaseWhenDone)
                 .disabled(!enabled)
-            Text("While this is off, your Mac stays awake after agents finish, so you can keep going with your Claude Code sessions from your phone.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("The time limit only counts while nobody is at the screen: lid closed, Screen Off or display asleep. It also stops on its own if the Mac gets hot or the battery falls to 10%. Keep the Mac somewhere it can breathe.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            SettingNote("While this is off, your Mac stays awake after agents finish, so you can keep going with your Claude Code sessions from your phone.")
+            SettingNote("The time limit only counts while nobody is at the screen: lid closed, Screen Off or display asleep. It also stops on its own if the Mac gets hot or the battery falls to 10%. Keep the Mac somewhere it can breathe.")
         }
     }
 }

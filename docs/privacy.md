@@ -7,7 +7,7 @@ omux has no telemetry. Its integrations use these network paths:
 - **Updates.** About once a day, omux fetches `https://omux.app/appcast.xml` to see whether a newer version exists, and downloads the update from GitHub only when you accept it. Nothing about you or your machine is sent.
 - **Codex.** omux communicates with its owned Codex app-servers over authenticated loopback WebSockets. Codex itself connects to the model provider, tools, and services configured in your Codex settings. Usage is requested through `account/rateLimits/read`; accounts without supported plan limits display an unavailable message. omux starts its app-servers with analytics disabled.
 
-The keep-awake helper (`omux-awake`, off until you turn on Settings › Keep Awake):
+The keep-awake helper (`omux-awake`, off until you turn on Settings › Sessions › Keep Awake):
 
 - It is a launch daemon inside the app (`Contents/Library/LaunchDaemons`), registered with SMAppService once you turn Keep Awake on and approve it in System Settings › Login Items, and unregistered when you turn it off. It runs as root because `pmset -a disablesleep` needs it, and runs nothing else.
 - It never uses the network. It listens only on its own XPC service and accepts connections only from omux signed by the same team, and omux only talks to a helper signed by that team.
