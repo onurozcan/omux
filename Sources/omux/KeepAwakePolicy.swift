@@ -20,8 +20,7 @@ struct AwakeInputs {
     var now: Date
 }
 
-/// One stretch of keeping the Mac awake. Saved, so a relaunch continues it instead of
-/// starting the time limit over.
+/// One stretch of keeping the Mac awake. Saved, so a relaunch keeps the latch.
 struct AwakePeriod: Codable, Equatable {
     /// When this period began; nil when the Mac is allowed to sleep.
     var start: Date?

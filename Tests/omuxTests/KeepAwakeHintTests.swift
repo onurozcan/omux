@@ -15,6 +15,6 @@ final class KeepAwakeHintTests: XCTestCase {
         XCTAssertEqual(SleepHint.message(agents: 3, enabled: false, shown: false)?.title,
                        "Your Mac slept while 3 agents were working")
         XCTAssertEqual(SleepHint.message(agents: 3, enabled: false, shown: false)?.detail,
-                       "Settings › Keep Awake can keep it awake while agents work, even with the lid closed.")
+                       "Settings › Sessions › Keep Awake can keep it awake while agents work, even with the lid closed.")
     }
 }

@@ -25,6 +25,6 @@ builds the release that goes on GitHub: signed with the Developer ID certificate
 swift test
 ```
 
-To try Keep Awake's time limit without waiting hours, `defaults write net.pf1.omux.beta stayAwakeLimitMinutes 2` makes it 2 minutes in the beta (it counts while the screen is dark, so use View › Screen Off) (`defaults delete net.pf1.omux.beta stayAwakeLimitMinutes` undoes it).
+To try Keep Awake's time limit without waiting hours, `defaults write net.pf1.omux.beta keepAwakeLimit 120` makes it 2 minutes in the beta (it counts while the screen is dark, so use View › Screen Off); picking a limit in Settings sets it back.
 
 The opt-in Codex integration checks are described in [codex.md](codex.md#checks). A GitHub Actions workflow builds and tests every pull request.

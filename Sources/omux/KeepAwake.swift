@@ -7,9 +7,8 @@ import ServiceManagement
 /// The keep-awake helper as the app sees it, so tests can use a fake.
 @MainActor
 protocol AwakeHelper: AnyObject {
-    /// Asks for sleep to stay disabled for `lease` more seconds. False when the helper can't be
-    /// reached (not approved, restarting) or refuses.
-    func hold(lease: TimeInterval) async -> Bool
+    /// Asks for sleep to stay disabled for `lease` more seconds.
+    func hold(lease: TimeInterval) async -> AwakeHoldReply
     /// Lets the Mac sleep, and returns once the helper has (or after a short timeout).
     func release() async
     /// Drops the connection; the helper lets the Mac sleep when it notices.
@@ -26,12 +25,21 @@ protocol AwakeHelperService: AnyObject {
 
 extension SMAppService: AwakeHelperService {}
 
+/// The helper's answer to a hold.
+enum AwakeHoldReply: Equatable {
+    case holding
+    /// The helper said no, and why (its 12-hour ceiling and cooldown).
+    case refused(String)
+    /// It couldn't be reached: not approved yet, restarting, or not answering.
+    case unreachable
+}
+
 enum HelperStatus: Equatable {
     case notRegistered, requiresApproval, enabled
     case unavailable(String)
 }
 
-/// Keeps the Mac awake while agents work, lid closed included, once Settings › Keep Awake is on.
+/// Keeps the Mac awake while agents work, lid closed included, once Settings › Sessions › Keep Awake is on.
 /// KeepAwakePolicy decides; this feeds it agent states, heat, battery and time, and carries the
 /// decision out: an IOPMAssertion against idle sleep, and the helper for the lid.
 @MainActor
@@ -51,7 +59,7 @@ final class KeepAwake: ObservableObject {
         let isApp = Bundle.main.bundleURL.pathExtension == "app"
         return KeepAwake(helper: XPCAwakeHelper(label: label),
                          service: isApp ? SMAppService.daemon(plistName: label + ".plist") : nil,
-                         defaults: .standard, environment: .live)
+                         defaults: .standard, environment: .live, signed: AwakeSigning.teamIdentifier() != nil)
     }()
 
     /// Notifications about keep awake share one id, so a new one replaces the last.
@@ -65,6 +73,10 @@ final class KeepAwake: ObservableObject {
     @Published private(set) var helperStatus: HelperStatus = .notRegistered
     /// Whether the helper confirmed the last hold, so the lid can close.
     @Published private(set) var helperHolds = false
+    /// Why the helper refused the last hold, when it did.
+    @Published private(set) var helperRefusal: String?
+    /// Why Keep Awake last stopped by itself (heat, battery, the time limit), until it holds again.
+    @Published private(set) var stopReason: AwakeReleaseReason?
     private(set) var period: AwakePeriod
     /// Turned off from the indicator, or stopped by heat, battery or the time limit: waits until
     /// every agent has stopped once, or until turned on again.
@@ -74,6 +86,9 @@ final class KeepAwake: ObservableObject {
     private let service: AwakeHelperService?
     private let defaults: UserDefaults
     private let env: Environment
+    /// Signed by a team. The helper answers only an omux signed by its own team, so an ad hoc
+    /// build doesn't register it at all.
+    private let signed: Bool
     /// Prevents idle sleep while the lid is open, and keeps App Nap from delaying the renewals.
     private var activity: NSObjectProtocol?
     private var registrationError: Error?
@@ -88,13 +103,17 @@ final class KeepAwake: ObservableObject {
     /// Nobody is at the screen, so the time limit counts.
     var isDark: Bool { displaysAsleep || curtainDark }
 
-    init(helper: AwakeHelper, service: AwakeHelperService?, defaults: UserDefaults, environment: Environment) {
+    init(helper: AwakeHelper, service: AwakeHelperService?, defaults: UserDefaults, environment: Environment,
+         signed: Bool = true) {
         self.helper = helper
         self.service = service
         self.defaults = defaults
         self.env = environment
-        period = defaults.data(forKey: Prefs.keepAwakePeriod)
+        self.signed = signed
+        // Only the latch carries over a relaunch: a period continues only if an agent works.
+        let saved = defaults.data(forKey: Prefs.keepAwakePeriod)
             .flatMap { try? JSONDecoder().decode(AwakePeriod.self, from: $0) } ?? AwakePeriod()
+        period = AwakePeriod(latched: saved.latched)
         paused = period.latched
         refreshStatus()
     }
@@ -103,9 +122,8 @@ final class KeepAwake: ObservableObject {
     var isHolding: Bool { if case .hold = decision { return true } else { return false } }
     var holdsAssertion: Bool { activity != nil }
 
+    /// Settings offers hours; `defaults write … keepAwakeLimit 120` sets any number of seconds.
     var limit: TimeInterval {
-        let minutes = defaults.integer(forKey: Prefs.stayAwakeLimitMinutes)
-        if minutes > 0 { return TimeInterval(minutes) * 60 }
         let seconds = defaults.double(forKey: Prefs.keepAwakeLimit)
         return seconds > 0 ? seconds : Self.defaultLimit
     }
@@ -155,7 +173,7 @@ final class KeepAwake: ObservableObject {
         RunLoop.main.add(renewal, forMode: .common)
         timer = renewal
         // On, but the helper isn't registered (omux was reinstalled or moved): register it again.
-        if enabled, let service, service.status == .notRegistered {
+        if enabled, signed, let service, service.status == .notRegistered {
             do { try service.register() } catch { registrationError = error }
             refreshStatus()
         }
@@ -171,7 +189,7 @@ final class KeepAwake: ObservableObject {
 
     func update(runtime: [UUID: TabRuntime]) {
         let count = runtime.values.filter(\.isAgentActive).count
-        guard count != activeAgents || !isHolding && count > 0 else { return }
+        guard count != activeAgents else { return }
         activeAgents = count
         evaluate()
     }
@@ -202,6 +220,7 @@ final class KeepAwake: ObservableObject {
 
     /// The indicator's Turn On after Turn Off: keep the Mac awake again while agents work.
     func resume() {
+        stopReason = nil
         KeepAwakePolicy.resume(period: &period)
         save(period)
         evaluate()
@@ -209,6 +228,7 @@ final class KeepAwake: ObservableObject {
 
     /// The indicator's Turn Off: let the Mac sleep now, until agents next start working.
     func endNow() {
+        stopReason = nil
         KeepAwakePolicy.endByUser(period: &period)
         save(period)
         evaluate()
@@ -217,18 +237,32 @@ final class KeepAwake: ObservableObject {
     private func apply(_ decided: AwakeDecision, wasHolding: Bool, renew: Bool) {
         switch decided {
         case .hold:
+            stopReason = nil
             takeAssertion()
             guard !wasHolding || renew else { return }
             Task {
-                let ok = await helper.hold(lease: Self.lease)
-                if isHolding { helperHolds = ok } else if ok { await helper.release() }
+                let reply = await helper.hold(lease: Self.lease)
+                let ok = reply == .holding
+                if isHolding {
+                    helperHolds = ok
+                    if case .refused(let reason) = reply { helperRefusal = reason } else { helperRefusal = nil }
+                } else if ok {
+                    await helper.release()
+                }
             }
         case .release(let reason):
             releaseAssertion()
             if wasHolding || helperHolds { Task { await helper.release() } }
             helperHolds = false
+            helperRefusal = nil
             // Only for a period this launch held: a relaunch after the limit passed says nothing.
-            if let reason, wasHolding { notify(reason) }
+            if let reason, wasHolding {
+                switch reason {
+                case .thermal, .lowBattery, .timeLimit: stopReason = reason
+                case .disabled, .agentsDone, .user: stopReason = nil
+                }
+                notify(reason)
+            }
         }
     }
 
@@ -253,14 +287,18 @@ final class KeepAwake: ObservableObject {
     }
 
     private func notify(_ reason: AwakeReleaseReason) {
-        let body: String
-        switch reason {
-        case .thermal: body = "It got hot, so omux stopped keeping it awake."
-        case .lowBattery: body = "The battery is at \(KeepAwakePolicy.batteryFloor)%, so omux stopped keeping it awake."
-        case .timeLimit: body = "Keep Awake reached its time limit."
-        case .disabled, .agentsDone, .user: return
-        }
+        guard let body = Self.stopMessage(reason) else { return }
         Notifier.shared.post(tabID: Self.notificationID, title: "Your Mac can sleep again", subtitle: nil, body: body)
+    }
+
+    /// Why Keep Awake stopped by itself, for the notification and the indicator's popover.
+    static func stopMessage(_ reason: AwakeReleaseReason) -> String? {
+        switch reason {
+        case .thermal: return "It got hot, so omux stopped keeping it awake."
+        case .lowBattery: return "The battery is at \(KeepAwakePolicy.batteryFloor)%, so omux stopped keeping it awake."
+        case .timeLimit: return "Keep Awake reached its time limit."
+        case .disabled, .agentsDone, .user: return nil
+        }
     }
 
     // MARK: Turning it on and off
@@ -269,17 +307,25 @@ final class KeepAwake: ObservableObject {
         defaults.set(on, forKey: Prefs.keepAwake)
         registrationError = nil
         if on {
-            do { try service?.register() } catch { registrationError = error }
+            if signed { do { try service?.register() } catch { registrationError = error } }
             refreshStatus()
             if helperStatus == .requiresApproval { openLoginItems() }
             evaluate()
         } else {
             evaluate()
-            // Unregistering stops the helper; make sure it has let the Mac sleep first.
+            stopReason = nil
+            // Unregistering stops the helper; make sure it has let the Mac sleep first. Turned
+            // on again meanwhile: leave the helper be, and register it again if the
+            // unregistering had already started.
             Task {
                 await helper.release()
+                guard !enabled else { return }
                 helper.disconnect()
                 try? await service?.unregister()
+                if enabled {
+                    registrationError = nil
+                    do { try service?.register() } catch { registrationError = error }
+                }
                 refreshStatus()
             }
         }
@@ -290,6 +336,10 @@ final class KeepAwake: ObservableObject {
     func refreshStatus() {
         guard let service else {
             helperStatus = .unavailable("The helper only runs from the omux app.")
+            return
+        }
+        guard signed else {
+            helperStatus = .unavailable("This build of omux isn't signed by a team, so the helper can't trust it.")
             return
         }
         helperStatus = Self.helperStatus(from: service.status, error: registrationError)
@@ -345,7 +395,7 @@ enum SleepHint {
         guard agents > 0, !enabled, !shown else { return nil }
         let who = agents == 1 ? "an agent was" : "\(agents) agents were"
         return ("Your Mac slept while \(who) working",
-                "Settings › Keep Awake can keep it awake while agents work, even with the lid closed.")
+                "Settings › Sessions › Keep Awake can keep it awake while agents work, even with the lid closed.")
     }
 }
 
@@ -381,12 +431,12 @@ final class XPCAwakeHelper: AwakeHelper {
         return made
     }
 
-    func hold(lease: TimeInterval) async -> Bool {
+    func hold(lease: TimeInterval) async -> AwakeHoldReply {
         let connection = current()
-        return await Self.call(timeout: 5, fallback: false) { done in
-            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done(false) } as? AwakeHelperXPC
-            guard let proxy else { return done(false) }
-            proxy.hold(leaseSeconds: lease) { ok, _ in done(ok) }
+        return await Self.call(timeout: 5, fallback: AwakeHoldReply.unreachable) { done in
+            let proxy = connection.remoteObjectProxyWithErrorHandler { _ in done(.unreachable) } as? AwakeHelperXPC
+            guard let proxy else { return done(.unreachable) }
+            proxy.hold(leaseSeconds: lease) { ok, reason in done(Self.reply(ok: ok, reason: reason)) }
         }
     }
 
@@ -397,6 +447,11 @@ final class XPCAwakeHelper: AwakeHelper {
             guard let proxy else { return done(()) }
             proxy.release { done(()) }
         }
+    }
+
+    /// The helper's (ok, reason) as a reply.
+    nonisolated static func reply(ok: Bool, reason: String?) -> AwakeHoldReply {
+        ok ? .holding : .refused(reason ?? "the helper said no")
     }
 
     func disconnect() {
