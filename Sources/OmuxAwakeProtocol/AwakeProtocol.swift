@@ -29,6 +29,8 @@ public enum AwakeHelperLabel {
 /// - However it's renewed, one stretch of being awake ends at `ceiling`, and then holds are
 ///   refused for `cooldown`. A stretch continues across reconnects less than `reconnectGap`
 ///   apart, so reconnecting can't reset it.
+/// - The hold belongs to the connection that last renewed it, so an older connection going
+///   away doesn't end a hold a newer one has taken over.
 public struct AwakeLease: Equatable {
     public enum HoldResult: Equatable {
         case granted
@@ -43,6 +45,8 @@ public struct AwakeLease: Equatable {
     private var lastActive: Date?
     private var expiry: Date?
     private var cooldownUntil: Date?
+    /// The connection that last renewed the hold; nil for a hold made without one.
+    private var owner: Int?
 
     public init(ceiling: TimeInterval = 12 * 3600, reconnectGap: TimeInterval = 300, cooldown: TimeInterval = 1800) {
         self.ceiling = ceiling
@@ -50,7 +54,7 @@ public struct AwakeLease: Equatable {
         self.cooldown = cooldown
     }
 
-    public mutating func hold(lease: TimeInterval, now: Date) -> HoldResult {
+    public mutating func hold(lease: TimeInterval, now: Date, owner: Int? = nil) -> HoldResult {
         // Bring the state up to now first: this may be the moment the ceiling is reached.
         _ = tick(now: now)
         if let until = cooldownUntil {
@@ -65,15 +69,37 @@ public struct AwakeLease: Equatable {
         }
         expiry = now.addingTimeInterval(lease)
         lastActive = now
+        self.owner = owner
         return .granted
+    }
+
+    /// Lets the Mac sleep when asked by the connection that holds, or when nobody does.
+    public mutating func release(by client: Int, now: Date) {
+        guard owner == nil || owner == client else { return }
+        release(now: now)
     }
 
     public mutating func release(now: Date) {
         if expiry != nil { lastActive = now }
         expiry = nil
+        owner = nil
     }
 
-    /// Whether sleep should be disabled right now. Call it periodically.
+    /// A connection went away: lets the Mac sleep only if that connection holds it.
+    public mutating func dropped(owner gone: Int, now: Date) {
+        guard owner == gone else { return }
+        release(now: now)
+    }
+
+    /// When `tick` next changes its answer (the lease runs out or the ceiling is reached); nil
+    /// while nothing is held.
+    public var nextChange: Date? {
+        guard let expiry else { return nil }
+        guard let start = stretchStart else { return expiry }
+        return min(expiry, start.addingTimeInterval(ceiling))
+    }
+
+    /// Whether sleep should be disabled right now. Call it at `nextChange`.
     public mutating func tick(now: Date) -> Bool {
         guard let end = expiry else { return false }
         if now >= end {
@@ -91,6 +117,7 @@ public struct AwakeLease: Equatable {
 
     private mutating func trip(now: Date) {
         expiry = nil
+        owner = nil
         stretchStart = nil
         lastActive = nil
         cooldownUntil = now.addingTimeInterval(cooldown)

@@ -2,7 +2,7 @@
 // to. It runs as root only because `pmset disablesleep` needs it, and does nothing else:
 // - it answers omux alone (same signing team and bundle id), over local XPC, never the network;
 // - a hold lasts one lease, which omux renews; a crashed or hung omux lets the Mac sleep again;
-// - a lost connection lets the Mac sleep at once;
+// - losing the connection that holds lets the Mac sleep at once;
 // - launchd starts it at boot (RunAtLoad), when it turns sleep back on, in case the Mac went
 //   down while it held;
 // - its own ceiling (AwakeLease) ends any stretch after 12 hours, whatever omux asks.
@@ -15,12 +15,14 @@ let label = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"].flatMap { $0
     ?? "net.pf1.omux.awake"
 let log = Logger(subsystem: label, category: "helper")
 
-/// Sets the system-wide "sleep disabled" flag, only when it changes.
+/// Sets the system-wide "sleep disabled" flag when it changes. `again` sets it even if this
+/// helper last set it the same way, since another program (the other build's helper starting
+/// up, or `sudo pmset`) may have changed it since.
 final class SleepSwitch {
     private var disabled: Bool?
 
-    func set(disabled wanted: Bool) {
-        guard wanted != disabled else { return }
+    func set(disabled wanted: Bool, again: Bool = false) {
+        guard again || wanted != disabled else { return }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
         process.arguments = ["-a", "disablesleep", wanted ? "1" : "0"]
@@ -39,43 +41,76 @@ final class SleepSwitch {
     }
 }
 
-/// The helper's state, touched only on the main queue.
-final class Helper: NSObject, NSXPCListenerDelegate, AwakeHelperXPC {
+/// One connection's view of the helper: what it asks carries which connection asked, so the
+/// lease knows whose hold a dropped connection was.
+final class Client: NSObject, AwakeHelperXPC {
+    private let helper: Helper
+    let id: Int
+
+    init(helper: Helper, id: Int) {
+        self.helper = helper
+        self.id = id
+    }
+
+    func hold(leaseSeconds: Double, reply: @escaping (Bool, String?) -> Void) {
+        helper.hold(leaseSeconds: leaseSeconds, client: id, reply: reply)
+    }
+
+    func release(reply: @escaping () -> Void) {
+        helper.release(client: id, reply: reply)
+    }
+}
+
+/// The helper's state, touched only on the main queue (connection ids aside, under their lock).
+final class Helper: NSObject, NSXPCListenerDelegate {
     private var lease = AwakeLease()
     private let sleep = SleepSwitch()
     private var timer: Timer?
     private let requirement: String?
+    private var nextClient = 0
+    private let clientLock = NSLock()
 
     override init() {
         requirement = Helper.clientRequirement()
         super.init()
         sleep.set(disabled: false)
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.apply() }
     }
 
-    private func apply() {
-        sleep.set(disabled: lease.tick(now: Date()))
+    /// Sets sleep to what the lease says, and wakes again only when that next changes, so an
+    /// idle helper does nothing. `granted`: a hold was just granted, so disable sleep again
+    /// even if this helper had already, once per renewal.
+    private func apply(granted: Bool = false) {
+        let disabled = lease.tick(now: Date())
+        sleep.set(disabled: disabled, again: granted && disabled)
+        timer?.invalidate()
+        timer = nil
+        guard let next = lease.nextChange else { return }
+        let timer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in self?.apply() }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .default)
+        self.timer = timer
     }
 
-    // MARK: AwakeHelperXPC
+    // MARK: What clients ask
 
-    func hold(leaseSeconds: Double, reply: @escaping (Bool, String?) -> Void) {
+    func hold(leaseSeconds: Double, client: Int, reply: @escaping (Bool, String?) -> Void) {
         DispatchQueue.main.async {
             let seconds = min(max(leaseSeconds, 10), 300)
-            switch self.lease.hold(lease: seconds, now: Date()) {
+            switch self.lease.hold(lease: seconds, now: Date(), owner: client) {
             case .granted:
-                self.apply()
+                self.apply(granted: true)
                 reply(true, nil)
             case .refusedCooldown(let until):
                 self.apply()
-                reply(false, "kept awake for 12 hours; sleep is allowed again until \(until.formatted(date: .omitted, time: .shortened))")
+                let hours = Int(self.lease.ceiling / 3600)
+                reply(false, "the Mac has been kept awake for \(hours) hours, so it may sleep until \(until.formatted(date: .omitted, time: .shortened))")
             }
         }
     }
 
-    func release(reply: @escaping () -> Void) {
+    func release(client: Int, reply: @escaping () -> Void) {
         DispatchQueue.main.async {
-            self.lease.release(now: Date())
+            self.lease.release(by: client, now: Date())
             self.apply()
             reply()
         }
@@ -89,12 +124,14 @@ final class Helper: NSObject, NSXPCListenerDelegate, AwakeHelperXPC {
             return false
         }
         connection.setCodeSigningRequirement(requirement)
+        let id = clientLock.withLock { nextClient += 1; return nextClient }
+        let client = Client(helper: self, id: id)
         connection.exportedInterface = NSXPCInterface(with: AwakeHelperXPC.self)
-        connection.exportedObject = self
+        connection.exportedObject = client
         connection.invalidationHandler = { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.lease.release(now: Date())
+                self.lease.dropped(owner: client.id, now: Date())
                 self.apply()
             }
         }
