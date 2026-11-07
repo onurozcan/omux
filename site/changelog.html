@@ -49,11 +49,33 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
+<article class="release" id="v0.10.1">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#v0.10.1">0.10.1</a></h2>
+    <span class="badge badge-latest">Latest</span>
+    <p><time datetime="2026-11-07">November 7, 2026</time></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.10.1">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Projects in the sidebar sit in the order they were last put to work.</strong> When an agent starts a turn in a project, after a prompt, an answered permission or its start, the project moves to the top and the others shift down. Status ticks during a turn don't reorder, so two projects working side by side hold their places. Dragging a project or Move Up/Down still works and holds until the next turn starts somewhere.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>▶ in a plain shell of a project with history resumes its latest conversation.</strong> A new shell in a project whose sessions were all closed used to start Claude Code from nothing; it now picks up the folder's newest conversation, skipping one that another session holds. New sessions made from the + button still start fresh.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A prompt sent while the agent starts leaves the box right away</strong> and shows as sending. It used to stay in the box until the agent was up, looking stuck, and Return again sent it a second time, so the agent got it twice, or several times, at once. A prompt the agent never took comes back to the box.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Prompts held behind a Claude Code dialog go out one at a time</strong> once it closes, instead of pasted together as one prompt. Queued prompts now say what they wait on: Claude Code reads its queue when the running tool call returns, not only at the end of the turn.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A subagent stopped with TaskStop no longer stays listed as running</strong> under its session for half an hour. Claude Code never marks it finished; once the session is idle and lists no such child, omux shows it as done and drops it after the usual while.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A refused /restart is done by omux.</strong> Claude Code can't restart itself while Remote Control is connected; when it says so, omux exits it and resumes the conversation, as the message asks. Run /remote-control again afterwards.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>An attached image no longer stays in the compose box after sending</strong> when the message went out later: once the agent was up, or once a dialog was answered.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>omux no longer redraws the window ten times a second while an agent works.</strong> Claude Code and Codex animate a spinner in the terminal title; each frame counted as a title change and re-rendered everything. With a dozen sessions open that kept the app busy enough to stop answering Accessibility.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Picking "default" in the permission-mode chip</strong> cycled past it and landed back where it started: Claude Code's status line says nothing in the default mode, and the chip only knew the named ones.</div></li>
+</ul>
+  </div>
+</article>
 <article class="release" id="v0.10.0">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
     <h2><a href="#v0.10.0">0.10.0</a></h2>
-    <span class="badge badge-latest">Latest</span>
+    
     <p><time datetime="2026-11-06">November 6, 2026</time></p>
     <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.10.0">Release on GitHub</a></p>
   </div>

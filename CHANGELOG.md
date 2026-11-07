@@ -2,7 +2,7 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.10.1] - 2026-11-07
 
 ### Changed
 - **Projects in the sidebar sit in the order they were last put to work.** When an agent starts a turn in a project, after a prompt, an answered permission or its start, the project moves to the top and the others shift down. Status ticks during a turn don't reorder, so two projects working side by side hold their places. Dragging a project or Move Up/Down still works and holds until the next turn starts somewhere.
