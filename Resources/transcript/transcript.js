@@ -304,10 +304,14 @@
 
   // Queued by Claude Code ("queued"), or sent and not yet confirmed as queued ("queuing").
   function isQueued(b) { return b && b.kind === 'user' && (b.pending === 'queued' || b.pending === 'queuing'); }
+  // Claude Code reads its queue between tool calls, so a long tool call is what a queued prompt
+  // waits on; Codex only takes its queue once the turn ends.
+  let queueReadsMidTurn = false;
+  function queueHint() { return queueReadsMidTurn ? 'read once the running tool call returns' : 'sent when the turn ends'; }
   function userHTML(block) {
     if (block.pending === 'removed' || (isQueued(block) && nestQueued)) return `<div class="queued-slot" hidden></div>`;
     const images = (block.images || []).map(src => `<img class="thumb" src="${src}" alt="pasted image">`).join('');
-    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · goes to the agent when this turn ends</div>`
+    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>`
       : block.pending === 'sent' ? `<div class="pending"><span class="dot pulse"></span>Sending</div>` : '';
     return `<div class="user${block.pending ? ' is-pending' : ''}">` +
       `<div class="actions"><button type="button" data-act="quote">Quote</button><button type="button" data-act="resend">Send again</button><button type="button" data-act="copy">Copy</button></div>` +
@@ -423,7 +427,7 @@
       `<button type="button" data-q="down" ${i === queued.length - 1 ? 'disabled' : ''} title="Later">↓</button>` +
       `<button type="button" data-q="remove" title="Remove">✕</button></div>` : '') + `</li>`).join('');
     const now = editable && queued.some(b => b.pending === 'queued') ? `<button type="button" class="qnow" data-q="now" data-qid="${queued[0].id}" title="Interrupt the turn and send the queue now (⌃X ⌃S)">Send now</button>` : '';
-    const html = `<div class="queue-title"><span class="dot pulse"></span>Up next · ${queued.length}<span class="hint">sent in order when the turn ends</span>${now}</div><ol>${items}</ol>`;
+    const html = `<div class="queue-title"><span class="dot pulse"></span>Up next · ${queued.length}<span class="hint">${queueHint()}, in order</span>${now}</div><ol>${items}</ol>`;
     if (html === queuePanel.innerHTML) return;
     queuePanel.innerHTML = html;
     // Room under the chat so the last lines can scroll above the box.
@@ -480,6 +484,7 @@
     const switched = payload.session && payload.session !== sessionID;
     const state = switched ? switchSession(payload.session) : null;
     const stick = switched ? false : nearBottom();
+    if (payload.status) queueReadsMidTurn = !!payload.status.queueEditable;
     const update = payload.blocks;
     const blocksChanged = !!update;
     const changedIds = new Set();
@@ -570,7 +575,7 @@
       if (pendingBuild.length && !buildTimer) buildTimer = setTimeout(buildPending, 40);
     }
     const queuedNow = blocks.filter(isQueued);
-    renderQueue(nestQueued ? queuedNow : [], !!(payload.status && payload.status.queueEditable));
+    renderQueue(nestQueued ? queuedNow : [], queueReadsMidTurn);
     const html = statusHTML(payload.status || null, queuedNow) || '';
     if (switched || html !== statusNow || (statusEl && statusEl.parentNode !== list)) {
       statusNow = html;

@@ -5,7 +5,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ## [Unreleased]
 
 ### Fixed
-
+- **Prompts held behind a Claude Code dialog go out one at a time** once it closes, instead of pasted together as one prompt. Queued prompts now say what they wait on: Claude Code reads its queue when the running tool call returns, not only at the end of the turn.
 - **A subagent stopped with TaskStop no longer stays listed as running** under its session for half an hour. Claude Code never marks it finished; once the session is idle and lists no such child, omux shows it as done and drops it after the usual while.
 - **A refused /restart is done by omux.** Claude Code can't restart itself while Remote Control is connected; when it says so, omux exits it and resumes the conversation, as the message asks. Run /remote-control again afterwards.
 - **An attached image no longer stays in the compose box after sending** when the message went out later: once the agent was up, or once a dialog was answered.

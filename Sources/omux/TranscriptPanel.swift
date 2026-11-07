@@ -702,12 +702,19 @@ struct TranscriptPanel: View {
         }
     }
 
-    /// Sends what was held behind a dialog, in order.
+    /// Sends what was held behind a dialog, in order. One at a time with a pause between: pasted
+    /// together, they would land in the input box as one prompt, and Claude Code drops a second
+    /// prompt typed before it has settled into the turn the first one starts.
     private func releaseHeld() {
         guard !held.isEmpty else { return }
         let texts = held; held = []
-        for text in texts { _ = store.sendText(text, to: tabID, submit: true) }
         if sendNotice?.hasPrefix("Held") == true { sendNotice = nil }
+        Task { @MainActor in
+            for (index, text) in texts.enumerated() {
+                if index > 0 { try? await Task.sleep(for: .seconds(2.5)) }
+                _ = store.sendText(text, to: tabID, submit: true)
+            }
+        }
     }
 
     /// A dialog drawn on the screen leaves no status change to wait for: watch the screen.
