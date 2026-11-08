@@ -219,15 +219,10 @@ struct Card<Content: View>: View {
 /// A dot that breathes, for states that are in progress.
 struct PulsingDot: View {
     let color: Color
-    @State private var on = false
 
     var body: some View {
-        Circle()
-            .fill(color)
+        BreathingDot(color: color, pulsing: true)
             .frame(width: 8, height: 8)
-            .opacity(on ? 1 : 0.35)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: on)
-            .onAppear { on = true }
     }
 }
 

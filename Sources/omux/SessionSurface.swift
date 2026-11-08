@@ -20,16 +20,99 @@ struct StatusDot: View {
     let color: Color
     let pulsing: Bool
     var size: CGFloat = 8
-    @State private var on = false
 
     var body: some View {
-        Circle()
-            .fill(color)
+        BreathingDot(color: color, pulsing: pulsing)
             .frame(width: size, height: size)
-            .opacity(pulsing && on ? 0.35 : 1)
-            .animation(pulsing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: on)
-            .onAppear { on = pulsing }
-            .onChange(of: pulsing) { _, now in on = now }
+    }
+}
+
+/// A round dot whose breathing is a Core Animation layer animation. The render server plays
+/// it, so the main thread does nothing per frame. A SwiftUI `repeatForever` animation here
+/// re-rendered the whole hosting view at the display's refresh rate for as long as any agent
+/// worked, which cost omux a fifth of a core.
+struct BreathingDot: NSViewRepresentable {
+    let color: Color
+    let pulsing: Bool
+
+    func makeNSView(context: Context) -> BreathingDotView { BreathingDotView() }
+
+    func updateNSView(_ view: BreathingDotView, context: Context) {
+        view.apply(color: color, pulsing: pulsing)
+    }
+}
+
+final class BreathingDotView: NSView {
+    private let dot = CALayer()
+    private var color: Color = .clear
+    private var pulsing = false
+    private static let animationKey = "breathe"
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.addSublayer(dot)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 8, height: 8) }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dot.frame = bounds
+        dot.cornerRadius = min(bounds.width, bounds.height) / 2
+        CATransaction.commit()
+    }
+
+    func apply(color: Color, pulsing: Bool) {
+        if color != self.color {
+            self.color = color
+            fill()
+        }
+        if pulsing != self.pulsing {
+            self.pulsing = pulsing
+            breathe()
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        fill()
+    }
+
+    /// Core Animation drops a layer's animations when the layer leaves its window, so a dot
+    /// that is scrolled or switched back into view starts breathing again.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { breathe() }
+    }
+
+    private func fill() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            dot.backgroundColor = NSColor(color).cgColor
+        }
+        CATransaction.commit()
+    }
+
+    private func breathe() {
+        guard pulsing else {
+            dot.removeAnimation(forKey: Self.animationKey)
+            return
+        }
+        guard dot.animation(forKey: Self.animationKey) == nil else { return }
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 1
+        animation.toValue = 0.35
+        animation.duration = 0.9
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        dot.add(animation, forKey: Self.animationKey)
     }
 }
 

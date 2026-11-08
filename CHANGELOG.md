@@ -2,6 +2,11 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- **omux no longer spends a fifth of a core while an agent works.** The breathing status dots were SwiftUI animations, which re-rendered the whole window at the display's refresh rate for as long as any agent was working. They are Core Animation layer animations now, played by the render server, so the main thread does nothing per frame.
+
 ## [0.10.1] - 2026-11-07
 
 ### Changed
