@@ -448,8 +448,12 @@
         const verb = last && last.kind === 'tools' ? 'Working' : (last && last.kind === 'user' ? 'Thinking' : 'Working');
         return `<div class="status working"><span class="dot pulse" style="background: var(--blue); margin-top: 5px"></span><div class="grow"><div class="title"><span>${verb}<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></span><span class="elapsed" data-since="${s.since || ''}"></span></div>${s.detail ? `<div class="detail">${esc(s.detail)}</div>` : ''}${s.live ? `<div class="live">${markdown(s.live)}<span class="caret"></span></div>` : ''}</div></div>`;
       }
-      case 'done':
-        return `<div class="status done"><span class="dot" style="background: var(--green)"></span><span>Done</span>${s.workedFor ? `<span class="worked">· worked for ${esc(s.workedFor)}</span>` : ''}</div>`;
+      case 'done': {
+        const worked = s.workedFor ? `<span class="worked">· worked for ${esc(s.workedFor)}</span>` : '';
+        // The reply read off the screen, until its record arrives and takes its place.
+        if (s.live) return `<div class="status done"><span class="dot" style="background: var(--green); margin-top: 5px"></span><div class="grow"><div class="title"><span>Done</span>${worked}</div><div class="live">${markdown(s.live)}</div></div></div>`;
+        return `<div class="status done"><span class="dot" style="background: var(--green)"></span><span>Done</span>${worked}</div>`;
+      }
       case 'blocked':
         return `<div class="status blocked"><span class="dot pulse" style="background: var(--amber)"></span><span>${esc(s.detail ? 'Needs you · ' + s.detail : 'Needs you')}</span><span class="hint">answer in the terminal or type below</span></div>`;
       case 'error':

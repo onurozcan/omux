@@ -113,9 +113,20 @@ struct TranscriptPanel: View {
                 }
                 .onChange(of: runtime.statusState) { _, state in
                     workingSince = state == .working ? (workingSince ?? Date()) : nil
-                    if state != .working { liveText = nil; liveRead.key = nil }
+                    if state != .working {
+                        // The reply read off the screen stays until its record lands, so the turn
+                        // doesn't show Done over a blank before the text; the record replaces it.
+                        liveRead.key = nil
+                        if liveText != nil {
+                            let lingering = liveText
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { if liveText == lingering, store.runtime[tabID]?.statusState != .working { liveText = nil } }
+                        }
+                    }
                     // The dialog is gone: what was held goes now, in order.
                     if state != .blocked { releaseHeld() }
+                }
+                .onChange(of: model.version) { _, _ in
+                    if liveText != nil, runtime.statusState != .working { liveText = nil }
                 }
                 .task(id: runtime.statusState == .working) {
                     // While the agent writes, follow the reply on the screen.
@@ -243,7 +254,7 @@ struct TranscriptPanel: View {
                 if let start = model.lastPrompt, let end = model.lastWrite, end.timeIntervalSince(start) >= 2 {
                     worked = SessionTranscript.duration(end.timeIntervalSince(start))
                 }
-                status = .init(state: "done", workedFor: worked)
+                status = .init(state: "done", workedFor: worked, live: liveText)
             case .blocked where !runtime.awaitsPermission && model.pendingTool.map({ !["ExitPlanMode", "AskUserQuestion"].contains($0.name) }) ?? true:
                 status = .init(state: "blocked", detail: runtime.statusDetail ?? runtime.statusKind)
             case .error:
@@ -277,7 +288,7 @@ struct TranscriptPanel: View {
     /// While the agent works, the reply it's writing is on the terminal before it's in the
     /// transcript: the text after the last reply marker, up to the prompt box.
     private func readLive() {
-        guard provider == .claude, store.runtime[tabID]?.statusState == .working else { if liveText != nil { liveText = nil }; return }
+        guard provider == .claude, store.runtime[tabID]?.statusState == .working else { return }
         // Nothing new on the screen and nothing new in the transcript: the last read still holds.
         guard liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
         let lines = store.screenLines(tabID, count: 60)

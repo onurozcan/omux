@@ -2,6 +2,11 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- **Done no longer shows over a blank before the reply.** The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.
+
 ## [0.11.0] - 2026-11-09
 
 ### Added
