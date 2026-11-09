@@ -113,33 +113,171 @@ struct PlanCard: View {
     }
 }
 
-/// A question Claude Code asked, with its options as buttons. Its prompt takes a number to
-/// pick and Return to submit.
+/// Claude Code's questions, one at a time as its dialog shows them: options as buttons, ticks
+/// for a multi-select question, a field for a typed answer, and "Chat about this". The card reads
+/// the dialog off the screen and drives it with the arrow keys and Return, so it always shows the
+/// question the terminal is on, and the review page at the end with Submit.
 struct QuestionCard: View {
     @EnvironmentObject var store: Store
     let tabID: UUID
-    let question: Question
+    let questions: [Question]
+    @State private var typed = ""
+    /// Keys are on their way; the dialog redraws before the next click should count.
+    @State private var acting = false
 
     var body: some View {
-        Card(color: Palette.needs, title: "Question") {
-            Text(question.text).font(.system(size: 12)).textSelection(.enabled)
-            HStack(spacing: 8) {
-                ForEach(Array(question.options.prefix(6).enumerated()), id: \.offset) { index, option in
-                    if index == 0 {
-                        Button(option) { pick(index) }.buttonStyle(.borderedProminent)
-                    } else {
-                        Button(option) { pick(index) }.buttonStyle(.bordered)
-                    }
+        TimelineView(.periodic(from: .now, by: 0.4)) { _ in
+            let dialog = QuestionScreen.parse(store.screenLines(tabID, count: 40), questions: questions)
+            Card(color: Palette.needs, title: title(dialog)) {
+                if questions.count > 1 { tabs(dialog) }
+                switch dialog?.page {
+                case .review: review(dialog!)
+                case .question(let index) where questions.indices.contains(index): question(questions[index], dialog!)
+                default: fallback
                 }
-                Text(question.multi ? "pick more in the terminal" : "or type an answer below").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .controlSize(.small)
+            .disabled(acting)
         }
     }
 
-    private func pick(_ index: Int) {
-        store.sendKeys("\(index + 1)", to: tabID)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { store.sendKeys("\r", to: tabID) }
+    private func title(_ dialog: QuestionDialog?) -> String {
+        switch dialog?.page {
+        case .review: return "Review your answers"
+        case .question(let index) where questions.count > 1: return "Question \(index + 1) of \(questions.count)"
+        default: return "Question"
+        }
+    }
+
+    /// The dialog's tabs: one per question, ticked once answered, the shown one underlined.
+    private func tabs(_ dialog: QuestionDialog?) -> some View {
+        HStack(spacing: 10) {
+            ForEach(questions.indices, id: \.self) { i in
+                let answered = dialog.map { $0.answered.indices.contains(i) && $0.answered[i] } ?? false
+                let current = dialog?.page == .question(i)
+                Text((answered ? "☑ " : "☐ ") + (questions[i].header ?? "Question \(i + 1)"))
+                    .font(.system(size: 11, weight: current ? .semibold : .regular))
+                    .foregroundStyle(current ? .primary : .secondary)
+                    .underline(current)
+            }
+            Text((dialog?.page == .review ? "✔ " : "") + "Submit").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func question(_ question: Question, _ dialog: QuestionDialog) -> some View {
+        Text(question.text).font(.system(size: 12)).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(question.options.indices, id: \.self) { i in
+                let row = dialog.row(.option(i))
+                let checked = row.flatMap { dialog.rows[$0].checked } ?? false
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if question.multi {
+                        Button((checked ? "☑ " : "☐ ") + question.options[i]) { if let row { choose(row, dialog) } }
+                            .buttonStyle(.bordered)
+                    } else if i == 0 {
+                        Button(question.options[i]) { if let row { choose(row, dialog) } }.buttonStyle(.borderedProminent)
+                    } else {
+                        Button(question.options[i]) { if let row { choose(row, dialog) } }.buttonStyle(.bordered)
+                    }
+                    if question.descriptions.indices.contains(i), !question.descriptions[i].isEmpty {
+                        Text(question.descriptions[i]).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
+                    }
+                }
+                .disabled(row == nil)
+            }
+        }
+        HStack(spacing: 8) {
+            if question.multi, let submit = dialog.row(.submit) {
+                if dialog.rows.contains(where: { $0.checked == true }) {
+                    Button("Done") { choose(submit, dialog) }.buttonStyle(.borderedProminent).help("Confirms the ticked options")
+                } else {
+                    Button("Done") { choose(submit, dialog) }.buttonStyle(.bordered).help("Confirms the ticked options")
+                }
+            }
+            TextField("Type an answer…", text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 320)
+                .onSubmit { type(dialog) }
+            Button("Send") { type(dialog) }.disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty || dialog.row(.type) == nil)
+            Spacer(minLength: 0)
+            if let chat = dialog.row(.chat) {
+                Button("Chat about this") { choose(chat, dialog) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11))
+                    .help("Tells Claude Code you'd rather talk about these questions; reply below")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func review(_ dialog: QuestionDialog) -> some View {
+        ForEach(dialog.review.indices, id: \.self) { i in
+            Text(dialog.review[i]).font(.system(size: 11.5)).textSelection(.enabled)
+        }
+        HStack(spacing: 8) {
+            if let submit = dialog.row(.submitAnswers) {
+                Button("Submit answers") { choose(submit, dialog) }.buttonStyle(.borderedProminent)
+            }
+            if let cancel = dialog.row(.cancel) {
+                Button("Cancel") { choose(cancel, dialog) }.buttonStyle(.bordered)
+            }
+            Button("Back") { send(QuestionScreen.up.replacingOccurrences(of: "A", with: "D")) }
+                .buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11))
+                .help("The previous question, to change its answer")
+        }
+    }
+
+    /// The screen doesn't show the dialog's rows: the typed-answer field is open, or the
+    /// terminal is mid-redraw. What's typed here goes to the terminal as is.
+    @ViewBuilder
+    private var fallback: some View {
+        if let first = questions.first { Text(first.text).font(.system(size: 12)).textSelection(.enabled) }
+        HStack(spacing: 8) {
+            TextField("Type an answer…", text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 320)
+                .onSubmit { sendTyped() }
+            Button("Send") { sendTyped() }.disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+            Text("Answer in the terminal, or type here").font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+    }
+
+    /// Moves the highlight to the row and presses Return: picks an option, ticks a box, or
+    /// takes Submit or Chat about this. Without a highlight to start from, the row's number.
+    private func choose(_ row: Int, _ dialog: QuestionDialog) {
+        if let cursor = dialog.cursor {
+            send(QuestionScreen.keys(from: cursor, to: row), then: QuestionScreen.enter)
+        } else if let number = dialog.rows[row].number {
+            send("\(number)", then: QuestionScreen.enter)
+        }
+    }
+
+    /// "Type something", then the text, then Return.
+    private func type(_ dialog: QuestionDialog) {
+        let text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let row = dialog.row(.type) else { return }
+        choose(row, dialog)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            store.sendKeys(text, to: tabID)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { store.sendKeys(QuestionScreen.enter, to: tabID) }
+        }
+        typed = ""
+    }
+
+    private func sendTyped() {
+        let text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        send(text, then: QuestionScreen.enter)
+        typed = ""
+    }
+
+    private func send(_ keys: String, then followUp: String? = nil) {
+        acting = true
+        if !keys.isEmpty { store.sendKeys(keys, to: tabID) }
+        if let followUp {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { store.sendKeys(followUp, to: tabID) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { acting = false }
     }
 }
 

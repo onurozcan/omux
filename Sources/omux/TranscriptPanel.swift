@@ -206,8 +206,8 @@ struct TranscriptPanel: View {
         let pending = model.pendingTool
         if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "ExitPlanMode", let plan = pending.new {
             PlanCard(tabID: tabID, plan: plan)
-        } else if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "AskUserQuestion", let question = pending.questions.first {
-            QuestionCard(tabID: tabID, question: question)
+        } else if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "AskUserQuestion", !pending.questions.isEmpty {
+            QuestionCard(tabID: tabID, questions: pending.questions)
         } else if runtime.awaitsPermission || codex.approval(for: tabID) != nil {
             PermissionCard(tabID: tabID, provider: provider, pending: pending)
         } else if provider == .claude, !runtime.exited, runtime.busy {

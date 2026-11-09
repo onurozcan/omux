@@ -13,7 +13,11 @@ struct Todo: Equatable, Encodable {
 
 struct Question: Equatable, Encodable {
     var text: String
+    /// The short tab label Claude Code shows for the question, such as "Auth method".
+    var header: String?
     var options: [String]
+    /// One per option, "" where the option has none.
+    var descriptions: [String] = []
     var multi: Bool
 }
 
@@ -622,9 +626,12 @@ final class SessionTranscript: ObservableObject {
                     row.path = (input["file_path"] ?? input["notebook_path"] ?? input["path"]) as? String
                     if name == "AskUserQuestion", let questions = input["questions"] as? [[String: Any]] {
                         row.questions = questions.map { q in
-                            Question(text: q["question"] as? String ?? "",
-                                     options: (q["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String },
-                                     multi: q["multiSelect"] as? Bool ?? false)
+                            let options = (q["options"] as? [[String: Any]] ?? []).filter { $0["label"] is String }
+                            return Question(text: q["question"] as? String ?? "",
+                                            header: q["header"] as? String,
+                                            options: options.map { $0["label"] as? String ?? "" },
+                                            descriptions: options.map { $0["description"] as? String ?? "" },
+                                            multi: q["multiSelect"] as? Bool ?? false)
                         }
                     }
                     events.append(.tool(row, time))
