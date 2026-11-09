@@ -235,6 +235,8 @@ final class SessionTranscript: ObservableObject {
     /// The note a slash command made, so the command's output can replace its text.
     private var commandNote: Int?
     private var loading = false
+    /// A change came in while a read was in flight: read again as soon as it lands.
+    private var reloadWanted = false
     /// Bumped by `unload`, so a read in flight when it ran is dropped instead of applied.
     private var generation = 0
     private(set) var pausedAt: Date?
@@ -465,7 +467,8 @@ final class SessionTranscript: ObservableObject {
     }
 
     private func load() {
-        guard !loading, !paused else { return }
+        guard !paused else { return }
+        if loading { reloadWanted = true; return }
         if url == nil {
             url = claudeFile()
             guard let url else {
@@ -505,6 +508,7 @@ final class SessionTranscript: ObservableObject {
                 self.apply(found)
                 self.loading = false
                 self.loaded = true
+                if self.reloadWanted { self.reloadWanted = false; self.load() }
             }
         }
     }

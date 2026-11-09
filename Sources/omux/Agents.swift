@@ -60,6 +60,8 @@ final class AgentMonitor: ObservableObject {
     private let scanner = AgentScanner()
     private let queue = DispatchQueue(label: "omux.agents", qos: .utility)
     private var scanning = false
+    /// Something changed while a scan was in flight: scan again as soon as it lands.
+    private var rescanWanted = false
     /// A safety net behind the watchers, for a file system that doesn't report changes.
     private var timer: Timer?
     /// When an agent without a "finished" mark was first seen with its session idle.
@@ -88,7 +90,7 @@ final class AgentMonitor: ObservableObject {
     }
 
     func poll() {
-        guard !scanning else { return }
+        if scanning { rescanWanted = true; return }
         let store = Store.shared
         var sessions: [AgentScanner.Session] = []
         var children: [UUID: [TabRuntime.StatusChild]] = [:]
@@ -110,6 +112,7 @@ final class AgentMonitor: ObservableObject {
             let (found, watch) = scanner.scan(sessions)
             DispatchQueue.main.async {
                 self.scanning = false
+                if self.rescanWanted { self.rescanWanted = false; self.schedulePoll() }
                 self.watch(watch)
                 var result: [UUID: [SubAgent]] = [:]
                 let now = Date()
@@ -375,6 +378,8 @@ final class AgentTranscript: ObservableObject {
     private var remainder = Data()
     private var toolRows: [String: Int] = [:]
     private var loading = false
+    /// The file changed while a read was in flight: read again as soon as it lands.
+    private var reloadWanted = false
     private var timer: Timer?
 
     private enum Event {
@@ -396,7 +401,7 @@ final class AgentTranscript: ObservableObject {
     deinit { timer?.invalidate() }
 
     func load() {
-        guard !loading else { return }
+        if loading { reloadWanted = true; return }
         loading = true
         let url = self.url
         var offset = self.offset
@@ -459,6 +464,7 @@ final class AgentTranscript: ObservableObject {
                 self.remainder = rest
                 self.apply(found)
                 self.loading = false
+                if self.reloadWanted { self.reloadWanted = false; self.load() }
             }
         }
     }
