@@ -55,7 +55,7 @@ struct TranscriptPanel: View {
     @State private var hasGit = false
 
     init(tab: TabItem, provider: SessionProvider, theme: Theme, compact: Bool = false, slot: String? = nil, hooks: DropHooks? = nil,
-         claudeFile: @escaping () -> URL?, codexThread: @escaping () -> String?) {
+         claudeFile: @escaping () -> URL?, claudeFolder: @escaping () -> URL? = { nil }, codexThread: @escaping () -> String?) {
         tabID = tab.id
         name = tab.name
         initialProvider = provider
@@ -65,7 +65,7 @@ struct TranscriptPanel: View {
         self.hooks = hooks
         // A page that already loaded for this slot redraws in place: no stand-in needed.
         _pageReady = State(initialValue: TranscriptPages.shared.isLoaded(self.slot))
-        _model = StateObject(wrappedValue: TranscriptModels.shared.model(for: tab, provider: provider, claudeFile: claudeFile, codexThread: codexThread))
+        _model = StateObject(wrappedValue: TranscriptModels.shared.model(for: tab, provider: provider, claudeFile: claudeFile, claudeFolder: claudeFolder, codexThread: codexThread))
     }
 
     private var isAgent: Bool { provider == .claude || provider == .codex }

@@ -786,6 +786,13 @@ final class Store: ObservableObject {
     /// The transcript of the session's Claude Code conversation. The tab's own session id first;
     /// else the id of the `claude` running in the terminal, which Claude Code records per process in
     /// ~/.claude/sessions/<pid>.json. That covers a `claude` typed into a shell, or `claude --continue`.
+    /// The ~/.claude/projects folder for the session's working directory, where its transcript
+    /// and subagent folders appear. nil for a session without a folder.
+    func claudeProjectFolderURL(for id: UUID) -> URL? {
+        guard let tab = tab(id), let folder = runtime[id]?.cwd ?? directory(of: tab) else { return nil }
+        return URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects/" + Self.claudeProjectFolder(for: folder))
+    }
+
     func claudeTranscriptURL(for id: UUID) -> URL? {
         guard let tab = tab(id) else { return nil }
         if let url = Self.claudeTranscriptURL(tab.claudeSessionID.uuidString.lowercased()) { return url }
@@ -1131,6 +1138,8 @@ final class Store: ObservableObject {
     private func applyStatus(_ state: TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild], for id: UUID) {
         let previous = runtime[id]?.statusState
         if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state)) }
+        // Subagent rows follow the session's turns: a child listed or a turn ended is worth a look.
+        if previous != state || (runtime[id]?.statusChildren ?? []) != children { AgentMonitor.shared.schedulePoll() }
         update(id) {
             if $0.statusState != state || $0.statusDetail != message { $0.lastActivity = Date() }
             $0.statusState = state; $0.statusKind = kind; $0.statusDetail = message; $0.statusChildren = children

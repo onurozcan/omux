@@ -118,12 +118,13 @@ final class TranscriptModels {
     static let shared = TranscriptModels()
     private var models: [UUID: SessionTranscript] = [:]
 
-    func model(for tab: TabItem, provider: SessionProvider, claudeFile: @escaping () -> URL?, codexThread: @escaping () -> String?) -> SessionTranscript {
+    func model(for tab: TabItem, provider: SessionProvider, claudeFile: @escaping () -> URL?, claudeFolder: @escaping () -> URL? = { nil },
+               codexThread: @escaping () -> String?) -> SessionTranscript {
         if let existing = models[tab.id] {
             existing.switchTo(provider)
             return existing
         }
-        let model = SessionTranscript(tab: tab, provider: provider, claudeFile: claudeFile, codexThread: codexThread)
+        let model = SessionTranscript(tab: tab, provider: provider, claudeFile: claudeFile, claudeFolder: claudeFolder, codexThread: codexThread)
         models[tab.id] = model
         return model
     }
@@ -199,6 +200,7 @@ final class SessionTranscript: ObservableObject {
     let tabID: UUID
     private(set) var provider: SessionProvider = .shell
     private let claudeFile: () -> URL?
+    private let claudeFolder: () -> URL?
     private let codexThread: () -> String?
     private var url: URL?
     private var offset: UInt64 = 0
@@ -233,12 +235,14 @@ final class SessionTranscript: ObservableObject {
     private var generation = 0
     private(set) var pausedAt: Date?
     var memoryBytes: Int { encodedBytes }
+    /// A safety net behind the watchers, for a file system that doesn't report changes.
     private var timer: Timer?
-    private var ticks = 0
     private var next = 0
     private var paused = false
     /// Wakes on every append, so the view follows the terminal within a frame of the write.
-    private var watcher: DispatchSourceFileSystemObject?
+    private var watcher: PathWatcher?
+    /// Wakes when the project folder changes: the transcript appearing, or a new one after /clear.
+    private var folderWatcher: PathWatcher?
 
     /// Reading a long transcript starts this far from its end.
     private static let tailBytes: UInt64 = 4 << 20
@@ -291,16 +295,17 @@ final class SessionTranscript: ObservableObject {
         case bridge(String)
     }
 
-    init(tab: TabItem, provider: SessionProvider, claudeFile: @escaping () -> URL?, codexThread: @escaping () -> String?) {
+    init(tab: TabItem, provider: SessionProvider, claudeFile: @escaping () -> URL?, claudeFolder: @escaping () -> URL? = { nil },
+         codexThread: @escaping () -> String?) {
         tabID = tab.id
         self.claudeFile = claudeFile
+        self.claudeFolder = claudeFolder
         self.codexThread = codexThread
         switchTo(provider, force: true)
     }
 
     deinit {
         timer?.invalidate()
-        watcher?.cancel()
     }
 
     /// Follows the session's provider: a shell that ▶ or the compose box turns into an agent
@@ -390,7 +395,8 @@ final class SessionTranscript: ObservableObject {
         switch provider {
         case .claude:
             load()
-            timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            watchFolder()
+            timer = Timer.scheduledTimer(withTimeInterval: Self.safetyInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.tick() }
             }
         case .codex:
@@ -407,7 +413,8 @@ final class SessionTranscript: ObservableObject {
 
     private func stopReading() {
         timer?.invalidate(); timer = nil
-        watcher?.cancel(); watcher = nil
+        watcher = nil
+        folderWatcher = nil
         CodexManager.shared.listen(tabID, nil)
     }
 
@@ -420,27 +427,36 @@ final class SessionTranscript: ObservableObject {
 
     // MARK: Claude Code
 
+    private static let safetyInterval: TimeInterval = 10
+
     private func watch(_ url: URL) {
-        let fd = open(url.path, O_EVTONLY)
-        guard fd >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .extend], queue: .main)
-        source.setEventHandler { [weak self] in self?.load() }
-        source.setCancelHandler { close(fd) }
-        source.resume()
-        watcher = source
+        watcher = PathWatcher(path: url.path) { [weak self] in self?.load() }
     }
 
-    /// The timer's turn: a read, and every so often a check that the session still writes to
-    /// the same file. /clear starts a new conversation in a new file.
-    private func tick() {
-        ticks += 1
-        if ticks % 5 == 0, url != nil, let now = claudeFile(), now != url {
-            stopReading()
-            url = now; offset = 0; remainder = Data()
-            note("New conversation")
-            startReading()
-            return
+    /// The project folder: a new session writes its first record at the first prompt, and
+    /// /clear starts a new conversation in a new file. Claude Code makes the folder with the
+    /// first record, so this may have to wait for a later try.
+    private func watchFolder() {
+        guard folderWatcher == nil, let folder = claudeFolder() else { return }
+        folderWatcher = PathWatcher(path: folder.path, directory: true) { [weak self] in
+            guard let self else { return }
+            if self.url == nil { self.load() } else { self.followNewConversation() }
         }
+    }
+
+    /// The session writes to another file now: start over from it.
+    private func followNewConversation() {
+        guard url != nil, let now = claudeFile(), now != url else { return }
+        stopReading()
+        url = now; offset = 0; remainder = Data()
+        note("New conversation")
+        startReading()
+    }
+
+    /// The safety net's turn: whatever the watchers would have said.
+    private func tick() {
+        watchFolder()
+        followNewConversation()
         load()
     }
 

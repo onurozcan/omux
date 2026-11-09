@@ -60,13 +60,30 @@ final class AgentMonitor: ObservableObject {
     private let scanner = AgentScanner()
     private let queue = DispatchQueue(label: "omux.agents", qos: .utility)
     private var scanning = false
+    /// A safety net behind the watchers, for a file system that doesn't report changes.
     private var timer: Timer?
     /// When an agent without a "finished" mark was first seen with its session idle.
     private var stopped: [String: Date] = [:]
+    /// The folders and files whose changes mean another look: by path.
+    private var watchers: [String: PathWatcher] = [:]
+    private var pollScheduled = false
+    /// Takes a finished agent off the list when its time is up.
+    private var expiry: Task<Void, Never>?
 
     private init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
             Task { @MainActor in AgentMonitor.shared.poll() }
+        }
+    }
+
+    /// A look soon, once; the writes behind one event tend to come in a burst.
+    func schedulePoll() {
+        guard !pollScheduled else { return }
+        pollScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            self.pollScheduled = false
+            self.poll()
         }
     }
 
@@ -81,7 +98,8 @@ final class AgentMonitor: ObservableObject {
             let rt = store.runtime[entry.tab.id] ?? TabRuntime()
             let active = !rt.exited && (rt.busy || rt.statusState == .working || rt.statusState == .blocked)
             guard active || agents[entry.tab.id] != nil else { continue }
-            sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active))
+            sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active,
+                                  project: store.claudeProjectFolderURL(for: entry.tab.id)))
             children[entry.tab.id] = rt.statusChildren
             if rt.statusState == .working || rt.statusState == .blocked { working.insert(entry.tab.id) }
         }
@@ -89,9 +107,10 @@ final class AgentMonitor: ObservableObject {
         scanning = true
         let scanner = self.scanner
         queue.async {
-            let found = scanner.scan(sessions)
+            let (found, watch) = scanner.scan(sessions)
             DispatchQueue.main.async {
                 self.scanning = false
+                self.watch(watch)
                 var result: [UUID: [SubAgent]] = [:]
                 let now = Date()
                 for (tab, list) in found {
@@ -115,7 +134,35 @@ final class AgentMonitor: ObservableObject {
                 }
                 self.stopped = self.stopped.filter { now.timeIntervalSince($0.value) < 3600 }
                 if result != self.agents { self.agents = result }
+                self.scheduleExpiry(of: result, now: now)
             }
+        }
+    }
+
+    /// Watches exactly these paths, dropping the rest. A folder that doesn't exist yet is
+    /// skipped; its parent is in the set, and tells when it appears.
+    private func watch(_ paths: Set<String>) {
+        for path in watchers.keys where !paths.contains(path) { watchers[path] = nil }
+        for path in paths where watchers[path] == nil {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { continue }
+            watchers[path] = PathWatcher(path: path, directory: isDirectory.boolValue) { [weak self] in self?.schedulePoll() }
+        }
+    }
+
+    /// Finished agents leave the list on their own clock, which no file event announces.
+    private func scheduleExpiry(of agents: [UUID: [SubAgent]], now: Date) {
+        expiry?.cancel(); expiry = nil
+        let ends = agents.values.flatMap { $0 }.compactMap { agent -> Date? in
+            guard agent.finished, let ended = agent.ended else { return nil }
+            return ended.addingTimeInterval(agent.background ? AgentScanner.lingerBackground : AgentScanner.lingerForeground)
+        }
+        guard let soonest = ends.min() else { return }
+        let wait = max(0.2, soonest.timeIntervalSince(now) + 0.1)
+        expiry = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled else { return }
+            self.poll()
         }
     }
 
@@ -135,6 +182,8 @@ private final class AgentScanner: @unchecked Sendable {
         let tab: UUID
         let session: String
         let active: Bool
+        /// The ~/.claude/projects folder the session's files appear under, when known.
+        let project: URL?
     }
 
     private struct Meta: Decodable {
@@ -160,14 +209,29 @@ private final class AgentScanner: @unchecked Sendable {
     private var misses: [String: Date] = [:]
     private var progress: [String: Progress] = [:]
 
-    func scan(_ sessions: [Session]) -> [UUID: [SubAgent]] {
+    /// The agents per session, and the paths whose changes call for another scan: the subagents
+    /// folder and the files of agents still running, or, before the folder exists, the nearest
+    /// folder on the way to it.
+    func scan(_ sessions: [Session]) -> (agents: [UUID: [SubAgent]], watch: Set<String>) {
         var result: [UUID: [SubAgent]] = [:]
+        var watch: Set<String> = []
         for session in sessions {
-            guard let folder = folder(for: session.session) else { continue }
+            guard let folder = folder(for: session.session) else {
+                if let project = session.project {
+                    let sessionDir = project.appendingPathComponent(session.session)
+                    watch.insert(FileManager.default.fileExists(atPath: sessionDir.path) ? sessionDir.path : project.path)
+                }
+                continue
+            }
+            watch.insert(folder.path)
             let agents = agents(in: folder, active: session.active)
+            for agent in agents where !agent.finished {
+                watch.insert(agent.transcript.path)
+                watch.insert(folder.appendingPathComponent(agent.id + ".meta.json").path)
+            }
             if !agents.isEmpty { result[session.tab] = agents }
         }
-        return result
+        return (result, watch)
     }
 
     /// The session's subagents folder; it appears with the first subagent.
@@ -317,10 +381,14 @@ final class AgentTranscript: ObservableObject {
         case task(String), text(String), tool(id: String, title: String), result(id: String, text: String, error: Bool)
     }
 
+    /// Wakes on every append; the timer is a safety net behind it.
+    private var watcher: PathWatcher?
+
     init(url: URL) {
         self.url = url
         load()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        watcher = PathWatcher(path: url.path) { [weak self] in self?.load() }
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.load() }
         }
     }

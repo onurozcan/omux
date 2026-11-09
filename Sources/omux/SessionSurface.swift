@@ -189,6 +189,7 @@ struct SessionSurface<Terminal: View>: View {
             if mode, let tab = store.tab(tabID) {
                 TranscriptPanel(tab: tab, provider: store.transcriptProvider(of: tab), theme: theme, compact: true, slot: slot, hooks: hooks,
                                 claudeFile: { [store] in store.claudeTranscriptURL(for: tabID) },
+                                claudeFolder: { [store] in store.claudeProjectFolderURL(for: tabID) },
                                 codexThread: { [store] in store.tab(tabID)?.codexThreadID })
                     .id(tabID)
                     .opacity(peeking ? 0 : 1)

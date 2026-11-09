@@ -5,6 +5,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ## [Unreleased]
 
 ### Changed
+- **The conversation and subagents follow their files instead of a clock.** omux already woke on appends to the transcript; it now also watches the project folder, so a new session's first record and the new conversation after /clear show the moment they are written rather than on the next two or ten second tick. Subagent rows and their progress follow the subagent folders and files the same way, and a subagent's own transcript follows its file. The timers behind all of these are a once-in-ten-seconds safety net now, so the app sits quiet between writes.
 - **Active projects sit in the order they were started, and stay put.** A project coming out of the idle stack joins the active block after the projects already at work; prompting a project that is already there no longer moves it to the top. Dragging a project or Move Up/Down holds. Move to Active puts the project after the ones at work too.
 
 ### Fixed
