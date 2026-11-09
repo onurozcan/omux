@@ -128,6 +128,8 @@ struct TabGroup: Identifiable, Codable, Hashable {
     var lastActive: Date?
     /// Put in the idle stack by hand; cleared when an agent works in the project again.
     var forcedIdle = false
+    /// Kept at the top of the sidebar, above the projects at work, and never folded into the idle stack.
+    var pinned = false
     var tabs: [TabItem] = []
 
     init(name: String, directory: String? = nil, tabs: [TabItem] = []) {
@@ -151,6 +153,7 @@ struct TabGroup: Identifiable, Codable, Hashable {
         effort = try c.decodeIfPresent(String.self, forKey: .effort)
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive)
         forcedIdle = try c.decodeIfPresent(Bool.self, forKey: .forcedIdle) ?? false
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         tabs = try c.decodeIfPresent([TabItem].self, forKey: .tabs) ?? []
     }
 }

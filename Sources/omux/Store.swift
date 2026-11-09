@@ -1082,6 +1082,18 @@ final class Store: ObservableObject {
         if !wasActive { joinActive(group.id) }
     }
 
+    /// Pin to Top in a project's menu: the project sits above the projects at work, after any
+    /// pinned before it, and never folds into the idle stack. Unpinning leaves it where it is,
+    /// counted as just used so it doesn't drop straight into the stack.
+    func pin(_ groupID: UUID, _ pinned: Bool) {
+        updateGroup(groupID) { $0.pinned = pinned; if !pinned { $0.lastActive = Date() } else { $0.forcedIdle = false } }
+        guard pinned, let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        let last = groups.indices.last { $0 != index && groups[$0].pinned }
+        if let offset = Self.offsetJoiningActive(from: index, afterLastActive: last) {
+            groups.move(fromOffsets: [index], toOffset: offset)
+        }
+    }
+
     /// Move to Active in a project's menu: out of the idle stack, after the projects at work.
     func wake(_ groupID: UUID) {
         updateGroup(groupID) { $0.forcedIdle = false; $0.lastActive = Date() }
@@ -1119,6 +1131,7 @@ final class Store: ObservableObject {
     /// Selection alone doesn't count, so clicks don't reorder. `ignoring` leaves one session's
     /// runtime out, to ask what the project was before that session's agent spoke up.
     func isActive(_ group: TabGroup, ignoring ignored: UUID? = nil) -> Bool {
+        if group.pinned { return true }
         if group.forcedIdle { return false }
         if Date().timeIntervalSince(lastActivity(group)) < Self.idleAfter { return true }
         return group.tabs.contains { tab in

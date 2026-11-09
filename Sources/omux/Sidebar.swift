@@ -35,12 +35,14 @@ struct Sidebar: View {
     /// Idle projects listed instead of stacked.
     @State private var expandedProjects = false
 
-    /// Active projects first, in the order they were started (a project coming out of the idle
+    /// Pinned projects first, then the active projects in the order they were started (a project coming out of the idle
     /// stack joins after the ones at work and then stays put; drags and Move Up/Down hold), then
     /// the idle ones; two or more idle projects fold into one row at the bottom. Within a project, two or more idle shells fold into one
     /// row, so agents stay in view. The flat list lets native drag reorder and move sessions.
     private var rows: [SidebarRow] {
-        let active = store.groups.filter { store.isActive($0) }
+        // Pinned projects first, in their order; then the rest of the active ones in theirs.
+        let working = store.groups.filter { store.isActive($0) }
+        let active = working.filter(\.pinned) + working.filter { !$0.pinned }
         // Idle projects most recently used first, so the one you'll come back to is on top.
         let idle = store.groups.filter { !store.isActive($0) }.sorted { store.lastActivity($0) > store.lastActivity($1) }
         var rows = active.flatMap(groupRows)
@@ -374,6 +376,9 @@ struct GroupHeader: View {
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
             }
+            if group.pinned {
+                Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.tertiary).help("Pinned to the top")
+            }
             Spacer()
             // Show/hide chevron on hover, then the + at the trailing edge.
             Button { store.updateGroup(group.id) { $0.isCollapsed.toggle() } } label: {
@@ -494,11 +499,18 @@ struct GroupMenu: View {
         Button("Rename") { store.renamingID = group.id }
         Button("Edit Project…") { store.editingGroupID = group.id }
         Divider()
+        if group.pinned {
+            Button("Unpin") { store.pin(group.id, false) }
+        } else {
+            Button("Pin to Top") { store.pin(group.id, true) }
+        }
         Button("Move Up") { store.moveGroup(group.id, by: -1) }
             .disabled(store.groups.first?.id == group.id)
         Button("Move Down") { store.moveGroup(group.id, by: 1) }
             .disabled(store.groups.last?.id == group.id)
-        if group.forcedIdle {
+        if group.pinned {
+            // Pinned projects never fold into the idle stack.
+        } else if group.forcedIdle {
             Button("Move to Active") { store.wake(group.id) }
         } else {
             Button("Move to Idle") { store.updateGroup(group.id) { $0.forcedIdle = true } }

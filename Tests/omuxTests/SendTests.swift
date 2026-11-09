@@ -101,6 +101,16 @@ final class SendTests: XCTestCase {
         XCTAssertEqual(groups, ["a", "b", "new", "idle"])
     }
 
+    /// A pinned project reads back from an older workspace file as unpinned, and keeps the flag it saved.
+    func testAProjectKeepsItsPin() throws {
+        var group = TabGroup(name: "p")
+        group.pinned = true
+        let data = try JSONEncoder().encode(group)
+        XCTAssertTrue(try JSONDecoder().decode(TabGroup.self, from: data).pinned)
+        let old = try JSONDecoder().decode(TabGroup.self, from: Data(#"{"name":"old"}"#.utf8))
+        XCTAssertFalse(old.pinned)
+    }
+
     func testShellPathKeepsOrderAndDropsDuplicates() {
         XCTAssertEqual(ShellPath.joined(["/a", "", "/b", "/a", "/c"]), "/a:/b:/c")
         XCTAssertTrue(ShellPath.current.split(separator: ":").contains("/usr/bin"))

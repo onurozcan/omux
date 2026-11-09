@@ -2,7 +2,7 @@
 
 Everything omux does, in detail. The [README](../README.md) has the short version.
 
-- **Projects and sessions.** A project is a folder plus a default command; sessions live under it in the sidebar. Active projects sit in the order they were started: a project coming out of the idle stack joins after the ones at work and stays put however often it is prompted; drags and Move Up/Down hold. Drag to reorder or move sessions between projects, rename them, and give them colors.
+- **Projects and sessions.** A project is a folder plus a default command; sessions live under it in the sidebar. Pinned projects (Pin to Top in the right-click menu) sit first and never fold into the idle stack; then active projects sit in the order they were started: a project coming out of the idle stack joins after the ones at work and stays put however often it is prompted; drags and Move Up/Down hold. Drag to reorder or move sessions between projects, rename them, and give them colors.
 - **▶ in a plain shell.** Starts the agent chosen in Settings in that shell. In a project that already has Claude Code conversations, it resumes the newest one that no other session holds, so a project whose sessions were closed picks up where it left off.
 - **Agent selection.** Choose Claude Code, Codex, a plain shell, or a custom command in project/session settings. File › New Codex Session starts Codex directly. Worktree sessions also have an agent selector.
 - **Conversations that resume.** Claude sessions keep their pinned UUID; Codex sessions keep the thread ID assigned by Codex. Restart and Continue reopen that exact conversation.
