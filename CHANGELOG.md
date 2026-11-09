@@ -2,7 +2,7 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.11.0] - 2026-11-09
 
 ### Added
 - **Pin a project to the top.** Pin to Top in a project's right-click menu keeps it above the projects at work, in the order pinned, and out of the idle stack however long it's quiet; a small pin marks it. Unpin puts it back among the others.

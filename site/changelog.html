@@ -49,11 +49,29 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
+<article class="release" id="v0.11.0">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#v0.11.0">0.11.0</a></h2>
+    <span class="badge badge-latest">Latest</span>
+    <p><time datetime="2026-11-09">November 9, 2026</time></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.11.0">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+<li class="entry"><span class="chip chip-added">Added</span><div class="entry-text"><strong>Pin a project to the top.</strong> Pin to Top in a project's right-click menu keeps it above the projects at work, in the order pinned, and out of the idle stack however long it's quiet; a small pin marks it. Unpin puts it back among the others.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Questions are answered the way the terminal asks them.</strong> When Claude Code asks several questions at once, the card shows the one the dialog is on, with its tabs along the top, and moves on as you answer, then shows the review page with Submit answers. Multi-select questions get ticks and a Done button instead of "pick more in the terminal", a typed answer goes through "Type something", and "Chat about this" hands the questions back so you can reply below. The card reads the dialog off the screen and drives it with the arrow keys and Return, so it never answers the wrong question.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>The conversation and subagents follow their files instead of a clock.</strong> omux already woke on appends to the transcript; it now also watches the project folder, so a new session's first record and the new conversation after /clear show the moment they are written rather than on the next two or ten second tick. Subagent rows and their progress follow the subagent folders and files the same way, and a subagent's own transcript follows its file. The timers behind all of these are a once-in-ten-seconds safety net now, so the app sits quiet between writes. A change that arrives while a read is in flight is read as soon as that read lands, where it used to wait for the next tick.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Active projects sit in the order they were started, and stay put.</strong> A project coming out of the idle stack joins the active block after the projects already at work; prompting a project that is already there no longer moves it to the top. Dragging a project or Move Up/Down holds. Move to Active puts the project after the ones at work too.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>omux no longer spends a fifth of a core while an agent works.</strong> The breathing status dots were SwiftUI animations, which re-rendered the whole window at the display's refresh rate for as long as any agent was working. They are Core Animation layer animations now, played by the render server, so the main thread does nothing per frame.</div></li>
+</ul>
+  </div>
+</article>
 <article class="release" id="v0.10.1">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
     <h2><a href="#v0.10.1">0.10.1</a></h2>
-    <span class="badge badge-latest">Latest</span>
+    
     <p><time datetime="2026-11-07">November 7, 2026</time></p>
     <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.10.1">Release on GitHub</a></p>
   </div>
