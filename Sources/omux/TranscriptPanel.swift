@@ -112,6 +112,8 @@ struct TranscriptPanel: View {
                     sendNotice = "Codex quit before taking the prompt. It's back in the box."
                 }
                 .onChange(of: runtime.statusState) { _, state in
+                    let stateName = state.map { String(describing: $0) } ?? "none"
+                    Timing.mark("status", tabID, stateName + (liveText != nil ? " live" : ""))
                     workingSince = state == .working ? (workingSince ?? Date()) : nil
                     if state != .working {
                         // The reply read off the screen stays until its record lands, so the turn
@@ -654,6 +656,7 @@ struct TranscriptPanel: View {
             return
         }
         if agentRunning || provider == .custom {
+            Timing.mark("send", tabID)
             if store.sendText(text, to: tabID, submit: true) {
                 sent(text)
                 if Self.opensDialog(text, provider: provider) {

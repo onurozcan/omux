@@ -468,7 +468,7 @@ final class SessionTranscript: ObservableObject {
 
     private func load() {
         guard !paused else { return }
-        if loading { reloadWanted = true; return }
+        if loading { reloadWanted = true; Timing.mark("read-queued", tabID); return }
         if url == nil {
             url = claudeFile()
             guard let url else {
@@ -504,7 +504,7 @@ final class SessionTranscript: ObservableObject {
                 guard generation == self.generation else { return }
                 self.offset = read
                 self.remainder = rest
-                if !found.isEmpty { self.notice = nil }
+                if !found.isEmpty { self.notice = nil; Timing.mark("read", self.tabID, "\(found.count) events") }
                 self.apply(found)
                 self.loading = false
                 self.loaded = true
@@ -851,6 +851,7 @@ final class SessionTranscript: ObservableObject {
                 }
                 // A prompt echoed from the compose box becomes its real record, in place.
                 if let index = echoIndex(for: text, in: list, at: time) {
+                    if let sent = list[index].time { Timing.mark("prompt-record", tabID, String(format: "%.2fs after echo", Date().timeIntervalSince(sent))) }
                     list[index].text = text
                     list[index].time = time
                     list[index].images = keep(images)
@@ -879,6 +880,7 @@ final class SessionTranscript: ObservableObject {
                 if firstPrompt == nil { firstPrompt = time }
                 commandNote = nil
             case .assistant(let text, let time, let meta):
+                Timing.mark("reply-record", tabID, "\(text.count) chars")
                 wrote(time)
                 var block = ChatBlock(id: next, kind: .assistant, text: text, messageID: meta?.messageID)
                 if let meta {
@@ -1146,6 +1148,7 @@ final class SessionTranscript: ObservableObject {
         block.pending = queued ? "queuing" : "sent"
         list.append(block); next += 1
         commit(list, touched: [])
+        Timing.mark("echo", tabID, queued ? "queued" : "sent")
     }
 
     /// The waiting prompt a queue record names: the one with that text, newest first.

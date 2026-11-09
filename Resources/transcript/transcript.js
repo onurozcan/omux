@@ -311,9 +311,9 @@
   function userHTML(block) {
     if (block.pending === 'removed' || (isQueued(block) && nestQueued)) return `<div class="queued-slot" hidden></div>`;
     const images = (block.images || []).map(src => `<img class="thumb" src="${src}" alt="pasted image">`).join('');
-    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>`
-      : block.pending === 'sent' ? `<div class="pending"><span class="dot pulse"></span>Sending</div>` : '';
-    return `<div class="user${block.pending ? ' is-pending' : ''}">` +
+    // A prompt just sent looks like any other prompt; its record replaces it in place when it lands.
+    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>` : '';
+    return `<div class="user${block.pending && block.pending !== 'sent' ? ' is-pending' : ''}">` +
       `<div class="actions"><button type="button" data-act="quote">Quote</button><button type="button" data-act="resend">Send again</button><button type="button" data-act="copy">Copy</button></div>` +
       `${images ? `<div class="thumbs">${images}</div>` : ''}` +
       `<div class="bubble">${esc(block.text)}</div>${state || (block.time ? `<div class="time">${timeOf(block.time)}</div>` : '')}</div>`;

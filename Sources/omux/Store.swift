@@ -564,7 +564,7 @@ final class Store: ObservableObject {
         view.paste(text)
         if submit {
             // A beat later, so the program has taken the paste before Return arrives.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { view.send(txt: "\r") }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { view.send(txt: "\r"); Timing.mark("return", id) }
             // An agent's TUI that was busy and read the paste and the Return together takes the
             // Return as a line break inside the paste, and the prompt sits in its input box; the
             // next prompt would then be typed onto it. If it's still there a moment later, press

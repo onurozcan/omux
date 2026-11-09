@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+- **A prompt just sent looks like any other prompt.** The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.
+
 ### Fixed
 - **Done no longer shows over a blank before the reply.** The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.
 
