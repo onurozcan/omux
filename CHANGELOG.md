@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+- **Active projects sit in the order they were started, and stay put.** A project coming out of the idle stack joins the active block after the projects already at work; prompting a project that is already there no longer moves it to the top. Dragging a project or Move Up/Down holds. Move to Active puts the project after the ones at work too.
+
 ### Fixed
 - **omux no longer spends a fifth of a core while an agent works.** The breathing status dots were SwiftUI animations, which re-rendered the whole window at the display's refresh rate for as long as any agent was working. They are Core Animation layer animations now, played by the render server, so the main thread does nothing per frame.
 

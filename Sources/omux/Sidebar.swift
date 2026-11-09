@@ -35,14 +35,14 @@ struct Sidebar: View {
     /// Idle projects listed instead of stacked.
     @State private var expandedProjects = false
 
-    /// Active projects first, latest put to work on top (the store moves a project up when an
-    /// agent starts a turn in it; drags and Move Up/Down hold until then), then the idle ones; two or more idle projects
-    /// fold into one row at the bottom. Within a project, two or more idle shells fold into one
+    /// Active projects first, in the order they were started (a project coming out of the idle
+    /// stack joins after the ones at work and then stays put; drags and Move Up/Down hold), then
+    /// the idle ones; two or more idle projects fold into one row at the bottom. Within a project, two or more idle shells fold into one
     /// row, so agents stay in view. The flat list lets native drag reorder and move sessions.
     private var rows: [SidebarRow] {
-        let active = store.groups.filter(isActive)
+        let active = store.groups.filter { store.isActive($0) }
         // Idle projects most recently used first, so the one you'll come back to is on top.
-        let idle = store.groups.filter { !isActive($0) }.sorted { lastActivity($0) > lastActivity($1) }
+        let idle = store.groups.filter { !store.isActive($0) }.sorted { store.lastActivity($0) > store.lastActivity($1) }
         var rows = active.flatMap(groupRows)
         if idle.count >= 2 {
             // Clicking never reorders: a selected session inside the stack opens the stack instead.
@@ -54,28 +54,6 @@ struct Sidebar: View {
             rows += idle.flatMap(groupRows)
         }
         return rows
-    }
-
-    /// When an agent last worked in the project: status events while the app runs, and the
-    /// transcripts' modification dates for what happened before. Opening a session doesn't count.
-    private func lastActivity(_ group: TabGroup) -> Date {
-        let files = group.tabs.map { TranscriptDates.shared.date(for: $0) }.compactMap { $0 }.max() ?? .distantPast
-        return max(files, group.lastActive ?? .distantPast)
-    }
-
-    /// Projects quiet for this long fold into the idle stack.
-    private static let idleAfter: TimeInterval = 3 * 24 * 3600
-
-    /// A project with something going on, or anything in the last three days: an agent running
-    /// or waiting, a program in a shell, a session asking for attention, or recent use.
-    /// Selection alone doesn't count, so clicks don't reorder.
-    private func isActive(_ group: TabGroup) -> Bool {
-        if group.forcedIdle { return false }
-        if Date().timeIntervalSince(lastActivity(group)) < Self.idleAfter { return true }
-        return group.tabs.contains { tab in
-            guard let rt = store.runtime[tab.id], !rt.exited else { return false }
-            return rt.busy || rt.statusState == .working || rt.statusState == .blocked || rt.needsAttention
-        }
     }
 
     private func groupRows(_ group: TabGroup) -> [SidebarRow] {
@@ -521,7 +499,7 @@ struct GroupMenu: View {
         Button("Move Down") { store.moveGroup(group.id, by: 1) }
             .disabled(store.groups.last?.id == group.id)
         if group.forcedIdle {
-            Button("Move to Active") { store.updateGroup(group.id) { $0.forcedIdle = false; $0.lastActive = Date() } }
+            Button("Move to Active") { store.wake(group.id) }
         } else {
             Button("Move to Idle") { store.updateGroup(group.id) { $0.forcedIdle = true } }
         }

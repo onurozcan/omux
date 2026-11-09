@@ -87,6 +87,20 @@ final class SendTests: XCTestCase {
         XCTAssertFalse(Store.startsTurn(from: .done, to: nil))
     }
 
+    func testAProjectComingOutOfIdleJoinsAfterTheProjectsAtWork() {
+        // Nothing active: the first project started goes to the top.
+        XCTAssertEqual(Store.offsetJoiningActive(from: 2, afterLastActive: nil), 0)
+        XCTAssertNil(Store.offsetJoiningActive(from: 0, afterLastActive: nil))
+        // Active projects at 0 and 1: a project below them slots in at 2, one already there stays.
+        XCTAssertEqual(Store.offsetJoiningActive(from: 4, afterLastActive: 1), 2)
+        XCTAssertNil(Store.offsetJoiningActive(from: 2, afterLastActive: 1))
+        // A project above the active ones moves down to sit after them (move semantics: offset 3 lands it at 2).
+        XCTAssertEqual(Store.offsetJoiningActive(from: 0, afterLastActive: 2), 3)
+        var groups = ["new", "a", "b", "idle"]
+        groups.move(fromOffsets: [0], toOffset: 3)
+        XCTAssertEqual(groups, ["a", "b", "new", "idle"])
+    }
+
     func testShellPathKeepsOrderAndDropsDuplicates() {
         XCTAssertEqual(ShellPath.joined(["/a", "", "/b", "/a", "/c"]), "/a:/b:/c")
         XCTAssertTrue(ShellPath.current.split(separator: ":").contains("/usr/bin"))

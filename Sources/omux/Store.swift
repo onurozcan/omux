@@ -1064,12 +1064,60 @@ final class Store: ObservableObject {
     /// using its shell doesn't count. When the agent starts a turn, the project moves to the top
     /// of the sidebar: the projects sit in the order they were last put to work, the latest first.
     /// Status ticks during the turn, or a second project working alongside, don't reorder them.
+    /// Marks a project as in use. A project that was idle joins the active block of the sidebar
+    /// after the projects already at work, so the block reads in the order projects were started;
+    /// a project already at work stays where it is, however often it is prompted.
     private func touchProject(of id: UUID, activated: Bool) {
-        guard let group = group(containing: id), let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
+        guard let group = group(containing: id) else { return }
+        let wasActive = isActive(group, ignoring: id)
         if group.forcedIdle { updateGroup(group.id) { $0.forcedIdle = false } }
-        guard activated else { return }
-        updateGroup(group.id) { $0.lastActive = Date() }
-        if index > 0 { groups.move(fromOffsets: [index], toOffset: 0) }
+        if activated { updateGroup(group.id) { $0.lastActive = Date() } }
+        if !wasActive { joinActive(group.id) }
+    }
+
+    /// Move to Active in a project's menu: out of the idle stack, after the projects at work.
+    func wake(_ groupID: UUID) {
+        updateGroup(groupID) { $0.forcedIdle = false; $0.lastActive = Date() }
+        joinActive(groupID)
+    }
+
+    private func joinActive(_ groupID: UUID) {
+        guard let index = groups.firstIndex(where: { $0.id == groupID }), isActive(groups[index]) else { return }
+        let last = groups.indices.last { $0 != index && isActive(groups[$0]) }
+        if let offset = Self.offsetJoiningActive(from: index, afterLastActive: last) {
+            groups.move(fromOffsets: [index], toOffset: offset)
+        }
+    }
+
+    /// Where a project at `index` goes to sit right after the last active project (nil when none
+    /// is active: the top), as an offset for `move(fromOffsets:toOffset:)`; nil when it is there already.
+    nonisolated static func offsetJoiningActive(from index: Int, afterLastActive last: Int?) -> Int? {
+        guard let last else { return index == 0 ? nil : 0 }
+        if index == last + 1 { return nil }
+        return last + 1
+    }
+
+    /// When an agent last worked in the project: status events while the app runs, and the
+    /// transcripts' modification dates for what happened before. Opening a session doesn't count.
+    func lastActivity(_ group: TabGroup) -> Date {
+        let files = group.tabs.map { TranscriptDates.shared.date(for: $0) }.compactMap { $0 }.max() ?? .distantPast
+        return max(files, group.lastActive ?? .distantPast)
+    }
+
+    /// Projects quiet for this long fold into the idle stack.
+    static let idleAfter: TimeInterval = 3 * 24 * 3600
+
+    /// A project with something going on, or anything in the last three days: an agent running
+    /// or waiting, a program in a shell, a session asking for attention, or recent use.
+    /// Selection alone doesn't count, so clicks don't reorder. `ignoring` leaves one session's
+    /// runtime out, to ask what the project was before that session's agent spoke up.
+    func isActive(_ group: TabGroup, ignoring ignored: UUID? = nil) -> Bool {
+        if group.forcedIdle { return false }
+        if Date().timeIntervalSince(lastActivity(group)) < Self.idleAfter { return true }
+        return group.tabs.contains { tab in
+            guard tab.id != ignored, let rt = runtime[tab.id], !rt.exited else { return false }
+            return rt.busy || rt.statusState == .working || rt.statusState == .blocked || rt.needsAttention
+        }
     }
 
     /// Whether a status change is the agent starting a turn: from nothing, as it comes up, or
