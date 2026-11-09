@@ -3,6 +3,33 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.11.0</title>
+            <pubDate>Mon, 09 Nov 2026 14:43:56 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.11.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Added</h3>
+<ul>
+<li><strong>Pin a project to the top.</strong> Pin to Top in a project's right-click menu keeps it above the projects at work, in the order pinned, and out of the idle stack however long it's quiet; a small pin marks it. Unpin puts it back among the others.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><strong>Questions are answered the way the terminal asks them.</strong> When Claude Code asks several questions at once, the card shows the one the dialog is on, with its tabs along the top, and moves on as you answer, then shows the review page with Submit answers. Multi-select questions get ticks and a Done button instead of "pick more in the terminal", a typed answer goes through "Type something", and "Chat about this" hands the questions back so you can reply below. The card reads the dialog off the screen and drives it with the arrow keys and Return, so it never answers the wrong question.</li>
+<li><strong>The conversation and subagents follow their files instead of a clock.</strong> omux already woke on appends to the transcript; it now also watches the project folder, so a new session's first record and the new conversation after /clear show the moment they are written rather than on the next two or ten second tick. Subagent rows and their progress follow the subagent folders and files the same way, and a subagent's own transcript follows its file. The timers behind all of these are a once-in-ten-seconds safety net now, so the app sits quiet between writes. A change that arrives while a read is in flight is read as soon as that read lands, where it used to wait for the next tick.</li>
+<li><strong>Active projects sit in the order they were started, and stay put.</strong> A project coming out of the idle stack joins the active block after the projects already at work; prompting a project that is already there no longer moves it to the top. Dragging a project or Move Up/Down holds. Move to Active puts the project after the ones at work too.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>omux no longer spends a fifth of a core while an agent works.</strong> The breathing status dots were SwiftUI animations, which re-rendered the whole window at the display's refresh rate for as long as any agent was working. They are Core Animation layer animations now, played by the render server, so the main thread does nothing per frame.</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.0/omux-0.11.0.zip" length="5901736" type="application/octet-stream" sparkle:edSignature="PRJIUAmbuLnV0zbaDWBcRYrLi9NTYSEyTyLgY8b3qyla4XfGcpPPyYHhvNDnEGfJKP/eYWVsPqNp3jcItRjJBw=="/>
+        </item>
+        <item>
             <title>0.10.1</title>
             <pubDate>Sat, 07 Nov 2026 22:51:04 +0300</pubDate>
             <link>https://omux.app</link>
@@ -76,28 +103,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.10.0/omux-0.10.0.zip" length="5825841" type="application/octet-stream" sparkle:edSignature="AsAg0swCReE8EUayWiJ+YdXUmPDhKXii7EZSnhbspOKkFCfeqdvTaiYUN3S2nk04d4HySw/3GaJ8r2F8EIm2AQ=="/>
-        </item>
-        <item>
-            <title>0.9.1</title>
-            <pubDate>Sun, 01 Nov 2026 18:55:46 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>12</sparkle:version>
-            <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Added</h3>
-<ul>
-<li><strong>What ▶ starts.</strong> Settings › Sessions chooses the agent ▶ starts in a plain shell session (Claude Code or Codex); the shell becomes that agent's session. A second setting decides what an agent with no saved conversation does: start fresh, or continue the folder's latest conversation (<code>claude --continue</code>). A saved conversation is always resumed exactly.</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li>▶ brings the session forward and focuses its terminal instead of starting it in the background.</li>
-<li>The ▶ and ■ buttons are smaller and centred on the session's name line.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.9.1/omux-0.9.1.zip" length="4978446" type="application/octet-stream" sparkle:edSignature="MyTcy2UAzepfeKOAok7L1YpwheS6391V3vjjDNTTXaZGVgBad6huyh55peePkTCTbBceZXNuzVjIW0ZuMJnzBA=="/>
         </item>
     </channel>
 </rss>
