@@ -11,6 +11,10 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 - **Building from source no longer re-asks permissions.** `./build.sh` signs the app with the Developer ID certificate when the keychain has one, the same identity releases carry, so a dev build and a release can replace each other in /Applications without macOS starting the Accessibility, Screen Recording and folder grants over. Without that certificate it falls back to Apple Development, then an ad-hoc signature, as before.
 - **A prompt just sent looks like any other prompt.** The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.
 
+### Added
+
+- **Edge status light.** Settings › Notifications › Status Light shows a small traffic light on the screen edge: green while an agent works, yellow while a session waits for you, red when no session is running. Click it to bring omux forward; right-click to snap it to the other edge, make it compact or hide it. Off by default.
+
 ### Fixed
 - **Done no longer shows over a blank before the reply.** The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.
 
