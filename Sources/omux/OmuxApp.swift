@@ -914,6 +914,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ShellPath.warmUp()
+        ClaudeModels.shared.refresh()
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()
         Notifier.shared.activate()

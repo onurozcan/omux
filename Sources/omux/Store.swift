@@ -809,6 +809,8 @@ final class Store: ObservableObject {
 
     /// Starts the selected provider in an idle shell or resumes its exact saved chat.
     func start(_ id: UUID) {
+        // Claude Code updates itself in place: a start is a good moment to learn its new models.
+        ClaudeModels.shared.refresh()
         guard let loc = location(of: id), pendingCommands[id] == nil else { return }
         // ▶ brings the session forward; what it starts should be what you're looking at.
         selectedTabID = id

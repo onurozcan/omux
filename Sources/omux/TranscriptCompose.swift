@@ -63,8 +63,9 @@ struct ComposeBox: View {
         let insert: String
     }
 
-    /// Full model ids, so the choice is exact; Claude Code takes them as `/model <id>`.
-    static let claudeModels = ["default", "claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan"]
+    /// Full model ids, so the choice is exact; Claude Code takes them as `/model <id>`. Read from
+    /// the installed Claude Code, so a new model is listed the day it learns of it.
+    @ObservedObject private var claudeModels = ClaudeModels.shared
     static let efforts = ["auto", "low", "medium", "high", "xhigh", "max"]
     /// Claude Code's permission modes, in the order shift-tab cycles them.
     static let modes = ["default", "accept edits", "plan", "auto"]
@@ -248,7 +249,7 @@ struct ComposeBox: View {
         let codexModels = CodexModels.list()
         return Menu {
             Section {
-                let listed = Self.claudeModels + (provider == .claude ? (current.map { Self.claudeModels.contains($0) ? [] : [$0] } ?? []) : [])
+                let listed = claudeModels.list + (provider == .claude ? (current.map { claudeModels.list.contains($0) ? [] : [$0] } ?? []) : [])
                 ForEach(listed, id: \.self) { id in
                     Toggle(isOn: Binding(get: { provider == .claude && (current == id || (id == "default" && current == nil)) }, set: { if $0 { pick(.claude, model: id) } })) {
                         Text(id == "default" ? "Default" : id)
