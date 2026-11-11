@@ -2,6 +2,11 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- **The question card reads as a choice list.** Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.
+
 ## [0.11.1] - 2026-11-11
 
 ### Added

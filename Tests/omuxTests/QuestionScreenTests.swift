@@ -92,6 +92,40 @@ final class QuestionScreenTests: XCTestCase {
         XCTAssertTrue(dialog.review[1].hasSuffix("→ Type my own answer"))
     }
 
+    /// Captured with two questions pending: no │ before the question, [✔] for a tick, and the
+    /// confirm row reads Next rather than Submit.
+    func testAMultiSelectQuestionWithMoreToCome() throws {
+        let screen = """
+        ←  ☒ Symptom  ☐ View  ✔ Submit  →
+        What goes wrong with the question card in omux? Pick everything you've seen.
+        ❯ 1. [✔] No card at all
+                 The question only shows in the terminal; the transcript shows nothing or a generic 'needs you' row.
+          2. [ ] Wrong or stale content
+                 The card shows a different question, the wrong options, or doesn't move on after an answer.
+          3. [✔] Clicks don't land
+                 A button does nothing, or picks the wrong row, or the review page never submits.
+          4. [ ] Only the terminal view works
+                 It works when the terminal is shown but not in the transcript view.
+          5. [ ] Type something
+             Next
+        ─────────────────────────────────────────────────
+          6. Chat about this
+        Enter to select · Tab/Arrow keys to navigate · Esc to cancel
+        """
+        let asked = [
+            Question(text: "What goes wrong with the question card in omux? Pick everything you've seen.", header: "Symptom",
+                     options: ["No card at all", "Wrong or stale content", "Clicks don't land", "Only the terminal view works"], multi: true),
+            Question(text: "Which view were you in when it went wrong?", header: "View", options: ["Transcript view", "Terminal view", "Both"], multi: false),
+        ]
+        let dialog = try XCTUnwrap(QuestionScreen.parse(lines(screen), questions: asked))
+        XCTAssertEqual(dialog.page, .question(0))
+        XCTAssertEqual(dialog.answered, [true, false])
+        XCTAssertEqual(dialog.rows.map(\.kind), [.option(0), .option(1), .option(2), .option(3), .type, .submit, .chat])
+        XCTAssertEqual(dialog.rows.map(\.checked), [true, false, true, false, false, nil, nil])
+        XCTAssertEqual(dialog.rows[5].label, "Next")
+        XCTAssertEqual(dialog.cursor, 0)
+    }
+
     func testNoDialogWhenTheScreenShowsNone() {
         XCTAssertNil(QuestionScreen.parse(["❯ ", "  ~/omux  main"], questions: questions))
     }

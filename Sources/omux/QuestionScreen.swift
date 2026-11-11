@@ -24,6 +24,8 @@ struct QuestionDialog: Equatable {
         var number: Int?
         /// A multi-select box: ticked or not. nil for rows without one.
         var checked: Bool?
+        /// The dialog's own wording for the row: a multi-select's "Next" or "Submit".
+        var label: String = ""
     }
     enum Page: Equatable { case question(Int), review }
 
@@ -44,7 +46,8 @@ enum QuestionScreen {
     static let down = "\u{1b}[B"
     static let enter = "\r"
     private static let rowPattern = try! NSRegularExpression(pattern: #"^\s*(❯)?\s*(\d+)\.\s+(?:\[([^\]])\]\s+)?(.*?)\s*$"#)
-    private static let submitPattern = try! NSRegularExpression(pattern: #"^\s*(❯)?\s+Submit\s*$"#)
+    /// A multi-select question's confirm row: "Submit", or "Next" when more questions follow.
+    private static let submitPattern = try! NSRegularExpression(pattern: #"^\s*(❯)?\s+(Submit|Next)\s*$"#)
 
     /// The dialog on screen, or nil when the screen doesn't show one (the agent moved on, or the
     /// typed-answer field is open). `questions` tells which question the page shows.
@@ -74,14 +77,14 @@ enum QuestionScreen {
             return QuestionDialog(page: .review, rows: rows, cursor: cursor, answered: answered, review: review)
         }
 
-        // The question shown: its text comes right after the tabs, marked with │.
+        // The question shown: its text comes right after the tabs, sometimes behind a │.
         var index: Int?
-        if let line = page.first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("│") }) {
-            let shown = normalized(String(line.drop { $0 != "│" }.dropFirst()))
+        for line in page where index == nil {
+            let shown = normalized(line.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "│ ")))
+            guard shown.count >= 12 else { continue }
             index = questions.indices.first { i in
                 let text = normalized(questions[i].text)
-                let probe = String(shown.prefix(24))
-                return !probe.isEmpty && (text.hasPrefix(probe) || shown.hasPrefix(String(text.prefix(24))))
+                return text.hasPrefix(String(shown.prefix(24))) || shown.hasPrefix(String(text.prefix(24)))
             }
         }
         let current = index ?? answered.firstIndex(of: false) ?? 0
@@ -104,7 +107,7 @@ enum QuestionScreen {
                 rows.append(.init(kind: kind, number: Int(line[Range(m.range(at: 2), in: line)!]), checked: checked))
             } else if let m = submitPattern.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) {
                 if m.range(at: 1).location != NSNotFound { cursor = rows.count }
-                rows.append(.init(kind: .submit, number: nil, checked: nil))
+                rows.append(.init(kind: .submit, number: nil, checked: nil, label: String(line[Range(m.range(at: 2), in: line)!])))
             }
         }
         guard !rows.isEmpty else { return nil }
