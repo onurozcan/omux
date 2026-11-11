@@ -8,6 +8,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 - **The model chip lists what Claude Code knows.** The Claude Code models in the compose box come from the installed Claude Code itself, which carries every model id it knows: the newest Fable, Opus, Sonnet and Haiku are offered, so a new model is listed the day Claude Code learns of it, with no omux update. Read again whenever Claude Code updates itself. A model not in the list can still be set with `/model <id>` and shows in the chip once the session reports it.
 
 ### Changed
+- **Building from source no longer re-asks permissions.** `./build.sh` signs the app with the Developer ID certificate when the keychain has one, the same identity releases carry, so a dev build and a release can replace each other in /Applications without macOS starting the Accessibility, Screen Recording and folder grants over. Without that certificate it falls back to Apple Development, then an ad-hoc signature, as before.
 - **A prompt just sent looks like any other prompt.** The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.
 
 ### Fixed

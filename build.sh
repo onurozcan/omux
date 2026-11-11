@@ -70,8 +70,13 @@ sign_sparkle() {
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 
 if [[ "$MODE" == "install" ]]; then
-  # A stable signing identity keeps macOS from re-asking permissions after each rebuild.
-  IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}' || true)
+  # A stable signing identity keeps macOS from re-asking permissions after each rebuild. The
+  # Developer ID certificate is the one releases carry, so a dev build and an update can replace
+  # each other in /Applications without Accessibility, Screen Recording and folder grants
+  # starting over; without it, the Apple Development certificate, then an ad-hoc signature.
+  IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
+  IDENTITY=$(echo "$IDENTITIES" | grep "Developer ID Application" | head -1 | awk '{print $2}')
+  [[ -z "$IDENTITY" ]] && IDENTITY=$(echo "$IDENTITIES" | grep "Apple Development" | head -1 | awk '{print $2}')
   sign_sparkle "${IDENTITY:--}"
   codesign --force --sign "${IDENTITY:--}" "$APP/Contents/Resources/bin/omux" 2>&1 | without "replacing existing signature"
   codesign --force --sign "${IDENTITY:--}" "$APP" 2>&1 | without "replacing existing signature"
