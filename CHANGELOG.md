@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+- **Claude Fable 5.2 in the model chip.** The list of Claude Code models in the compose box has `claude-fable-5-2` at the top; a model not in the list can still be set with `/model <id>` and shows in the chip once the session reports it.
+
 ### Changed
 - **A prompt just sent looks like any other prompt.** The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.
 

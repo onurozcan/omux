@@ -64,7 +64,7 @@ struct ComposeBox: View {
     }
 
     /// Full model ids, so the choice is exact; Claude Code takes them as `/model <id>`.
-    static let claudeModels = ["default", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan"]
+    static let claudeModels = ["default", "claude-fable-5-2", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan"]
     static let efforts = ["auto", "low", "medium", "high", "xhigh", "max"]
     /// Claude Code's permission modes, in the order shift-tab cycles them.
     static let modes = ["default", "accept edits", "plan", "auto"]
