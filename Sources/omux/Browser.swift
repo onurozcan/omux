@@ -55,6 +55,13 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         webView.load(URLRequest(url: url))
     }
 
+    /// Shows a local page; `folder` (the page's own, or the project's) is what it may read.
+    func load(file url: URL, within folder: URL) {
+        error = nil
+        address = url.absoluteString
+        webView.loadFileURL(url, allowingReadAccessTo: folder)
+    }
+
     func reload() {
         if error != nil, let failedURL {
             load(failedURL.absoluteString)

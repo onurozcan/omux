@@ -210,16 +210,21 @@ struct FilePanel: View {
             store.openCodexAgent = nil
             var isDir: ObjCBool = false
             if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
-                previewURL = URL(fileURLWithPath: path)
+                show(URL(fileURLWithPath: path))
             }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             providers.first?.loadDataRepresentation(forTypeIdentifier: "public.file-url") { data, _ in
                 guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                DispatchQueue.main.async { previewURL = url }
+                DispatchQueue.main.async { show(url) }
             }
             return true
         }
+    }
+
+    /// A page goes to the Browser tab, rendered; everything else previews here.
+    private func show(_ url: URL) {
+        if Store.opensInBrowser(url) { store.showInBrowser(url) } else { previewURL = url }
     }
 
     private func showRequested() {

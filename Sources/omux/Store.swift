@@ -644,6 +644,31 @@ final class Store: ObservableObject {
         showPanel(.files)
     }
 
+    /// Shows a file in the right panel: a web page in the Browser tab, anything else in Files.
+    func preview(_ path: String) {
+        let url = URL(fileURLWithPath: path)
+        if Self.opensInBrowser(url) { showInBrowser(url) } else { previewRequest = path }
+    }
+
+    /// Pages belong in the browser, rendered, not in the editor as markup.
+    nonisolated static func opensInBrowser(_ url: URL) -> Bool {
+        ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Opens a local page in the selected session's browser. The project folder is readable to
+    /// it, so the page's own stylesheets, scripts and images load; a page outside the project
+    /// gets its own folder.
+    func showInBrowser(_ url: URL) {
+        guard let id = selectedTabID else { return }
+        var folder = url.deletingLastPathComponent()
+        if let dir = group(containing: id)?.directory.map({ URL(fileURLWithPath: $0) }),
+           url.standardizedFileURL.path.hasPrefix(dir.standardizedFileURL.path + "/") {
+            folder = dir
+        }
+        browser(for: id).load(file: url, within: folder)
+        showPanel(.browser)
+    }
+
     func browser(for id: UUID) -> BrowserSession {
         if let browser = browsers[id] { return browser }
         let browser = BrowserSession(tabID: id)
@@ -1049,7 +1074,7 @@ final class Store: ObservableObject {
         case .exited:
             update(id) { $0.exited = true; $0.statusState = nil; $0.statusKind = nil; $0.statusChildren = []; $0.busy = false }
         case .openPath(let path):
-            previewRequest = path
+            preview(path)
         case .status(let state, let kind, let message, let children):
             // Codex also emits terminal OSC status. Its protocol is authoritative, particularly
             // for approval IDs; mixing both can revive stale buttons. Its first idle does say
@@ -1069,19 +1094,39 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Marks the session's project as worked in: an agent reported status. Opening a session or
-    /// using its shell doesn't count. When the agent starts a turn, the project moves to the top
-    /// of the sidebar: the projects sit in the order they were last put to work, the latest first.
-    /// Status ticks during the turn, or a second project working alongside, don't reorder them.
-    /// Marks a project as in use. A project that was idle joins the active block of the sidebar
-    /// after the projects already at work, so the block reads in the order projects were started;
-    /// a project already at work stays where it is, however often it is prompted.
-    private func touchProject(of id: UUID, activated: Bool) {
+    /// Marks a project as in use: an agent reported status. Opening a session or using its shell
+    /// doesn't count. The project moves to the top of the sidebar when it is activated: an agent
+    /// starts a turn in it while no agent was up in the project, or after an hour without a turn.
+    /// So the projects sit in the order they were activated, the latest first. Prompts while the
+    /// project is at work don't move it, nor do status ticks during a turn, so the list holds still.
+    private func touchProject(of id: UUID, activated: Bool, agentWasUp: Bool) {
         guard let group = group(containing: id) else { return }
         let wasActive = isActive(group, ignoring: id)
         if group.forcedIdle { updateGroup(group.id) { $0.forcedIdle = false } }
-        if activated { updateGroup(group.id) { $0.lastActive = Date() } }
-        if !wasActive { joinActive(group.id) }
+        var moves = !wasActive
+        if activated {
+            moves = moves || Self.activates(agentUp: agentWasUp || hasAgentUp(group, ignoring: id), lastTurn: group.lastActive)
+            updateGroup(group.id) { $0.lastActive = Date() }
+        }
+        if moves { moveToTop(group.id) }
+    }
+
+    /// A project with no turn for this long counts as activated again by its next one.
+    nonisolated static let reactivateAfter: TimeInterval = 3600
+
+    /// Whether a turn starting now activates the project: nothing of the agent was up in it, or
+    /// its last turn started over `reactivateAfter` ago (or never).
+    nonisolated static func activates(agentUp: Bool, lastTurn: Date?, now: Date = Date()) -> Bool {
+        guard let lastTurn else { return true }
+        return !agentUp || now.timeIntervalSince(lastTurn) > reactivateAfter
+    }
+
+    /// Whether an agent is up in any session of the project other than `ignored`.
+    private func hasAgentUp(_ group: TabGroup, ignoring ignored: UUID?) -> Bool {
+        group.tabs.contains { tab in
+            guard tab.id != ignored, let rt = runtime[tab.id], !rt.exited else { return false }
+            return rt.statusState != nil
+        }
     }
 
     /// Pin to Top in a project's menu: the project sits above the projects at work, after any
@@ -1096,18 +1141,16 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Move to Active in a project's menu: out of the idle stack, after the projects at work.
+    /// Move to Active in a project's menu: out of the idle stack, to the top of the projects at work.
     func wake(_ groupID: UUID) {
         updateGroup(groupID) { $0.forcedIdle = false; $0.lastActive = Date() }
-        joinActive(groupID)
+        moveToTop(groupID)
     }
 
-    private func joinActive(_ groupID: UUID) {
-        guard let index = groups.firstIndex(where: { $0.id == groupID }), isActive(groups[index]) else { return }
-        let last = groups.indices.last { $0 != index && isActive(groups[$0]) }
-        if let offset = Self.offsetJoiningActive(from: index, afterLastActive: last) {
-            groups.move(fromOffsets: [index], toOffset: offset)
-        }
+    /// Puts an active project first in the sidebar; pinned projects are listed ahead of it regardless.
+    private func moveToTop(_ groupID: UUID) {
+        guard let index = groups.firstIndex(where: { $0.id == groupID }), index > 0, isActive(groups[index]) else { return }
+        groups.move(fromOffsets: [index], toOffset: 0)
     }
 
     /// Where a project at `index` goes to sit right after the last active project (nil when none
@@ -1152,7 +1195,7 @@ final class Store: ObservableObject {
 
     private func applyStatus(_ state: TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild], for id: UUID) {
         let previous = runtime[id]?.statusState
-        if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state)) }
+        if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state), agentWasUp: previous != nil) }
         // Subagent rows follow the session's turns: a child listed or a turn ended is worth a look.
         if previous != state || (runtime[id]?.statusChildren ?? []) != children { AgentMonitor.shared.schedulePoll() }
         update(id) {

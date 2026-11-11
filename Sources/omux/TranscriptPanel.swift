@@ -324,7 +324,7 @@ struct TranscriptPanel: View {
             guard let raw = message["path"] as? String else { return }
             let path = raw.hasPrefix("/") || raw.hasPrefix("~") ? (raw as NSString).expandingTildeInPath
                 : (baseDirectory as NSString).appendingPathComponent(raw)
-            if FileManager.default.fileExists(atPath: path) { store.previewRequest = path }
+            if FileManager.default.fileExists(atPath: path) { store.preview(path) }
         case "agent":
             if let id = message["id"] as? String, let agent = agents.agents[tabID]?.first(where: { $0.id == id }) {
                 store.openAgentTranscript(agent, in: tabID)

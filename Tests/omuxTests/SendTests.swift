@@ -87,7 +87,26 @@ final class SendTests: XCTestCase {
         XCTAssertFalse(Store.startsTurn(from: .done, to: nil))
     }
 
-    func testAProjectComingOutOfIdleJoinsAfterTheProjectsAtWork() {
+    func testAProjectIsActivatedByAFreshStartOrAfterAnHour() {
+        let now = Date()
+        // No turn on record: the first one activates, whatever is up.
+        XCTAssertTrue(Store.activates(agentUp: true, lastTurn: nil, now: now))
+        // Prompting a project whose agent is up, minutes after its last turn, doesn't.
+        XCTAssertFalse(Store.activates(agentUp: true, lastTurn: now.addingTimeInterval(-600), now: now))
+        // Starting the agent afresh does, even right away.
+        XCTAssertTrue(Store.activates(agentUp: false, lastTurn: now.addingTimeInterval(-60), now: now))
+        // Coming back after an hour does, with the agent still sitting at its prompt.
+        XCTAssertTrue(Store.activates(agentUp: true, lastTurn: now.addingTimeInterval(-3601), now: now))
+    }
+
+    func testPagesOpenInTheBrowser() {
+        XCTAssertTrue(Store.opensInBrowser(URL(fileURLWithPath: "/p/site/index.html")))
+        XCTAssertTrue(Store.opensInBrowser(URL(fileURLWithPath: "/p/Report.HTM")))
+        XCTAssertFalse(Store.opensInBrowser(URL(fileURLWithPath: "/p/site/style.css")))
+        XCTAssertFalse(Store.opensInBrowser(URL(fileURLWithPath: "/p/notes.md")))
+    }
+
+    func testAPinnedProjectJoinsAfterTheOnesPinnedBefore() {
         // Nothing active: the first project started goes to the top.
         XCTAssertEqual(Store.offsetJoiningActive(from: 2, afterLastActive: nil), 0)
         XCTAssertNil(Store.offsetJoiningActive(from: 0, afterLastActive: nil))

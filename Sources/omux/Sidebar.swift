@@ -35,9 +35,9 @@ struct Sidebar: View {
     /// Idle projects listed instead of stacked.
     @State private var expandedProjects = false
 
-    /// Pinned projects first, then the active projects in the order they were started (a project coming out of the idle
-    /// stack joins after the ones at work and then stays put; drags and Move Up/Down hold), then
-    /// the idle ones; two or more idle projects fold into one row at the bottom. Within a project, two or more idle shells fold into one
+    /// Pinned projects first, then the active projects in the order they were activated, latest first (a
+    /// project moves to the top when an agent starts in it or returns after an hour, and stays put
+    /// while it is prompted; drags and Move Up/Down hold), then the idle ones; two or more idle projects fold into one row at the bottom. Within a project, two or more idle shells fold into one
     /// row, so agents stay in view. The flat list lets native drag reorder and move sessions.
     private var rows: [SidebarRow] {
         // Pinned projects first, in their order; then the rest of the active ones in theirs.
