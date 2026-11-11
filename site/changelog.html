@@ -49,11 +49,28 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
+<article class="release" id="v0.11.1">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#v0.11.1">0.11.1</a></h2>
+    <span class="badge badge-latest">Latest</span>
+    <p><time datetime="2026-11-11">November 11, 2026</time></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.11.1">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+<li class="entry"><span class="chip chip-added">Added</span><div class="entry-text"><strong>The model chip lists what Claude Code knows.</strong> The Claude Code models in the compose box come from the installed Claude Code itself, which carries every model id it knows: the newest Fable, Opus, Sonnet and Haiku are offered, so a new model is listed the day Claude Code learns of it, with no omux update. Read again whenever Claude Code updates itself. A model not in the list can still be set with <code>/model &lt;id&gt;</code> and shows in the chip once the session reports it.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Building from source no longer re-asks permissions.</strong> <code>./build.sh</code> signs the app with the Developer ID certificate when the keychain has one, the same identity releases carry, so a dev build and a release can replace each other in /Applications without macOS starting the Accessibility, Screen Recording and folder grants over. Without that certificate it falls back to Apple Development, then an ad-hoc signature, as before.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>A prompt just sent looks like any other prompt.</strong> The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Done no longer shows over a blank before the reply.</strong> The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.</div></li>
+</ul>
+  </div>
+</article>
 <article class="release" id="v0.11.0">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
     <h2><a href="#v0.11.0">0.11.0</a></h2>
-    <span class="badge badge-latest">Latest</span>
+    
     <p><time datetime="2026-11-09">November 9, 2026</time></p>
     <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.11.0">Release on GitHub</a></p>
   </div>

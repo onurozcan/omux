@@ -2,7 +2,7 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.11.1] - 2026-11-11
 
 ### Added
 - **The model chip lists what Claude Code knows.** The Claude Code models in the compose box come from the installed Claude Code itself, which carries every model id it knows: the newest Fable, Opus, Sonnet and Haiku are offered, so a new model is listed the day Claude Code learns of it, with no omux update. Read again whenever Claude Code updates itself. A model not in the list can still be set with `/model <id>` and shows in the chip once the session reports it.
