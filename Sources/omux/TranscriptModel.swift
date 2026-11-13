@@ -553,7 +553,10 @@ final class SessionTranscript: ObservableObject {
         case "queue-operation":
             if object["operation"] as? String == "dequeue" { return [.dequeued] }
             guard let content = object["content"] as? String else { return [] }
-            let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            // A pasted prompt is queued in its <pasted_content> wrapper; without it, it is the
+            // prompt as typed, which is what its echo holds.
+            let text = content.replacingOccurrences(of: #"\n?</?pasted_content[^>]*>\n?"#, with: "\n", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             // Injected records (task notifications, agent messages) pass through the queue too.
             guard !text.isEmpty, !text.hasPrefix("<") else { return [] }
             let shown = cap(inlineImages(in: text, thumbnails: false).text)
