@@ -183,75 +183,7 @@ struct Workspace: Codable {
     }
 }
 
-/// Live, non-persisted state of one terminal tab.
-struct TabRuntime: Equatable {
-    var provider: SessionProvider?
-    var agentConnected = false
-    /// When Codex's app-server took the session and its TUI command was typed.
-    var agentConnectedAt: Date?
-    /// Codex's TUI has drawn its prompt (its first idle status line), so it takes input.
-    var tuiReady = false
-    var title = ""
-    var cwd: String?
-    var hasActivity = false
-    /// When the session last did something: output, a status change, a bell.
-    var lastActivity: Date?
-    var needsAttention = false
-    var exited = false
-    /// A program (e.g. claude) is running in the shell, as opposed to an idle prompt.
-    var busy = false
-    var statusState: StatusState?
-    var statusDetail: String?
-    /// Why a blocked program waits: permission, question or auth.
-    var statusKind: String?
-    /// OSC 7501 records other than the root, e.g. Claude Code's subagents.
-    var statusChildren: [StatusChild] = []
-
-    enum StatusState: String { case idle, working, done, blocked, error }
-
-    /// The state without what changes many times a turn: the status wording, the subagent
-    /// records, the window title and the time of the last sign of life. Two states equal in this
-    /// look the same to everything but the session's own views.
-    var coarse: TabRuntime {
-        var copy = self
-        copy.statusDetail = nil; copy.statusChildren = []; copy.title = ""; copy.lastActivity = nil
-        return copy
-    }
-
-    struct StatusChild: Equatable {
-        let id: String
-        let state: StatusState?
-        let kind: String?
-        let message: String?
-        let title: String?
-    }
-
-    /// Claude Code is waiting on a tool permission, which Allow/Deny can answer. It reports plan
-    /// approval and peer messages as "permission" too, but their first option isn't a plain
-    /// yes; a tool prompt's message reads "approve <Tool>: …", or just "permission prompt" when
-    /// it has no description for the call, as with some long Bash commands.
-    var awaitsPermission: Bool {
-        guard statusState == .blocked, statusKind == "permission" else { return false }
-        guard provider != .codex, let message = statusDetail else { return true }
-        return message == "permission prompt" || message.range(of: #"^approve [\w-]+: "#, options: .regularExpression) != nil
-    }
-
-    func statusLine(showFolder: Bool = true) -> String? {
-        if let s = statusState {
-            switch s {
-            case .blocked: return (statusDetail ?? statusKind).map { "Needs you · \($0)" } ?? "Needs you"
-            case .working: return statusDetail.map { "Working · \($0)" } ?? "Working…"
-            case .done: return "Done"
-            case .error: return statusDetail.map { "Error · \($0)" } ?? "Error"
-            case .idle: break
-            }
-        }
-        if exited { return "Stopped" }
-        if !title.isEmpty { return title }
-        if showFolder, let cwd { return (cwd as NSString).abbreviatingWithTildeInPath }
-        return nil
-    }
-
+extension TabRuntime {
     var statusColor: Color? {
         switch statusState {
         case .blocked: return Palette.needs
