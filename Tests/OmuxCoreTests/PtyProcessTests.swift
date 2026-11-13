@@ -64,6 +64,25 @@ final class PtyProcessTests: XCTestCase {
         XCTAssertEqual(out.status, 128 + 1, "ended by the hang-up signal")
     }
 
+    /// Worker threads block nearly every signal, and a program inherits its starter's blocked
+    /// signals. Started from one, as the host starts them, it must still hear a hang-up.
+    func testAProgramStartedFromAWorkerThreadCanBeHungUpOn() throws {
+        let out = Collected()
+        let started = DispatchSemaphore(value: 0)
+        final class Holder: @unchecked Sendable { var process: PtyProcess? }
+        let holder = Holder()
+        DispatchQueue(label: "worker").async {
+            holder.process = try? PtyProcess(executable: "/bin/sh", arguments: ["-c", "echo ready; sleep 60"], environment: ["PATH": "/usr/bin:/bin"],
+                                             onOutput: { out.add($0) }, onExit: { out.ended($0) })
+            started.signal()
+        }
+        started.wait()
+        until { out.text.contains("ready") }
+        holder.process?.terminate()
+        until { out.status != nil }
+        XCTAssertEqual(out.status, 128 + 1)
+    }
+
     func testAProgramThatIsNotThere() {
         XCTAssertThrowsError(try PtyProcess(executable: "/nonexistent/program", environment: [:], onOutput: { _ in }, onExit: { _ in }))
     }

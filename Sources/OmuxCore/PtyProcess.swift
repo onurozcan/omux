@@ -40,12 +40,20 @@ public final class PtyProcess: @unchecked Sendable {
             path = "/bin/sh"
             argv = ["sh", "-c", #"cd "$1" && shift && exec "$@""#, "sh", directory, executable] + arguments
         }
-        guard access(path, X_OK) == 0 else { throw Failure.notStarted(errno) }
+        // Asked of the program itself, not of the shell that enters the folder for it.
+        guard access(executable, X_OK) == 0, access(path, X_OK) == 0 else { throw Failure.notStarted(errno) }
         var cArguments: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
         var cEnvironment: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer { cArguments.forEach { free($0) }; cEnvironment.forEach { free($0) } }
         var opened: Int32 = -1
         var pid: pid_t = 0
+        // A program inherits which signals its starter blocks and ignores, and we may well be
+        // on a worker thread that blocks nearly all of them: a program started from there
+        // couldn't be hung up on or interrupted. It starts with none blocked and none ignored.
+        var noSignals = sigset_t()
+        var allSignals = sigset_t()
+        sigemptyset(&noSignals)
+        sigfillset(&allSignals)
 
         #if canImport(Darwin)
         // macOS gives a program a controlling terminal only when the program asks for it
@@ -54,6 +62,8 @@ public final class PtyProcess: @unchecked Sendable {
         var window = winsize(ws_row: UInt16(clamping: size.rows), ws_col: UInt16(clamping: size.columns), ws_xpixel: 0, ws_ypixel: 0)
         pid = forkpty(&opened, nil, nil, &window)
         if pid == 0 {
+            sigprocmask(SIG_SETMASK, &noSignals, nil)
+            for number in 1..<32 { signal(Int32(number), SIG_DFL) }
             execve(path, &cArguments, &cEnvironment)
             _exit(127)
         }
@@ -83,7 +93,11 @@ public final class PtyProcess: @unchecked Sendable {
         posix_spawn_file_actions_addopen(&actions, 0, name, O_RDWR, 0)
         posix_spawn_file_actions_adddup2(&actions, 0, 1)
         posix_spawn_file_actions_adddup2(&actions, 0, 2)
-        posix_spawnattr_setflags(&attributes, 0x80)  // POSIX_SPAWN_SETSID, which glibc only shows to C with _GNU_SOURCE
+        posix_spawnattr_setsigmask(&attributes, &noSignals)
+        posix_spawnattr_setsigdefault(&attributes, &allSignals)
+        // POSIX_SPAWN_SETSID (0x80), which glibc only shows to C with _GNU_SOURCE, with
+        // POSIX_SPAWN_SETSIGMASK and POSIX_SPAWN_SETSIGDEF.
+        posix_spawnattr_setflags(&attributes, Int16(0x80 | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
         // The child must not inherit our end, or the terminal never reports that it closed.
         _ = fcntl(opened, F_SETFD, FD_CLOEXEC)
         let result = posix_spawn(&pid, path, &actions, &attributes, &cArguments, &cEnvironment)

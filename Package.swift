@@ -11,6 +11,11 @@ var targets: [Target] = [
     // headless session host on Linux are both built on. Foundation only, so it compiles there.
     .target(name: "OmuxCore", path: "Sources/OmuxCore"),
     .testTarget(name: "OmuxCoreTests", dependencies: ["OmuxCore"]),
+    // The session host: the protocol, the sessions it keeps, and the socket it answers on.
+    .target(name: "OmuxHostKit", dependencies: ["OmuxCore"], path: "Sources/OmuxHostKit"),
+    // The host as a program, and the command line that talks to it: `omux-host`.
+    .executableTarget(name: "omux-host", dependencies: ["OmuxHostKit"], path: "Sources/omux-host"),
+    .testTarget(name: "OmuxHostKitTests", dependencies: ["OmuxHostKit"]),
 ]
 
 #if os(macOS)

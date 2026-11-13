@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds the core and runs its tests on Linux, in a container, before a push does it in CI.
+# Builds what runs on Linux, the core and the session host, and runs their tests there, in a container, before a push does it in CI.
 # Needs a Docker runtime: `brew install colima docker`. Starts Colima if it isn't running.
 #
 #   scripts/linux-test.sh            build the core and run its tests
@@ -17,8 +17,8 @@ fi
 # The image CI uses, and a build folder of its own beside the Mac's .build.
 run() { docker run --rm ${TTY:+-it} -v "$PWD":/src -w /src swift:6.2 "$@"; }
 case "${1:-test}" in
-  build) run swift build --target OmuxCore --scratch-path .build-linux ;;
+  build) run swift build --scratch-path .build-linux ;;
   shell) TTY=1 run bash ;;
-  test)  run bash -c 'swift build --target OmuxCore --scratch-path .build-linux && swift test --filter OmuxCoreTests --scratch-path .build-linux' ;;
+  test)  run bash -c 'swift build --scratch-path .build-linux && swift test --scratch-path .build-linux' ;;
   *) echo "usage: $0 [test|build|shell]" >&2; exit 2 ;;
 esac
