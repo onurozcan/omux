@@ -81,6 +81,21 @@ struct RightPanel: View {
             // area they touch, and the tab bar sits in the title bar's. The hairline keeps them apart.
             Rectangle().fill(.primary.opacity(0.08)).frame(height: 1)
 
+            if let host = store.selectedGroup?.host, store.selectedGroup?.isRemote == true, current == .files || current == .changes {
+                // The folder is on another machine; these two still read this Mac's disk.
+                VStack(spacing: 6) {
+                    Image(systemName: "network").font(.title2).foregroundStyle(.tertiary)
+                    Text("\(current == .files ? "Files" : "Changes") aren't available for projects on another machine yet")
+                        .font(.callout.weight(.medium))
+                        .multilineTextAlignment(.center)
+                    Text("This project's folder is on \(host). The session, its transcript and its agents work from here.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: theme.chrome))
+            } else {
             ZStack {
                 // Files stays alive so its preview and scroll position survive tab switches.
                 FilePanel(root: root, theme: theme, visible: current == .files)
@@ -104,6 +119,7 @@ struct RightPanel: View {
                         Text("No session").foregroundStyle(.secondary)
                     }
                 }
+            }
             }
         }
     }

@@ -63,19 +63,24 @@ enum RemoteHost {
         return """
         H=\(Git.quote(host))
         BIN=\(Git.quote(binaries ?? ""))
-        WANT='omux-host protocol \(HostProtocol.version)'
-        if [ "$(\(ssh) "$H" '\(remoteBinary) version 2>/dev/null')" != "$WANT" ]; then
-          printf 'Setting up omux on %s…\\n' "$H"
-          SYS=$(\(ssh) "$H" 'uname -sm') || { printf "Couldn't reach %s.\\n" "$H"; exit 1; }
-          case "$SYS" in
-            "Linux x86_64") F=omux-host-linux-x86_64 ;;
-            "Linux aarch64"|"Linux arm64") F=omux-host-linux-aarch64 ;;
-            *) printf "omux can't run sessions on %s yet.\\n" "$SYS"; exit 1 ;;
-          esac
-          [ -f "$BIN/$F" ] || { printf 'This build of omux has no host program for %s.\\n' "$SYS"; exit 1; }
-          \(ssh) "$H" 'mkdir -p ~/.omux/bin && cat > ~/.omux/bin/omux-host.new && chmod +x ~/.omux/bin/omux-host.new && mv ~/.omux/bin/omux-host.new ~/.omux/bin/omux-host' < "$BIN/$F" \\
+        # One question to the machine: what it is, and which host program it has, if any.
+        INFO=$(\(ssh) "$H" 'uname -sm; sha256sum \(remoteBinary) 2>/dev/null | cut -d" " -f1') || { printf "Couldn't reach %s.\\n" "$H"; exit 1; }
+        SYS=$(printf '%s\\n' "$INFO" | sed -n 1p)
+        HAVE=$(printf '%s\\n' "$INFO" | sed -n 2p)
+        case "$SYS" in
+          "Linux x86_64") F=omux-host-linux-x86_64 ;;
+          "Linux aarch64"|"Linux arm64") F=omux-host-linux-aarch64 ;;
+          *) printf "omux can't run sessions on %s yet.\\n" "$SYS"; exit 1 ;;
+        esac
+        if [ -f "$BIN/$F.sha256" ] && [ "$HAVE" != "$(cat "$BIN/$F.sha256")" ]; then
+          # Put in place in one move: a host already running there keeps its sessions and its
+          # own copy, and makes way for this one once it has nothing running.
+          if [ -n "$HAVE" ]; then printf 'Updating omux on %s…\\n' "$H"; else printf 'Setting up omux on %s…\\n' "$H"; fi
+          /usr/bin/tar -xOJf "$BIN/$F.tar.xz" | \(ssh) "$H" 'mkdir -p ~/.omux/bin && cat > ~/.omux/bin/omux-host.new && chmod +x ~/.omux/bin/omux-host.new && mv ~/.omux/bin/omux-host.new ~/.omux/bin/omux-host' \\
             || { printf "Couldn't install omux on %s.\\n" "$H"; exit 1; }
           printf 'Ready.\\n'
+        elif [ -z "$HAVE" ]; then
+          printf 'This build of omux has no host program for %s.\\n' "$SYS"; exit 1
         fi
         while :; do
           \(ssh) -t "$H" \(Git.quote(remoteCommand(tab: tab, name: name, directory: directory, run: run)))

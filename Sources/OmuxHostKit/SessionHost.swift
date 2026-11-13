@@ -22,6 +22,10 @@ public final class SessionHost: @unchecked Sendable {
     }
 
     private let queue = DispatchQueue(label: "omux.host")
+    /// Called when a host with no sessions is asked to retire, after it has said yes.
+    public var onRetire: (@Sendable () -> Void)?
+    /// When the host last had a session running, for stopping one nobody needs.
+    private var lastBusy = Date()
     private var sessions: [String: Hosted] = [:]
     private var order: [String] = []
     /// Output kept per session for catching up; older output is dropped from the front.
@@ -37,7 +41,14 @@ public final class SessionHost: @unchecked Sendable {
         queue.sync {
             switch message {
             case .hello:
-                return .welcome(version: HostProtocol.version, host: ProcessInfo.processInfo.hostName, system: Self.system)
+                return .welcome(version: HostProtocol.version, host: ProcessInfo.processInfo.hostName, system: Self.system,
+                                build: Daemon.build, oldest: HostProtocol.oldest, running: running)
+            case .retire:
+                guard running == 0 else { return .failed(reason: "\(running) session\(running == 1 ? " is" : "s are") running") }
+                let retire = onRetire
+                // After the answer has gone out.
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { retire?() }
+                return .done
             case .list:
                 return .sessions(list: order.compactMap { sessions[$0]?.info })
             case .start(let request):
@@ -74,6 +85,16 @@ public final class SessionHost: @unchecked Sendable {
                 }
                 return .done
             }
+        }
+    }
+
+    private var running: Int { sessions.values.filter { $0.info.exited == nil }.count }
+
+    /// How long the host has had nothing running; nil while something is.
+    public var idleFor: TimeInterval? {
+        queue.sync {
+            if running > 0 { lastBusy = Date(); return nil }
+            return Date().timeIntervalSince(lastBusy)
         }
     }
 
@@ -129,6 +150,7 @@ public final class SessionHost: @unchecked Sendable {
         }
         sessions[id] = session
         order.append(id)
+        lastBusy = Date()
         if let input = request.initialInput, !input.isEmpty {
             // A beat for the shell to come up; a terminal holds what is typed before the prompt.
             queue.asyncAfter(deadline: .now() + 0.4) { [weak session] in session?.process?.write(input) }
@@ -153,6 +175,7 @@ public final class SessionHost: @unchecked Sendable {
         guard let session = sessions[id] else { return }
         session.info.exited = code
         session.process = nil
+        lastBusy = Date()
         for client in session.watchers.values { client.send(HostFrame(message: .exited(session: id, code: code))) }
     }
 

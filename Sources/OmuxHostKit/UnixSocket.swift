@@ -172,7 +172,11 @@ public final class HostServer: @unchecked Sendable {
         let client = SessionHost.Client { [weak connection] frame in connection?.send(frame) }
         connection.start(onFrame: { body in
             guard let frame = try? Wire.decode(ClientFrame.self, from: body) else {
-                connection.send(HostFrame(message: .failed(reason: "A message this host doesn't understand")))
+                // A request from a newer omux: said so under its own number, so the asker
+                // hears no at once instead of waiting for an answer that isn't coming.
+                struct Numbered: Decodable { var id: Int }
+                let id = (try? Wire.decode(Numbered.self, from: body))?.id
+                connection.send(HostFrame(reply: id, message: .failed(reason: "This host is older than the omux asking and doesn't know that request")))
                 return
             }
             connection.send(HostFrame(reply: frame.id, message: host.handle(frame.message, from: client)))
@@ -184,6 +188,11 @@ public final class HostServer: @unchecked Sendable {
     }
 
     public func stop() { listener?.stop(); listener = nil }
+
+    /// A host with nothing running for this long stops; the next command starts one again,
+    /// from whatever build of the program is installed by then. That is how a machine comes
+    /// to run a newer host without a session ever being dropped for it.
+    public static let idleLimit: TimeInterval = 15 * 60
 
     /// Where a user's host listens unless told otherwise.
     public static var defaultSocket: String {

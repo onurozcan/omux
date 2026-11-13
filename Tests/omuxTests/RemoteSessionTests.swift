@@ -20,7 +20,7 @@ final class RemoteSessionTests: XCTestCase {
     func testTheScriptSetsUpAttachesAndComesBack() throws {
         let script = RemoteHost.script(host: "me@dev box", tab: tab, name: "s", directory: "/srv/app", run: nil)
         XCTAssertTrue(script.contains("H='me@dev box'"))
-        XCTAssertTrue(script.contains("omux-host protocol"), "checks the version there before attaching")
+        XCTAssertTrue(script.contains("sha256sum ~/.omux/bin/omux-host"), "checks which host program is there before attaching")
         XCTAssertTrue(script.contains("[ $code -ne 255 ] && exit $code"), "only a lost connection is retried")
         // It is a shell script: the shell must take it.
         let check = Process()

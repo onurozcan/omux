@@ -52,9 +52,20 @@ signal(SIGPIPE, SIG_IGN)
 
 func connect() -> HostClient {
     do {
-        let client = try Daemon.connect(to: socket)
-        guard case .welcome(let version, _, _) = client.request(.hello(version: HostProtocol.version)) else { fail("the host didn't answer") }
-        guard version == HostProtocol.version else { fail("the host speaks protocol \(version), this command \(HostProtocol.version); restart the host") }
+        var client = try Daemon.connect(to: socket)
+        guard case .welcome(let version, _, _, let build, let oldest, _) = client.request(.hello(version: HostProtocol.version)) else { fail("the host didn't answer") }
+        // A host from an earlier build of this program, with nothing running: it makes way.
+        // With sessions running it stays, and is talked to as it is.
+        if let build, build != Daemon.build, case .done = client.request(.retire) {
+            client.close()
+            for _ in 0..<60 where FileManager.default.fileExists(atPath: socket) { Thread.sleep(forTimeInterval: 0.05) }
+            client = try Daemon.connect(to: socket)
+            guard case .welcome = client.request(.hello(version: HostProtocol.version)) else { fail("the new host didn't answer") }
+            return client
+        }
+        guard HostProtocol.speaks(version: version, oldest: oldest) else {
+            fail("the host running here is from an omux too old for this one to talk to. Its sessions keep running; when they have ended, it makes way for the new one.")
+        }
         return client
     } catch { fail("\(error)") }
 }
@@ -143,6 +154,12 @@ case "serve":
     print("omux-host \(HostProtocol.version) listening at \(socket)")
     fflush(stdout)
     // Asked to stop, the host hangs up on its sessions first, as closing a terminal would.
+    server.host.onRetire = { server.stop(); exit(0) }
+    // Nothing running for a while: stop, and let the next command start whatever is installed.
+    let idle = DispatchSource.makeTimerSource(queue: .main)
+    idle.schedule(deadline: .now() + 60, repeating: 60)
+    idle.setEventHandler { if let quiet = server.host.idleFor, quiet > HostServer.idleLimit { server.stop(); exit(0) } }
+    idle.resume()
     var stops: [DispatchSourceSignal] = []
     for number in [SIGTERM, SIGINT] {
         signal(number, SIG_IGN)
@@ -291,7 +308,7 @@ case "connect":
     pump(from: descriptor, to: STDOUT_FILENO)
 
 case "version", "--version":
-    print("omux-host protocol \(HostProtocol.version)")
+    print("omux-host protocol \(HostProtocol.version) build \(Daemon.build)")
 
 case "help", "--help", "-h":
     print(usage)

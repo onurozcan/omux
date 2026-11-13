@@ -10,6 +10,15 @@ public enum HostProtocol {
     /// Raised when a message changes meaning. Both sides say theirs first; additions that an
     /// older side can ignore don't raise it.
     public static let version = 1
+    /// The oldest version this side still speaks. A host goes on serving the sessions it has
+    /// when a newer omux arrives, so the two must overlap: changes are additions wherever they
+    /// can be, and this moves only when an old meaning is finally dropped.
+    public static let oldest = 1
+
+    /// Whether a side speaking `version`, down to `oldest`, and this side can talk.
+    public static func speaks(version theirs: Int, oldest theirOldest: Int?) -> Bool {
+        theirs >= oldest && version >= (theirOldest ?? theirs)
+    }
 }
 
 /// One session a host runs.
@@ -64,10 +73,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case resize(session: String, columns: Int, rows: Int)
     /// Hangs up on a running session; removes one that has ended.
     case close(session: String)
+    /// Asks a host with nothing running to stop, so a newer one can start in its place.
+    /// Refused while any session runs: a host never drops sessions to be replaced.
+    case retire
 }
 
 public enum HostMessage: Codable, Equatable, Sendable {
-    case welcome(version: Int, host: String, system: String)
+    /// `build` tells one build of the host program from another, `oldest` is the oldest
+    /// protocol version it still speaks, `running` how many sessions it has.
+    case welcome(version: Int, host: String, system: String, build: String?, oldest: Int?, running: Int?)
     case sessions(list: [SessionInfo])
     case started(info: SessionInfo)
     /// Bytes the session printed, starting at byte `offset` of its output. A client that adds

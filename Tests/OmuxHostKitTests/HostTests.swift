@@ -60,9 +60,12 @@ final class HostTests: XCTestCase {
 
     func testHelloAndAnEmptyList() throws {
         let client = try client()
-        guard case .welcome(let version, _, let system) = client.request(.hello(version: HostProtocol.version)) else { return XCTFail() }
+        guard case .welcome(let version, _, let system, let build, let oldest, let running) = client.request(.hello(version: HostProtocol.version)) else { return XCTFail() }
         XCTAssertEqual(version, HostProtocol.version)
         XCTAssertFalse(system.isEmpty)
+        XCTAssertEqual(build, Daemon.build)
+        XCTAssertEqual(oldest, HostProtocol.oldest)
+        XCTAssertEqual(running, 0)
         XCTAssertEqual(client.request(.list), .sessions(list: []))
     }
 
@@ -166,6 +169,48 @@ final class HostTests: XCTestCase {
         guard case .started(let third) = client.request(.start(request: request)) else { return XCTFail() }
         XCTAssertNotEqual(third.started, first.started)
         XCTAssertNil(third.exited)
+    }
+
+    /// How a machine comes to run a newer host: the old one makes way when asked, but only
+    /// with nothing running. Sessions are never dropped for an update.
+    func testAHostRetiresOnlyWithNothingRunning() throws {
+        let retired = DispatchSemaphore(value: 0)
+        server.host.onRetire = { retired.signal() }
+        let client = try client()
+        let info = try start(client, "sleep 60")
+        guard case .failed(let why) = client.request(.retire) else { return XCTFail("retired with a session running") }
+        XCTAssertTrue(why.contains("1 session is running"), why)
+        XCTAssertEqual(retired.wait(timeout: .now() + 0.5), .timedOut)
+        XCTAssertNil(server.host.idleFor, "not idle while it runs")
+
+        _ = client.request(.close(session: info.id))
+        until { if case .sessions(let list) = client.request(.list) { return list.first?.exited != nil } else { return false } }
+        XCTAssertNotNil(server.host.idleFor)
+        XCTAssertEqual(client.request(.retire), .done)
+        XCTAssertEqual(retired.wait(timeout: .now() + 2), .success)
+    }
+
+    /// A request this host has never heard of, from a newer omux, is refused under its own
+    /// number at once, not left unanswered.
+    func testAnUnknownRequestIsRefusedByNumber() throws {
+        let descriptor = try UnixSocket.rawConnect(socket)
+        defer { close(descriptor) }
+        let body = Data(#"{"id":41,"message":{"teleport":{"to":"mars"}}}"#.utf8)
+        var frame = Data([0, 0, 0, UInt8(body.count)]); frame.append(body)
+        _ = frame.withUnsafeBytes { write(descriptor, $0.baseAddress!, $0.count) }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let count = read(descriptor, &buffer, buffer.count)
+        XCTAssertGreaterThan(count, 4)
+        let answer = try Wire.decode(HostFrame.self, from: Data(buffer[4..<max(count, 4)]))
+        XCTAssertEqual(answer.reply, 41)
+        if case .failed = answer.message {} else { XCTFail() }
+    }
+
+    func testWhichVersionsCanTalk() {
+        XCTAssertTrue(HostProtocol.speaks(version: HostProtocol.version, oldest: HostProtocol.oldest))
+        XCTAssertTrue(HostProtocol.speaks(version: HostProtocol.version + 3, oldest: HostProtocol.version), "a newer host that still speaks ours")
+        XCTAssertFalse(HostProtocol.speaks(version: HostProtocol.version + 3, oldest: HostProtocol.version + 1), "a newer host that dropped ours")
+        XCTAssertFalse(HostProtocol.speaks(version: HostProtocol.oldest - 1, oldest: nil), "a host older than we still speak")
     }
 
     func testWhatCannotBeDoneIsSaid() throws {

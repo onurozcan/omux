@@ -45,6 +45,15 @@ public enum Daemon {
         return Bundle.main.executablePath ?? CommandLine.arguments[0]
     }
 
+    /// Tells one build of this program from another: the size and date of its file. A host
+    /// reports its own, taken when it started, and a command compares it with the file's now.
+    public static let build: String = {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: ownPath)
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        let date = Int((attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
+        return "\(size)-\(date)"
+    }()
+
     /// A client connected to the host at `socket`, starting the host first if none answers.
     public static func connect(to socket: String, startingHost: Bool = true) throws -> HostClient {
         if let client = try? HostClient(socket: socket) { return client }
