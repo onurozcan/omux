@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 /// Timing harnesses, skipped unless pointed at data: OMUX_PROFILE=<transcript.jsonl> swift test
 /// -c release -Xswiftc -enable-testing --filter ProfileTests

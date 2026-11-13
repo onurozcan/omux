@@ -5,8 +5,8 @@ import Foundation
 /// question's options as numbered rows, with "Type something" and "Chat about this" after them
 /// and, for a multi-select question, a Submit row; and a review page at the end, which asks
 /// "Ready to submit your answers?". The highlighted row carries ❯.
-struct QuestionDialog: Equatable {
-    enum Kind: Equatable {
+public struct QuestionDialog: Equatable {
+    public enum Kind: Equatable {
         /// An option of the current question, by index.
         case option(Int)
         /// "Type something": a typed answer.
@@ -18,40 +18,40 @@ struct QuestionDialog: Equatable {
         /// The review page's "Submit answers" and "Cancel".
         case submitAnswers, cancel
     }
-    struct Row: Equatable {
-        var kind: Kind
+    public struct Row: Equatable {
+        public var kind: Kind
         /// The number the dialog gives the row, when it has one.
-        var number: Int?
+        public var number: Int?
         /// A multi-select box: ticked or not. nil for rows without one.
-        var checked: Bool?
+        public var checked: Bool?
         /// The dialog's own wording for the row: a multi-select's "Next" or "Submit".
-        var label: String = ""
+        public var label: String = ""
     }
-    enum Page: Equatable { case question(Int), review }
+    public enum Page: Equatable { case question(Int), review }
 
-    var page: Page
-    var rows: [Row]
+    public var page: Page
+    public var rows: [Row]
     /// Which row carries ❯.
-    var cursor: Int?
+    public var cursor: Int?
     /// Per question tab, whether it shows as answered (☒ rather than ☐).
-    var answered: [Bool]
+    public var answered: [Bool]
     /// On the review page, the "question → answer" lines as shown.
-    var review: [String] = []
+    public var review: [String] = []
 
-    func row(_ kind: Kind) -> Int? { rows.firstIndex { $0.kind == kind } }
+    public func row(_ kind: Kind) -> Int? { rows.firstIndex { $0.kind == kind } }
 }
 
-enum QuestionScreen {
-    static let up = "\u{1b}[A"
-    static let down = "\u{1b}[B"
-    static let enter = "\r"
+public enum QuestionScreen {
+    public static let up = "\u{1b}[A"
+    public static let down = "\u{1b}[B"
+    public static let enter = "\r"
     private static let rowPattern = try! NSRegularExpression(pattern: #"^\s*(❯)?\s*(\d+)\.\s+(?:\[([^\]])\]\s+)?(.*?)\s*$"#)
     /// A multi-select question's confirm row: "Submit", or "Next" when more questions follow.
     private static let submitPattern = try! NSRegularExpression(pattern: #"^\s*(❯)?\s+(Submit|Next)\s*$"#)
 
     /// The dialog on screen, or nil when the screen doesn't show one (the agent moved on, or the
     /// typed-answer field is open). `questions` tells which question the page shows.
-    static func parse(_ lines: [String], questions: [Question]) -> QuestionDialog? {
+    public static func parse(_ lines: [String], questions: [Question]) -> QuestionDialog? {
         guard let header = lines.lastIndex(where: { $0.contains("✔ Submit") && ($0.contains("☐") || $0.contains("☒")) }) else { return nil }
         let answered = lines[header].compactMap { $0 == "☒" ? true : $0 == "☐" ? false : nil }
         let body = Array(lines[(header + 1)...])
@@ -115,7 +115,7 @@ enum QuestionScreen {
     }
 
     /// The arrow keys that move the highlight from `cursor` to `row`.
-    static func keys(from cursor: Int, to row: Int) -> String {
+    public static func keys(from cursor: Int, to row: Int) -> String {
         row > cursor ? String(repeating: down, count: row - cursor) : String(repeating: up, count: cursor - row)
     }
 

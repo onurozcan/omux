@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class CodexConnectionTests: XCTestCase {
     /// A codex that exits while connecting (not on PATH, bad flag, crash) gets the

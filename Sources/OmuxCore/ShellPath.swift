@@ -4,12 +4,12 @@ import Foundation
 /// launched from the Dock, omux gets the system's PATH, and tools installed by nvm, volta or a
 /// line in .zshrc aren't on it. Read once from `$SHELL -ilc`, with the inherited PATH and the
 /// usual tool folders added, so a slow or silent dotfile still leaves a working PATH.
-enum ShellPath {
+public enum ShellPath {
     nonisolated(unsafe) private static var cached: String?
     private static let lock = NSLock()
 
     /// Blocks on the first call for as long as the shell takes to start; call it off the main thread.
-    static var current: String {
+    public static var current: String {
         lock.lock(); defer { lock.unlock() }
         if let cached { return cached }
         let value = resolve()
@@ -17,12 +17,12 @@ enum ShellPath {
         return value
     }
 
-    static func load() async -> String {
+    public static func load() async -> String {
         await Task.detached(priority: .userInitiated) { current }.value
     }
 
     /// Reads the shell's PATH ahead of the first Codex start.
-    static func warmUp() {
+    public static func warmUp() {
         Task.detached(priority: .utility) { _ = current }
     }
 
@@ -39,7 +39,7 @@ enum ShellPath {
     }
 
     /// The folders in order, each once, empty ones dropped.
-    static func joined(_ dirs: [String]) -> String {
+    public static func joined(_ dirs: [String]) -> String {
         var seen: Set<String> = []
         return dirs.filter { !$0.isEmpty && seen.insert($0).inserted }.joined(separator: ":")
     }

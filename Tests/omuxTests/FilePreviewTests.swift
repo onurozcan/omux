@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class FilePreviewTests: XCTestCase {
     /// Whether the preview built for `url` holds `marker`, i.e. shows the file as text.

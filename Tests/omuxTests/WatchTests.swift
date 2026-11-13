@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 /// The transcript and subagent readers follow their files through vnode events, with timers
 /// only as a ten-second safety net; these tests would take that long if the watchers failed.

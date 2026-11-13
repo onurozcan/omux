@@ -1,14 +1,14 @@
 import Foundation
 
 /// Thin, synchronous wrappers around the git CLI. Call them off the main thread.
-enum Git {
-    struct Result {
-        let status: Int32
-        let out: String
-        let err: String
-        var ok: Bool { status == 0 }
+public enum Git {
+    public struct Result {
+        public let status: Int32
+        public let out: String
+        public let err: String
+        public var ok: Bool { status == 0 }
         /// The most useful text to show when the command failed.
-        var message: String {
+        public var message: String {
             let text = err.isEmpty ? out : err
             return text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -17,13 +17,13 @@ enum Git {
     /// Runs git directly. `GIT_OPTIONAL_LOCKS=0` keeps status checks from fighting
     /// with whatever git the session itself is running.
     @discardableResult
-    static func run(_ args: [String], in dir: String) -> Result {
+    public static func run(_ args: [String], in dir: String) -> Result {
         exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath])
     }
 
     /// The login shell's PATH, looked up once. Opened from Finder, omux only has
     /// /usr/bin:/bin, where hooks, signing and LFS filters can't find npx, gpg or git-lfs.
-    static let loginPath: String = {
+    public static let loginPath: String = {
         let out = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory()).out
         let path = out.components(separatedBy: "\n").last ?? ""
         return path.contains("/") ? path : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -32,7 +32,7 @@ enum Git {
     /// Runs a command through the user's login shell, so PATH and credential helpers
     /// match their terminal (needed for push and anything that may call gh).
     @discardableResult
-    static func login(_ command: String, in dir: String) -> Result {
+    public static func login(_ command: String, in dir: String) -> Result {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         return exec(shell, ["-lc", command], in: dir, env: ["GIT_TERMINAL_PROMPT": "0"])
     }
@@ -65,65 +65,65 @@ enum Git {
                       err: String(decoding: errData, as: UTF8.self))
     }
 
-    static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+    public static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 
     /// Where the login shell finds gh, looked up once so polling doesn't start a shell
     /// each time. nil when gh isn't installed.
-    static let ghPath: String? = {
+    public static let ghPath: String? = {
         let path = login("command -v gh", in: NSHomeDirectory()).out.trimmingCharacters(in: .whitespacesAndNewlines)
         return path.hasPrefix("/") ? path : nil
     }()
 
     /// Runs the GitHub CLI, or returns nil when it isn't installed.
-    static func gh(_ args: [String], in dir: String) -> Result? {
+    public static func gh(_ args: [String], in dir: String) -> Result? {
         guard let ghPath else { return nil }
         return exec(ghPath, args, in: dir, env: ["GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0"])
     }
 
     // MARK: Repository facts
 
-    static func topLevel(_ dir: String) -> String? {
+    public static func topLevel(_ dir: String) -> String? {
         let r = run(["rev-parse", "--show-toplevel"], in: dir)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
     /// The folder with this checkout's HEAD and index. A linked worktree's is under the
     /// main repository's .git, and a subfolder's is above it, so neither is inside `dir`.
-    static func gitDirectory(_ dir: String) -> String? {
+    public static func gitDirectory(_ dir: String) -> String? {
         let r = run(["rev-parse", "--absolute-git-dir"], in: dir)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
-    static func currentBranch(_ dir: String) -> String? {
+    public static func currentBranch(_ dir: String) -> String? {
         let r = run(["symbolic-ref", "--quiet", "--short", "HEAD"], in: dir)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
-    static func branches(_ dir: String) -> [String] {
+    public static func branches(_ dir: String) -> [String] {
         run(["for-each-ref", "--format=%(refname:short)", "refs/heads"], in: dir).out
             .split(separator: "\n").map(String.init)
     }
 
-    static func hasUncommittedChanges(_ dir: String) -> Bool {
+    public static func hasUncommittedChanges(_ dir: String) -> Bool {
         uncommittedFileCount(dir) > 0
     }
 
     /// Changed and new files, a new folder counting once. New files are listed even when
     /// the user's status.showUntrackedFiles=no hides them from `git status`.
-    static func uncommittedFileCount(_ dir: String) -> Int {
+    public static func uncommittedFileCount(_ dir: String) -> Int {
         run(["status", "--porcelain", "--untracked-files=normal"], in: dir).out.split(separator: "\n").count
     }
 
     /// Commits on `branch` that aren't in `commit`, or nil when git doesn't have that commit.
     /// `commit` comes from GitHub, so only an object id is taken.
-    static func commitCount(after commit: String, on branch: String, in repo: String) -> Int? {
+    public static func commitCount(after commit: String, on branch: String, in repo: String) -> Int? {
         guard commit.range(of: #"^[0-9a-f]{40,64}\z"#, options: .regularExpression) != nil else { return nil }
         return Int(run(["rev-list", "--count", "\(commit)..refs/heads/\(branch)"], in: repo).out
             .trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// A branch name from free text: "Fix the login bug" → "fix-the-login-bug".
-    static func slug(_ text: String) -> String {
+    public static func slug(_ text: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_/."))
         let words = text.lowercased().components(separatedBy: allowed.inverted).filter { !$0.isEmpty }
         // Git rejects "..", "//" and components starting with ".": keep only the first of such a run.
@@ -134,7 +134,7 @@ enum Git {
     // MARK: Worktrees
 
     /// Where a branch's worktree lives: next to the repo, in `<repo>.worktrees/<branch>`.
-    static func worktreePath(repo: String, branch: String) -> String {
+    public static func worktreePath(repo: String, branch: String) -> String {
         let url = URL(fileURLWithPath: repo)
         return url.deletingLastPathComponent()
             .appendingPathComponent(url.lastPathComponent + ".worktrees")
@@ -142,7 +142,7 @@ enum Git {
     }
 
     /// Creates the worktree, reusing the branch when it already exists.
-    static func addWorktree(repo: String, branch: String, base: String) -> Result {
+    public static func addWorktree(repo: String, branch: String, base: String) -> Result {
         // git builds `git branch <branch> <base>` from these, so "-D" would delete the base.
         guard !branch.hasPrefix("-"), run(["check-ref-format", "--branch", branch], in: repo).ok else {
             return Result(status: 1, out: "", err: "“\(branch)” isn't a valid branch name.")
@@ -159,20 +159,20 @@ enum Git {
         return run(["worktree", "add", "-b", branch, path, base], in: repo)
     }
 
-    static func removeWorktree(_ worktree: Worktree, path: String) -> Result {
+    public static func removeWorktree(_ worktree: Worktree, path: String) -> Result {
         let removed = run(["worktree", "remove", "--force", path], in: worktree.repo)
         guard removed.ok else { return removed }
         return run(["branch", "-D", worktree.branch], in: worktree.repo)
     }
 
-    static func commitAll(in dir: String, message: String) -> Result {
+    public static func commitAll(in dir: String, message: String) -> Result {
         let added = run(["add", "-A"], in: dir)
         guard added.ok else { return added }
         return run(["commit", "-m", message], in: dir)
     }
 
     /// Merges the worktree's branch into its base in the main checkout.
-    static func merge(_ worktree: Worktree) -> Result {
+    public static func merge(_ worktree: Worktree) -> Result {
         guard let current = currentBranch(worktree.repo) else {
             return Result(status: 1, out: "", err: "Couldn't read the branch checked out in \(worktree.repo).")
         }
@@ -184,14 +184,14 @@ enum Git {
 
     /// Pushes the branch and returns the page for opening a pull request, when the
     /// remote is on GitHub.
-    static func pushForPullRequest(_ worktree: Worktree, path: String) -> (Result, URL?) {
+    public static func pushForPullRequest(_ worktree: Worktree, path: String) -> (Result, URL?) {
         let pushed = login("git push -u origin \(quote(worktree.branch))", in: path)
         guard pushed.ok else { return (pushed, nil) }
         let remote = run(["remote", "get-url", "origin"], in: path).out.trimmingCharacters(in: .whitespacesAndNewlines)
         return (pushed, compareURL(remote: remote, base: worktree.base, branch: worktree.branch))
     }
 
-    static func compareURL(remote: String, base: String, branch: String) -> URL? {
+    public static func compareURL(remote: String, base: String, branch: String) -> URL? {
         var slug = remote
         for prefix in ["git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/"] where slug.hasPrefix(prefix) {
             slug = String(slug.dropFirst(prefix.count))
@@ -208,7 +208,7 @@ enum Git {
 
     /// What a session's changes are measured against: the merge base with the worktree's
     /// base branch, or HEAD for an ordinary checkout. nil when there is no commit yet.
-    static func diffBase(dir: String, worktree: Worktree?) -> String? {
+    public static func diffBase(dir: String, worktree: Worktree?) -> String? {
         if let worktree {
             let r = run(["merge-base", "HEAD", worktree.base], in: dir)
             if r.ok { return r.out.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -217,7 +217,7 @@ enum Git {
     }
 
     /// Changed and untracked files, compared with `base` (working tree included).
-    static func changedFiles(dir: String, base: String?) -> [ChangedFile] {
+    public static func changedFiles(dir: String, base: String?) -> [ChangedFile] {
         var files: [ChangedFile] = []
         // Before the first commit, staged files are measured against the empty tree.
         if let base = base ?? emptyTree(dir) {
@@ -253,7 +253,7 @@ enum Git {
     }
 
     /// The lines of a small text file, or nil for binaries and big files.
-    static func textLines(atPath path: String) -> [String]? {
+    public static func textLines(atPath path: String) -> [String]? {
         // Sized through symlinks, since contents(atPath:) follows them.
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: (path as NSString).resolvingSymlinksInPath),
               (attrs[.size] as? Int ?? .max) < 1_000_000,
@@ -265,7 +265,7 @@ enum Git {
         return lines
     }
 
-    static func diff(dir: String, base: String?, file: ChangedFile) -> [DiffLine] {
+    public static func diff(dir: String, base: String?, file: ChangedFile) -> [DiffLine] {
         if file.status == .untracked || base == nil {
             guard let lines = textLines(atPath: (dir as NSString).appendingPathComponent(file.path)) else {
                 return [DiffLine(index: 0, kind: .info, oldNumber: nil, newNumber: nil, text: "Binary or large file")]
@@ -278,7 +278,7 @@ enum Git {
         return parseDiff(out)
     }
 
-    static func parseDiff(_ text: String) -> [DiffLine] {
+    public static func parseDiff(_ text: String) -> [DiffLine] {
         var lines: [DiffLine] = []
         var old = 0, new = 0, inHunk = false
         let header = try! NSRegularExpression(pattern: #"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$"#)
@@ -313,39 +313,39 @@ enum Git {
     }
 }
 
-struct ChangedFile: Identifiable, Hashable {
-    enum Status { case modified, added, deleted, untracked }
-    let path: String
+public struct ChangedFile: Identifiable, Hashable {
+    public enum Status { case modified, added, deleted, untracked }
+    public let path: String
     /// nil for binary files.
-    let added: Int?
-    let removed: Int?
-    let status: Status
-    var id: String { path }
-    var name: String { (path as NSString).lastPathComponent }
-    var folder: String { (path as NSString).deletingLastPathComponent }
+    public let added: Int?
+    public let removed: Int?
+    public let status: Status
+    public var id: String { path }
+    public var name: String { (path as NSString).lastPathComponent }
+    public var folder: String { (path as NSString).deletingLastPathComponent }
 }
 
 extension Array where Element == ChangedFile {
     /// Lines added and removed; binary files count for neither.
-    var totals: DiffStat {
+    public var totals: DiffStat {
         DiffStat(added: reduce(0) { $0 + ($1.added ?? 0) }, removed: reduce(0) { $0 + ($1.removed ?? 0) })
     }
 }
 
-struct DiffStat: Equatable {
-    let added: Int
-    let removed: Int
-    var isEmpty: Bool { added == 0 && removed == 0 }
+public struct DiffStat: Equatable {
+    public let added: Int
+    public let removed: Int
+    public var isEmpty: Bool { added == 0 && removed == 0 }
 }
 
-struct DiffLine: Identifiable, Hashable {
-    enum Kind { case hunk, context, added, removed, info }
-    let index: Int
-    let kind: Kind
-    let oldNumber: Int?
-    let newNumber: Int?
-    let text: String
-    var id: Int { index }
+public struct DiffLine: Identifiable, Hashable {
+    public enum Kind { case hunk, context, added, removed, info }
+    public let index: Int
+    public let kind: Kind
+    public let oldNumber: Int?
+    public let newNumber: Int?
+    public let text: String
+    public var id: Int { index }
     /// The line number a review note refers to.
-    var number: Int? { newNumber ?? oldNumber }
+    public var number: Int? { newNumber ?? oldNumber }
 }

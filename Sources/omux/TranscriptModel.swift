@@ -11,16 +11,6 @@ struct Todo: Equatable, Encodable {
     var status: String
 }
 
-struct Question: Equatable, Encodable {
-    var text: String
-    /// The short tab label Claude Code shows for the question, such as "Auth method".
-    var header: String?
-    var options: [String]
-    /// One per option, "" where the option has none.
-    var descriptions: [String] = []
-    var multi: Bool
-}
-
 /// One block of the transcript: a prompt, a reply, thinking, a run of tool calls, a todo list, a note, or an overview.
 struct ChatBlock: Identifiable, Equatable, Encodable {
     enum Kind: String, Equatable, Encodable { case user, assistant, thinking, tools, todos, note, info, summary }

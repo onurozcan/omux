@@ -2,6 +2,7 @@ import AppKit
 import ObjectiveC
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 private var opened: [URL] = []
 private var revealed: [URL] = []

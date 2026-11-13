@@ -1,6 +1,7 @@
 import SwiftUI
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class PaneLayoutTests: XCTestCase {
     let a = UUID(), b = UUID(), c = UUID(), d = UUID()

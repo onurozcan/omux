@@ -1,6 +1,7 @@
 import XCTest
 import OmuxCLIProtocol
 @testable import omux
+@testable import OmuxCore
 
 final class CLITests: XCTestCase {
     private func parse(_ line: String) -> Result<(command: CLICommand, json: Bool), CLIUsageError> {

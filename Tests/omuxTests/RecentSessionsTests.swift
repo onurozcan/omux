@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class RecentSessionsTests: XCTestCase {
     /// After a skill's slash command, Claude Code writes the skill's instructions as an isMeta

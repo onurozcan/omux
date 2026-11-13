@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class ClaudeModelsTests: XCTestCase {
     func testModelIDsAreReadOutOfBytesAndTheNewestOfEachFamilyIsOffered() {

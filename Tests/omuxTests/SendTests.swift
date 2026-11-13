@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class SendTests: XCTestCase {
     /// A Return the agent took as a line break leaves the prompt in its input box: the last

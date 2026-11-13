@@ -1,4 +1,6 @@
 import AppKit
+// The core is part of the app: its types are used everywhere without a further import.
+@_exported import OmuxCore
 import SwiftUI
 import UniformTypeIdentifiers
 

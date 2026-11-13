@@ -99,14 +99,6 @@ struct TabItem: Identifiable, Codable, Hashable {
     }
 }
 
-struct Worktree: Codable, Hashable {
-    var branch: String
-    /// The branch it was made from; diffs and merges compare against it.
-    var base: String
-    /// The main checkout that owns the worktree.
-    var repo: String
-}
-
 struct TabGroup: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String

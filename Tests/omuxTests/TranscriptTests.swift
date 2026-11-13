@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 /// The transcript parser against records shaped like Claude Code 2.1's. A change in the
 /// format shows up here before it shows up as a blank page.
