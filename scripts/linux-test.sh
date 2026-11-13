@@ -16,6 +16,9 @@ fi
 
 # The image CI uses, and a build folder of its own beside the Mac's .build.
 run() { docker run --rm ${TTY:+-it} -v "$PWD":/src -w /src swift:6.2 "$@"; }
+# On Linux the package has no dependencies, so SwiftPM there deletes Package.resolved, which
+# the Mac build needs as it is. Put it back whatever happens.
+trap 'git checkout -q -- Package.resolved 2>/dev/null || true' EXIT
 case "${1:-test}" in
   build) run swift build --scratch-path .build-linux ;;
   shell) TTY=1 run bash ;;
