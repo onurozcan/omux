@@ -1150,7 +1150,7 @@ final class Store: ObservableObject {
     /// Puts an active project first in the sidebar; pinned projects are listed ahead of it regardless.
     private func moveToTop(_ groupID: UUID) {
         guard let index = groups.firstIndex(where: { $0.id == groupID }), index > 0, isActive(groups[index]) else { return }
-        groups.move(fromOffsets: [index], toOffset: 0)
+        withAnimation(.easeInOut(duration: 0.25)) { groups.move(fromOffsets: [index], toOffset: 0) }
     }
 
     /// Where a project at `index` goes to sit right after the last active project (nil when none

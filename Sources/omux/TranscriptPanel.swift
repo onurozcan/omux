@@ -30,6 +30,11 @@ struct TranscriptPanel: View {
     @State private var sendNotice: String?
     /// The reply as it appears on the terminal, ahead of the transcript file.
     @State private var liveText: String?
+    /// The turn has ended but its reply isn't in the transcript yet: the card stays on Working
+    /// until the record lands, so Done never shows over a blank with the text popping in after.
+    @State private var replyPending = false
+    @State private var replyWait = 0
+    @State private var heldSince: Date?
     /// The screen output and transcript version `readLive` last read at.
     @State private var liveRead = ScreenReadMemo<LiveReadKey>()
     private struct LiveReadKey: Equatable { let output: UInt64?; let version: Int }
@@ -111,9 +116,22 @@ struct TranscriptPanel: View {
                     ComposeDrafts.version += 1
                     sendNotice = "Codex quit before taking the prompt. It's back in the box."
                 }
-                .onChange(of: runtime.statusState) { _, state in
+                .onChange(of: runtime.statusState) { old, state in
                     let stateName = state.map { String(describing: $0) } ?? "none"
                     Timing.mark("status", tabID, stateName + (liveText != nil ? " live" : ""))
+                    // Claude Code reports the turn over a moment before it writes the reply's
+                    // record. Done waits for the record, briefly, and the last of the reply is
+                    // read off the screen meanwhile.
+                    if provider == .claude, old == .working, state == .done, !replyLanded {
+                        readLive(final: true)
+                        heldSince = workingSince
+                        replyPending = true
+                        replyWait += 1
+                        let wait = replyWait
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { if replyWait == wait { replyPending = false } }
+                    } else if state != .done {
+                        replyPending = false
+                    }
                     workingSince = state == .working ? (workingSince ?? Date()) : nil
                     if state != .working {
                         // The reply read off the screen stays until its record lands, so the turn
@@ -128,7 +146,8 @@ struct TranscriptPanel: View {
                     if state != .blocked { releaseHeld() }
                 }
                 .onChange(of: model.version) { _, _ in
-                    if liveText != nil, runtime.statusState != .working { liveText = nil }
+                    if replyPending, replyLanded { replyPending = false; Timing.mark("reply-shown", tabID) }
+                    if liveText != nil, runtime.statusState != .working, !replyPending { liveText = nil }
                 }
                 .task(id: runtime.statusState == .working) {
                     // While the agent writes, follow the reply on the screen.
@@ -251,6 +270,8 @@ struct TranscriptPanel: View {
             switch runtime.statusState {
             case .working:
                 status = .init(state: "working", detail: runtime.statusDetail, since: workingSince.map { Int($0.timeIntervalSince1970 * 1000) }, live: liveText, queueEditable: provider == .claude)
+            case .done where replyPending:
+                status = .init(state: "working", since: heldSince.map { Int($0.timeIntervalSince1970 * 1000) }, live: liveText, queueEditable: provider == .claude)
             case .done:
                 var worked: String?
                 if let start = model.lastPrompt, let end = model.lastWrite, end.timeIntervalSince(start) >= 2 {
@@ -289,10 +310,17 @@ struct TranscriptPanel: View {
 
     /// While the agent works, the reply it's writing is on the terminal before it's in the
     /// transcript: the text after the last reply marker, up to the prompt box.
-    private func readLive() {
-        guard provider == .claude, store.runtime[tabID]?.statusState == .working else { return }
+    /// Whether the turn's reply is in the transcript: its last block of the conversation is the
+    /// assistant's text, not the prompt or a tool call still ahead of it.
+    private var replyLanded: Bool {
+        model.blocks.last { [.user, .assistant, .tools, .thinking].contains($0.kind) }?.kind == .assistant
+    }
+
+    /// `final` reads once more as the turn ends, for a reply written since the last look.
+    private func readLive(final: Bool = false) {
+        guard provider == .claude, final || store.runtime[tabID]?.statusState == .working else { return }
         // Nothing new on the screen and nothing new in the transcript: the last read still holds.
-        guard liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
+        guard final || liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
         let lines = store.screenLines(tabID, count: 60)
         guard let start = lines.lastIndex(where: { line in
             let t = line.trimmingCharacters(in: .whitespaces)

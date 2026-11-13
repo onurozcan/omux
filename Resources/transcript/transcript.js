@@ -464,6 +464,28 @@
     return '';
   }
 
+  // Updates a status card to match `next` without replacing it; false when they differ in kind.
+  function patchStatus(cur, next) {
+    if (cur.className.replace(' enter', '') !== next.className) return false;
+    const a = cur.querySelector(':scope > .grow'), b = next.querySelector(':scope > .grow');
+    if (!a || !b) return false;
+    const at = a.querySelector(':scope > .title'), bt = b.querySelector(':scope > .title');
+    if (!at || !bt || at.children.length !== bt.children.length) return false;
+    for (let i = 0; i < bt.children.length; i++) {
+      const x = at.children[i], y = bt.children[i];
+      if (x.className !== y.className) return false;
+      if (y.classList.contains('elapsed')) { x.dataset.since = y.dataset.since; continue; }
+      if (x.textContent !== y.textContent) x.replaceWith(y.cloneNode(true));
+    }
+    for (const cls of ['detail', 'live']) {
+      const x = a.querySelector(`:scope > .${cls}`), y = b.querySelector(`:scope > .${cls}`);
+      if (x && y) { if (x.innerHTML !== y.innerHTML) x.innerHTML = y.innerHTML; }
+      else if (x) x.remove();
+      else if (y) { y.classList.add('enter'); if (cls === 'detail') at.after(y); else a.appendChild(y); }
+    }
+    return true;
+  }
+
   function tick() {
     document.querySelectorAll('.elapsed[data-since]').forEach(e => {
       const since = Number(e.dataset.since);
@@ -552,6 +574,8 @@
             // A tool row that just finished gets a brief highlight.
             if (block.kind === 'tools' && entry.block && entry.block.tools) {
               const was = new Set(entry.block.tools.filter(t => t.running).map(t => t.id));
+              const had = new Set(entry.block.tools.map(t => t.id));
+              for (const t of block.tools) if (!had.has(t.id)) { const el = node.querySelector(`[data-row="${CSS.escape(t.id)}"]`); if (el) el.classList.add('enter'); }
               for (const t of block.tools) if (was.has(t.id) && !t.running) { const el = node.querySelector(`[data-row="${CSS.escape(t.id)}"]`); if (el) el.classList.add('just-done'); }
             }
             entry.el.replaceWith(node);
@@ -582,9 +606,16 @@
     renderQueue(nestQueued ? queuedNow : [], queueReadsMidTurn);
     const html = statusHTML(payload.status || null, queuedNow) || '';
     if (switched || html !== statusNow || (statusEl && statusEl.parentNode !== list)) {
-      statusNow = html;
-      if (statusEl) { statusEl.remove(); statusEl = null; }
-      if (html) { statusEl = el(html); list.appendChild(statusEl); }
+      const next = html ? el(html) : null;
+      // The same card with new words: change them in place, so its dots and pulse keep their beat.
+      if (!switched && statusEl && next && statusEl.parentNode === list && patchStatus(statusEl, next)) {
+        statusNow = html;
+      } else {
+        const fresh = !switched && statusNow !== '' && !!next;
+        statusNow = html;
+        if (statusEl) { statusEl.remove(); statusEl = null; }
+        if (next) { statusEl = next; if (fresh) statusEl.classList.add('enter'); list.appendChild(statusEl); }
+      }
     } else if (statusEl && statusEl !== list.lastElementChild) {
       list.appendChild(statusEl);
     }

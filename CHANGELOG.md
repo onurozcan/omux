@@ -7,8 +7,10 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ### Changed
 - **Pages open in the Browser tab.** Choosing an `.html` file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.
 - **A project moves to the top of the sidebar when it is activated.** That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.
+- **Smoother motion in the transcript.** The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.
 
 ### Fixed
+- **Done no longer shows before the reply.** Claude Code reports a turn over a moment before it writes the reply to the transcript, so Done appeared over a blank and the text landed after it. The card now stays on Working, with the last of the reply read off the screen, until the reply is in; then Done and the message arrive together.
 - **The question card reads as a choice list.** Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.
 
 ## [0.11.1] - 2026-11-11

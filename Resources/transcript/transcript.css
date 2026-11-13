@@ -228,8 +228,8 @@ html.light .diff { background: rgba(0,0,0,0.04); }
 @keyframes dot { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 .status .caret { animation: blink 1s steps(2, start) infinite; }
 @keyframes blink { to { visibility: hidden; } }
-.enter { animation: enter 0.22s ease-out; }
-@keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.enter { animation: enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .tool.just-done { animation: justdone 1.2s ease-out; }
 @keyframes justdone { 0% { background: rgba(34,197,94,0.18); } 100% { background: transparent; } }
 .tool.just-done.failed { animation-name: justfailed; }
