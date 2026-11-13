@@ -46,6 +46,12 @@ cp Resources/omux.icns "$APP/Contents/Resources/"
 if command -v node >/dev/null; then node --check Resources/transcript/transcript.js; fi
 cp -R Resources/transcript "$APP/Contents/Resources/transcript"
 cp -R Resources/icons "$APP/Contents/Resources/icons"
+# The session host for other machines, when scripts/build-host.sh has built it: omux
+# installs it over SSH on a machine a project is set to run on.
+if ls build/host/omux-host-linux-* >/dev/null 2>&1; then
+  mkdir -p "$APP/Contents/Resources/host"
+  cp build/host/omux-host-linux-* "$APP/Contents/Resources/host/"
+fi
 for bundle in .build/release/*.bundle; do
   [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done

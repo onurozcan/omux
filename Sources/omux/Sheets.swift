@@ -205,15 +205,24 @@ struct GroupEditSheet: View {
     @State private var sessionView = ""
     @State private var model = ""
     @State private var effort = ""
+    @State private var host = ""
+
+    private var remote: Bool { !host.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
         Form {
             TextField("Name", text: $name)
+            TextField("Machine", text: $host, prompt: Text("This Mac"))
+                .font(.system(.body, design: .monospaced))
+            Text(remote ? "Sessions run on \(host.trimmingCharacters(in: .whitespaces)) over SSH and keep running there when omux is closed. omux sets itself up on the machine the first time. The folder below is a folder there."
+                        : "To run this project on another machine, enter how you reach it with ssh: a name from ~/.ssh/config, or user@address.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 TextField("Folder", text: $directory, prompt: Text("~"))
-                Button("Choose…") { if let dir = chooseDirectory(current: directory) { directory = dir } }
+                if !remote { Button("Choose…") { if let dir = chooseDirectory(current: directory) { directory = dir } } }
             }
-            if !provider.startsAutomatically(in: directory.isEmpty ? "~" : directory) {
+            if !remote, !provider.startsAutomatically(in: directory.isEmpty ? "~" : directory) {
                 HomeFolderHint(provider: provider)
             }
             Picker("New sessions", selection: $provider) {
@@ -262,11 +271,14 @@ struct GroupEditSheet: View {
             sessionView = group.sessionView ?? ""
             model = group.model ?? ""
             effort = group.effort ?? ""
+            host = group.host ?? ""
         }
     }
 
     private func save() {
         store.updateGroup(groupID) { group in
+            let machine = host.trimmingCharacters(in: .whitespaces)
+            group.host = machine.isEmpty ? nil : machine
             group.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? group.name : name
             group.directory = directory.isEmpty ? nil : directory
             group.command = provider == .custom ? command : provider.command

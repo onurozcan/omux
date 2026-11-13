@@ -78,7 +78,7 @@ public final class AgentScanner: @unchecked Sendable {
         var result: [UUID: [SubAgent]] = [:]
         var watch: Set<String> = []
         for session in sessions {
-            guard let folder = folder(for: session.session) else {
+            guard let folder = folder(for: session.session, in: session.project) else {
                 if let project = session.project {
                     let sessionDir = project.appendingPathComponent(session.session)
                     watch.insert(FileManager.default.fileExists(atPath: sessionDir.path) ? sessionDir.path : project.path)
@@ -97,8 +97,14 @@ public final class AgentScanner: @unchecked Sendable {
     }
 
     /// The session's subagents folder; it appears with the first subagent.
-    private func folder(for session: String) -> URL? {
+    private func folder(for session: String, in project: URL? = nil) -> URL? {
         if let folder = folders[session] { return folder }
+        // Where the session's files are known to be: a remote session's copy isn't under ~/.claude.
+        if let known = project?.appendingPathComponent(session).appendingPathComponent("subagents"),
+           FileManager.default.fileExists(atPath: known.path) {
+            folders[session] = known
+            return known
+        }
         if let miss = misses[session], Date().timeIntervalSince(miss) < 3 { return nil }
         let projects = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects")
         for name in (try? FileManager.default.contentsOfDirectory(atPath: projects.path)) ?? [] {

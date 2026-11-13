@@ -440,6 +440,7 @@ final class Store: ObservableObject {
     }
 
     private func launch(_ view: TermView, tab: TabItem, group: TabGroup, command: String?) {
+        if let host = group.host, group.isRemote { launchRemote(view, tab: tab, group: group, host: host, command: command); return }
         let home = NSHomeDirectory()
         var dir = ((tab.directory ?? group.directory) as NSString?)?.expandingTildeInPath ?? home
         var isDir: ObjCBool = false
@@ -506,6 +507,56 @@ final class Store: ObservableObject {
                 view.send(txt: command + "\n")
             }
         }
+    }
+
+    /// A session of a project on another machine: the terminal runs SSH attached to the session
+    /// there. The host starts the agent, once, when it starts the session; attached again after
+    /// a restart of omux or a dropped connection, the session is as it was left.
+    private func launchRemote(_ view: TermView, tab: TabItem, group: TabGroup, host: String, command: String?) {
+        let inherited = ProcessInfo.processInfo.environment
+        let home = NSHomeDirectory()
+        var env: [String: String] = [
+            "HOME": home, "USER": inherited["USER"] ?? NSUserName(), "LOGNAME": inherited["LOGNAME"] ?? NSUserName(),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+            "LANG": inherited["LANG"] ?? "en_US.UTF-8", "TERM": "xterm-256color", "COLORTERM": "truecolor", "TERM_PROGRAM": "omux",
+        ]
+        // The user's keys, and whatever asks for a passphrase in a window.
+        for key in ["SSH_AUTH_SOCK", "SSH_ASKPASS", "DISPLAY"] { if let value = inherited[key] { env[key] = value } }
+        let directory = tab.directory ?? group.directory
+        let provider = tab.resolvedProvider(in: group)
+        let run = command ?? remoteStartupCommand(tab: tab, group: group)
+        let script = RemoteHost.script(host: host, tab: tab.id, name: tab.name, directory: directory, run: run)
+        view.startProcess(executable: "/bin/sh", args: ["-c", script], environment: env.map { "\($0.key)=\($0.value)" },
+                          execName: "sh", currentDirectory: home)
+        update(tab.id) {
+            $0.provider = provider; $0.agentConnected = false; $0.agentConnectedAt = nil; $0.tuiReady = false
+            $0.exited = false; $0.cwd = directory; $0.title = ""
+            $0.statusState = nil; $0.statusKind = nil; $0.statusDetail = nil; $0.statusChildren = []
+        }
+        if provider == .claude {
+            RemoteMirrors.shared.follow(tab: tab.id, host: host, directory: directory ?? "~", session: tab.claudeSessionID.uuidString.lowercased())
+        }
+    }
+
+    /// What the host types into a new remote session's shell. For Claude Code, the session's
+    /// own conversation: resumed when its copy here shows it exists, and when there is no copy
+    /// to tell by, resumed if it can be and started if it can't.
+    private func remoteStartupCommand(tab: TabItem, group: TabGroup) -> String? {
+        let provider = tab.resolvedProvider(in: group)
+        let raw = (tab.command ?? group.command ?? "").trimmingCharacters(in: .whitespaces)
+        guard provider != .shell, !raw.isEmpty else { return nil }
+        guard provider == .claude else { return raw }
+        var flags = ""
+        if let model = (tab.model ?? group.model)?.trimmingCharacters(in: .whitespaces), !model.isEmpty, model != "default", !raw.contains("--model") {
+            flags += " --model \(Git.quote(model))"
+        }
+        if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
+            flags += " --effort \(effort)"
+        }
+        let resume = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: true) + flags
+        let fresh = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: false) + flags
+        if RemoteHost.mirroredTranscript(tab.claudeSessionID.uuidString.lowercased()) != nil || resume == fresh { return resume }
+        return "\(resume) || \(fresh)"
     }
 
     private func startCodex(_ view: TermView, tab: TabItem, cwd: String) {
@@ -719,6 +770,11 @@ final class Store: ObservableObject {
     /// Re-checks whether the shell has a child process (claude, a build, …).
     func refreshBusy(_ id: UUID) {
         guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return }
+        // A remote session's shell isn't a process here: its agent says so itself when it runs.
+        if group(containing: id)?.isRemote == true {
+            update(id) { $0.busy = $0.statusState != nil }
+            return
+        }
         let pid = view.process.shellPid
         let busy = pid > 0 && Self.hasChildProcess(of: pid)
         if runtime[id]?.provider == .codex {
@@ -854,7 +910,10 @@ final class Store: ObservableObject {
     /// The ~/.claude/projects folder for the session's working directory, where its transcript
     /// and subagent folders appear. nil for a session without a folder.
     func claudeProjectFolderURL(for id: UUID) -> URL? {
-        guard let tab = tab(id), let folder = runtime[id]?.cwd ?? directory(of: tab) else { return nil }
+        guard let tab = tab(id) else { return nil }
+        // A remote session's files are copied to a folder of its own here.
+        if let host = group(containing: id)?.host, !host.isEmpty { return RemoteHost.mirrorFolder(host: host, tab: id) }
+        guard let folder = runtime[id]?.cwd ?? directory(of: tab) else { return nil }
         return URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects/" + Self.claudeProjectFolder(for: folder))
     }
 
@@ -902,7 +961,9 @@ final class Store: ObservableObject {
                 restart(id)
                 return
             }
-            guard !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil else { return }
+            let remote = groups[loc.group].isRemote
+            guard remote || !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil else { return }
+            if remote, runtime[id]?.statusState != nil { return }
             if runtime[id]?.provider != tab.resolvedProvider(in: groups[loc.group]) { restart(id); return }
         }
         if tab.resolvedProvider(in: groups[loc.group]) != .claude {
@@ -1011,7 +1072,7 @@ final class Store: ObservableObject {
             let path = "\(projects)/\(dir)/\(session).jsonl"
             if FileManager.default.fileExists(atPath: path) { return URL(fileURLWithPath: path) }
         }
-        return nil
+        return RemoteHost.mirroredTranscript(session)
     }
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
@@ -1358,6 +1419,11 @@ final class Store: ObservableObject {
     func closeTab(_ id: UUID) {
         closeCodex(id)
         guard let loc = location(of: id) else { return }
+        // Closed here, a remote session is closed there: without this it would run on unseen.
+        if let host = groups[loc.group].host, groups[loc.group].isRemote {
+            RemoteHost.run("\(RemoteHost.remoteBinary) close \(id.uuidString.lowercased())", on: host)
+            RemoteMirrors.shared.forget(tab: id, host: host)
+        }
         if let view = terminals.removeValue(forKey: id) {
             killTree(view)
             view.removeFromSuperview()

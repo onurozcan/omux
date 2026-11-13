@@ -33,6 +33,7 @@ targets += [
             .product(name: "Sparkle", package: "Sparkle"),
             "OmuxCLIProtocol",
             "OmuxCore",
+            "OmuxHostKit",
         ],
         path: "Sources/omux",
         // build.sh embeds Sparkle.framework in the app bundle; the binary finds it there.

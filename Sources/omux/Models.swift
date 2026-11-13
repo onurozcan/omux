@@ -122,6 +122,11 @@ struct TabGroup: Identifiable, Codable, Hashable {
     var forcedIdle = false
     /// Kept at the top of the sidebar, above the projects at work, and never folded into the idle stack.
     var pinned = false
+    /// An SSH destination, as `ssh` takes it ("devbox", "me@10.0.0.5"), when the project lives
+    /// on another machine: its sessions run there and keep running with omux closed. `directory`
+    /// is then a folder on that machine. nil for a project on this Mac.
+    var host: String?
+    var isRemote: Bool { !(host ?? "").isEmpty }
     var tabs: [TabItem] = []
 
     init(name: String, directory: String? = nil, tabs: [TabItem] = []) {
@@ -146,6 +151,7 @@ struct TabGroup: Identifiable, Codable, Hashable {
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive)
         forcedIdle = try c.decodeIfPresent(Bool.self, forKey: .forcedIdle) ?? false
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        host = try c.decodeIfPresent(String.self, forKey: .host)
         tabs = try c.decodeIfPresent([TabItem].self, forKey: .tabs) ?? []
     }
 }

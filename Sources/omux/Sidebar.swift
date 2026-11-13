@@ -382,6 +382,14 @@ struct GroupHeader: View {
             if group.pinned {
                 Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.tertiary).help("Pinned to the top")
             }
+            if let host = group.host, group.isRemote {
+                HStack(spacing: 3) {
+                    Image(systemName: "network").font(.system(size: 8))
+                    Text(host).font(.system(size: 9.5, design: .monospaced)).lineLimit(1)
+                }
+                .foregroundStyle(.tertiary)
+                .help("Sessions of this project run on \(host)")
+            }
             Spacer()
             // Show/hide chevron on hover, then the + at the trailing edge.
             Button { store.updateGroup(group.id) { $0.isCollapsed.toggle() } } label: {
