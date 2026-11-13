@@ -27,3 +27,13 @@ public struct Question: Equatable, Encodable, Sendable {
         self.text = text; self.header = header; self.options = options; self.descriptions = descriptions; self.multi = multi
     }
 }
+
+public extension String {
+    /// The path with the home folder written as "~", for showing. Foundation's own
+    /// `abbreviatingWithTildeInPath` doesn't exist on Linux.
+    var tildeAbbreviated: String {
+        let home = NSHomeDirectory()
+        if self == home { return "~" }
+        return hasPrefix(home + "/") ? "~" + dropFirst(home.count) : self
+    }
+}

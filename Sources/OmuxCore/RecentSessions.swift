@@ -12,7 +12,7 @@ public enum RecentConversation: Identifiable {
     public var cwd: String {
         switch self { case .claude(let s): return s.cwd; case .codex(let s): return s.cwd }
     }
-    public var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
+    public var folder: String { cwd.tildeAbbreviated }
     public var prompt: String {
         switch self { case .claude(let s): return s.prompt; case .codex(let s): return s.name }
     }
@@ -28,7 +28,7 @@ public struct RecentSession: Identifiable, Hashable {
     public let prompt: String
     public let date: Date
 
-    public var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
+    public var folder: String { cwd.tildeAbbreviated }
 
     /// Short name for a tab: first words of the first prompt.
     public var tabName: String {
