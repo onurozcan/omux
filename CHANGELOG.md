@@ -7,6 +7,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ### Changed
 - **Neutral reaches the transcript's working colour.** With the Neutral accent, the Bash tag, running tool rows, spinners, the reply's caret, the Working dot and the starting cards are grey too. The sidebar and the session header keep the working blue.
 
+### Fixed
+- **A pasted prompt no longer stays "Queued" after the agent takes it.** A prompt that was pasted, sent while the agent worked and picked up mid-turn kept its Queued label for good, because Claude Code records pasted text in a wrapper omux mistook for a system message.
+
 ## [0.11.2] - 2026-11-13
 
 ### Changed

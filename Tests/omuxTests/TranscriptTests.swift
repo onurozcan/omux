@@ -30,6 +30,19 @@ final class TranscriptTests: XCTestCase {
         watching.cancel()
     }
 
+    /// Claude Code wraps a pasted prompt in a tag in its queue records. Read as an injected
+    /// record and dropped, the prompt stayed "Queued" after the agent had taken it mid-turn.
+    func testAPastedPromptLeavesTheQueueWhenTakenMidTurn() {
+        let m = SessionTranscript(tab: TabItem(name: "t"), provider: .claude, claudeFile: { nil }, codexThread: { nil })
+        m.echo("what is this\nlong pasted text", queued: true)
+        let wrapped = #"<pasted_content id=\"d420\">\nwhat is this\nlong pasted text\n</pasted_content id=\"d420\">"#
+        m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-13T19:46:54.110Z","content":"\#(wrapped)"}"#)])
+        XCTAssertEqual(m.blocks.filter { $0.kind == .user }.count, 1, "the record is the echo, not a second prompt")
+        XCTAssertEqual(m.blocks.last?.pending, "queued")
+        m.ingest([object(#"{"type":"queue-operation","operation":"remove","timestamp":"2026-11-13T19:47:16.697Z","content":"\#(wrapped)","reason":"absorbed_mid_turn"}"#)])
+        XCTAssertNil(m.blocks.last?.pending)
+    }
+
     func testTurnsToolsAndResults() {
         let m = model()
         m.ingest([
