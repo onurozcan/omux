@@ -26,7 +26,7 @@ struct CodexAgents: View {
                 Button {
                     store.openAgent = nil
                     store.openCodexAgent = CodexAgentRef(tabID: tabID, agent: agent)
-                    store.showPanel(.files)
+                    store.showPanel(.agents)
                     open = false
                 } label: {
                     HStack(spacing: 5) {

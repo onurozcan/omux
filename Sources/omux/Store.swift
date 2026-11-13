@@ -641,7 +641,7 @@ final class Store: ObservableObject {
     func openAgentTranscript(_ agent: SubAgent, in tabID: UUID) {
         openCodexAgent = nil
         openAgent = AgentRef(tabID: tabID, agent: agent)
-        showPanel(.files)
+        showPanel(.agents)
     }
 
     /// Shows a file in the right panel: a web page in the Browser tab, anything else in Files.

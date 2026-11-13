@@ -593,6 +593,8 @@ struct AgentList: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var monitor = AgentMonitor.shared
     let tabID: UUID
+    /// In the right panel's Agents tab the list takes the panel's width; in a popover, its own.
+    var inPanel = false
     let dismiss: () -> Void
 
     var body: some View {
@@ -623,7 +625,8 @@ struct AgentList: View {
                 .padding(.top, 4)
         }
         .padding(8)
-        .frame(width: 400)
+        .frame(width: inPanel ? nil : 400)
+        .frame(maxWidth: inPanel ? .infinity : nil, alignment: .leading)
     }
 
     private func row(_ agent: SubAgent) -> some View {
@@ -657,7 +660,7 @@ struct AgentList: View {
     }
 }
 
-/// A subagent's transcript, shown where the file preview usually is.
+/// A subagent's transcript, shown in the right panel's Agents tab.
 struct AgentTranscriptView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var monitor = AgentMonitor.shared
@@ -690,7 +693,7 @@ struct AgentTranscriptView: View {
                     PermissionButtons(tabID: ref.tabID)
                 }
                 Button { store.openAgent = nil } label: { Image(systemName: "xmark") }
-                    .help("Close transcript")
+                    .help("Back to the agents")
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)

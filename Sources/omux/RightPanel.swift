@@ -1,18 +1,51 @@
 import SwiftUI
 
 enum PanelTab: String, CaseIterable {
-    case files, changes, browser
+    case files, changes, browser, agents
 }
 
-/// The right panel: Files, Changes and Browser for the selected session.
+/// The Agents tab: the session's subagents, and the transcript of the one picked.
+struct AgentsPanel: View {
+    @EnvironmentObject var store: Store
+    @ObservedObject private var monitor = AgentMonitor.shared
+    @ObservedObject private var codex = CodexManager.shared
+    let tabID: UUID
+
+    var body: some View {
+        if let agent = store.openAgent, agent.tabID == tabID {
+            AgentTranscriptView(ref: agent).id(agent.agentID)
+        } else if let ref = store.openCodexAgent, ref.tabID == tabID {
+            CodexAgentTranscriptView(ref: ref).id(ref.agent.id)
+        } else if !(monitor.agents[tabID] ?? []).isEmpty {
+            ScrollView { AgentList(tabID: tabID, inPanel: true) {} }
+        } else if !(codex.agents[tabID] ?? []).isEmpty {
+            ScrollView { CodexAgents(tabID: tabID).padding(12).frame(maxWidth: .infinity, alignment: .leading) }
+        } else {
+            Text("No agents in this session")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+/// The right panel: Files, Changes, Browser and Agents for the selected session.
 struct RightPanel: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var changes = Changes.shared
+    @ObservedObject private var monitor = AgentMonitor.shared
+    @ObservedObject private var codex = CodexManager.shared
     let root: URL
     let theme: Theme
     @AppStorage(Prefs.panelTab) private var tab = PanelTab.files.rawValue
 
     private var current: PanelTab { PanelTab(rawValue: tab) ?? .files }
+
+    /// Agents still at work in the selected session, for the tab's badge.
+    private var runningAgents: Int {
+        guard let id = store.selectedTabID else { return 0 }
+        return (monitor.agents[id] ?? []).filter { !$0.finished }.count + (codex.agents[id] ?? []).filter { !$0.finished }.count
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,6 +54,7 @@ struct RightPanel: View {
                 button(.changes, "Changes", "plusminus", shortcut: "2",
                        badge: changes.tabID == store.selectedTabID ? changes.files.count : 0)
                 button(.browser, "Browser", "globe", shortcut: "3")
+                button(.agents, "Agents", "person.2", shortcut: "4", badge: runningAgents)
                 Spacer()
             }
             .padding(.horizontal, 6)
@@ -38,6 +72,13 @@ struct RightPanel: View {
                     .accessibilityHidden(current != .files)
                 if current == .changes {
                     ChangesPanel(theme: theme)
+                }
+                if current == .agents {
+                    if let id = store.selectedTabID {
+                        AgentsPanel(tabID: id).background(Color(nsColor: theme.chrome))
+                    } else {
+                        Text("No session").foregroundStyle(.secondary)
+                    }
                 }
                 if current == .browser {
                     if let id = store.selectedTabID {

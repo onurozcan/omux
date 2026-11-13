@@ -870,6 +870,7 @@ struct AppCommands: Commands {
             Button("Files") { store.showPanel(.files) }.keyboardShortcut("1", modifiers: [.command, .option])
             Button("Changes") { store.showPanel(.changes) }.keyboardShortcut("2", modifiers: [.command, .option])
             Button("Browser") { store.showPanel(.browser) }.keyboardShortcut("3", modifiers: [.command, .option])
+            Button("Agents") { store.showPanel(.agents) }.keyboardShortcut("4", modifiers: [.command, .option])
             Button("Terminal Behind Transcript") {
                 guard let id = store.selectedTabID else { return }
                 if TerminalPeek.shared.tabs.contains(id) { TerminalPeek.shared.hide(id) } else { TerminalPeek.shared.show(id, store: store) }
