@@ -4,38 +4,38 @@ import Foundation
 /// overviews of MCP servers, plugins, skills, agents, hooks and permissions, which the terminal
 /// otherwise shows in dialogs. Changes go through the agents' own command lines, or, for
 /// permission rules, the settings files Claude Code reads.
-enum AgentConfig {
-    struct Row: Equatable, Encodable {
-        var name: String
-        var detail: String
-        var note: String
+public enum AgentConfig {
+    public struct Row: Equatable, Encodable {
+        public var name: String
+        public var detail: String
+        public var note: String
         /// "on", "off" or "" for the dot in front of the row.
-        var state: String = ""
+        public var state: String = ""
         /// What the panel can do to this row: login, logout, remove, enable, disable, uninstall.
-        var actions: [String] = []
+        public var actions: [String] = []
         /// What the action needs: a scope, a plugin id with scope, or a settings file.
-        var arg: String = ""
+        public var arg: String = ""
     }
 
-    struct Overview: Equatable, Encodable {
-        var title: String
-        var summary: String
-        var rows: [Row]
+    public struct Overview: Equatable, Encodable {
+        public var title: String
+        public var summary: String
+        public var rows: [Row]
         /// The Claude Code command that manages this, for the button.
-        var command: String
+        public var command: String
         /// Which add form the page offers: "mcp" or "permission".
-        var form: String?
+        public var form: String?
         /// Which overview this is, so an action can rebuild it.
-        var kind: String = ""
+        public var kind: String = ""
         /// What to say when there are no rows, instead of "Nothing configured."
-        var empty: String?
+        public var empty: String?
         /// One extra button in the header, and the action it posts.
-        var actionID: String?
-        var actionLabel: String?
+        public var actionID: String?
+        public var actionLabel: String?
     }
 
     /// Claude Code's user-scope MCP servers, as configured: name and its config object.
-    static func claudeUserServers() -> [(name: String, server: [String: Any])] {
+    public static func claudeUserServers() -> [(name: String, server: [String: Any])] {
         let servers = json("\(home)/.claude.json")?["mcpServers"] as? [String: Any] ?? [:]
         return servers.sorted { $0.key < $1.key }.compactMap { name, value in (value as? [String: Any]).map { (name, $0) } }
     }
@@ -47,11 +47,11 @@ enum AgentConfig {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
-    static let commands: Set<String> = ["mcp", "plugins", "plugin", "skills", "agents", "hooks", "permissions", "commands", "status", "version", "account"]
+    public static let commands: Set<String> = ["mcp", "plugins", "plugin", "skills", "agents", "hooks", "permissions", "commands", "status", "version", "account"]
 
-    static func hasOverview(for command: String) -> Bool { commands.contains(command) }
+    public static func hasOverview(for command: String) -> Bool { commands.contains(command) }
 
-    static func overview(for command: String, project: String, provider: SessionProvider = .claude) -> Overview? {
+    public static func overview(for command: String, project: String, provider: SessionProvider = .claude) -> Overview? {
         if provider == .codex { return codexOverview(for: command, project: project) }
         var overview: Overview?
         switch command {
@@ -71,19 +71,19 @@ enum AgentConfig {
 
     // MARK: Claude Code's own defaults
 
-    struct ClaudeDefaults {
-        var model: String?
+    public struct ClaudeDefaults {
+        public var model: String?
         /// A default effort saved with /effort, when there is one.
-        var effort: String?
+        public var effort: String?
         /// Per-model effort from the Model settings.
-        var effortByModel: [String: String]
+        public var effortByModel: [String: String]
     }
 
     private static var defaultsCache: (at: Date, value: ClaudeDefaults)?
 
     /// The model and effort Claude Code starts with when omux passes none: from its settings file,
     /// read at most every half minute since the chips ask on every redraw.
-    static func claudeDefaults() -> ClaudeDefaults {
+    public static func claudeDefaults() -> ClaudeDefaults {
         if let cached = defaultsCache, Date().timeIntervalSince(cached.at) < 30 { return cached.value }
         let settings = json("\(home)/.claude/settings.json") ?? [:]
         var byModel: [String: String] = [:]
@@ -100,7 +100,7 @@ enum AgentConfig {
     // MARK: Status
 
     /// Claude Code's installed version and the account it's signed in as, from its own files.
-    static func status() -> Overview {
+    public static func status() -> Overview {
         var rows: [Row] = []
         let versions = (try? FileManager.default.contentsOfDirectory(atPath: "\(home)/.local/share/claude/versions")) ?? []
         let newest = versions.filter { $0.first?.isNumber == true }.sorted { $0.compare($1, options: .numeric) == .orderedAscending }.last
@@ -121,7 +121,7 @@ enum AgentConfig {
 
     /// Codex keeps MCP servers in ~/.codex/config.toml, skills and prompts in folders, hooks in
     /// hooks.json, and approvals as config keys. No plugins or custom agents.
-    static func codexOverview(for command: String, project: String) -> Overview? {
+    public static func codexOverview(for command: String, project: String) -> Overview? {
         let codex = "\(home)/.codex"
         switch command {
         case "mcp":
@@ -250,7 +250,7 @@ enum AgentConfig {
     /// `claude <arguments>` or `codex <arguments>`, run with the login shell's PATH. Returns success and the output.
     /// Runs the agent's CLI. `pty` gives it a terminal, for commands that refuse to run without
     /// one, such as `claude mcp login`, which opens the browser and waits for the callback.
-    static func run(_ arguments: [String], tool: String = "claude", timeout: TimeInterval = 180, pty: Bool = false) async -> (ok: Bool, output: String) {
+    public static func run(_ arguments: [String], tool: String = "claude", timeout: TimeInterval = 180, pty: Bool = false) async -> (ok: Bool, output: String) {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
@@ -279,12 +279,12 @@ enum AgentConfig {
         }
     }
 
-    static func validName(_ name: String) -> Bool {
+    public static func validName(_ name: String) -> Bool {
         name.range(of: #"^[\w.-]{1,64}$"#, options: .regularExpression) != nil
     }
 
     /// Adds or removes a permission rule in a settings file, keeping everything else in it.
-    static func editPermission(kind: String, rule: String, file: String, add: Bool) -> String? {
+    public static func editPermission(kind: String, rule: String, file: String, add: Bool) -> String? {
         guard ["allow", "deny", "ask"].contains(kind), !rule.isEmpty, rule.count <= 500, !rule.contains("\n") else { return "Invalid rule" }
         var settings: [String: Any] = [:]
         if FileManager.default.fileExists(atPath: file) {
@@ -308,11 +308,11 @@ enum AgentConfig {
     }
 
     /// Whether a path is one of the settings files the permissions overview reads.
-    static func isSettingsFile(_ path: String, project: String) -> Bool {
+    public static func isSettingsFile(_ path: String, project: String) -> Bool {
         settingsFiles(project: project).contains { $0.path == path }
     }
 
-    static func settingsFile(scope: String, project: String) -> String {
+    public static func settingsFile(scope: String, project: String) -> String {
         switch scope {
         case "project": return "\(project)/.claude/settings.json"
         case "local": return "\(project)/.claude/settings.local.json"
@@ -322,7 +322,7 @@ enum AgentConfig {
 
     // MARK: MCP
 
-    static func mcp(project: String) -> Overview {
+    public static func mcp(project: String) -> Overview {
         var rows: [Row] = []
         let config = json("\(home)/.claude.json") ?? [:]
         let projectConfig = (config["projects"] as? [String: Any])?[project] as? [String: Any] ?? [:]
@@ -354,22 +354,22 @@ enum AgentConfig {
     }
 
     /// One server's live state, from `claude mcp list`.
-    struct Health: Equatable {
+    public struct Health: Equatable {
         /// "on" connected, "ask" needs sign-in, "off" failed or disabled.
-        var state: String
-        var note: String
-        var target: String
+        public var state: String
+        public var note: String
+        public var target: String
     }
 
     /// Asks the CLI to connect to every server, the way a new session would, and reads what it
     /// says: connected, needs authentication, or failed with the reason. Takes a few seconds,
     /// since it starts the stdio servers. Keyed by server name as Claude Code shows it.
-    static func mcpHealth() async -> [String: Health] {
+    public static func mcpHealth() async -> [String: Health] {
         parseMCPHealth(await run(["mcp", "list"], timeout: 90).output)
     }
 
     /// `name: target - ✔ Connected`, `! Needs authentication`, or `✘ Failed to connect — reason`.
-    static func parseMCPHealth(_ output: String) -> [String: Health] {
+    public static func parseMCPHealth(_ output: String) -> [String: Health] {
         var health: [String: Health] = [:]
         let pattern = try! NSRegularExpression(pattern: #"^(.+?): (.*?) - (✔|✓|!|⚠|✘|✗) (.*)$"#)
         for line in output.split(separator: "\n") {
@@ -394,7 +394,7 @@ enum AgentConfig {
     /// The configured servers with their live state folded in, plus the ones only the CLI
     /// knows: claude.ai connectors, plugin servers and built-ins. Sign-in and reconnect go
     /// through the session's own /mcp dialog, so they apply to the running session.
-    static func mcp(project: String, health: [String: Health]) -> Overview {
+    public static func mcp(project: String, health: [String: Health]) -> Overview {
         var overview = mcp(project: project)
         var seen: Set<String> = []
         for index in overview.rows.indices {
@@ -441,17 +441,17 @@ enum AgentConfig {
 
     // MARK: Plugins
 
-    struct Plugin {
-        var name: String
-        var marketplace: String
-        var version: String
-        var scope: String
-        var path: String
-        var enabled: Bool
-        var shortName: String { name }
+    public struct Plugin {
+        public var name: String
+        public var marketplace: String
+        public var version: String
+        public var scope: String
+        public var path: String
+        public var enabled: Bool
+        public var shortName: String { name }
     }
 
-    static func installedPlugins(project: String) -> [Plugin] {
+    public static func installedPlugins(project: String) -> [Plugin] {
         let registry = json("\(home)/.claude/plugins/installed_plugins.json")?["plugins"] as? [String: Any] ?? [:]
         let settings = json("\(home)/.claude/settings.json") ?? [:]
         let enabled = settings["enabledPlugins"] as? [String: Bool] ?? [:]
@@ -470,7 +470,7 @@ enum AgentConfig {
         return result
     }
 
-    static func plugins(project: String) -> Overview {
+    public static func plugins(project: String) -> Overview {
         let list = installedPlugins(project: project)
         let rows = list.map { plugin in
             Row(name: plugin.name, detail: plugin.marketplace, note: [plugin.version, plugin.scope].filter { !$0.isEmpty }.joined(separator: " · "),
@@ -497,7 +497,7 @@ enum AgentConfig {
         return nil
     }
 
-    static func skills(project: String) -> Overview {
+    public static func skills(project: String) -> Overview {
         var rows: [Row] = []
         func add(root: String, source: String, prefix: String = "") {
             guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return }
@@ -515,7 +515,7 @@ enum AgentConfig {
         return Overview(title: "Skills", summary: "\(rows.count) available. Invoke one with /name.", rows: rows, command: "/skills")
     }
 
-    static func agents(project: String) -> Overview {
+    public static func agents(project: String) -> Overview {
         var rows: [Row] = []
         func add(root: String, source: String, prefix: String = "") {
             guard let names = try? FileManager.default.contentsOfDirectory(atPath: root) else { return }
@@ -534,7 +534,7 @@ enum AgentConfig {
                         rows: rows, command: "/agents")
     }
 
-    static func commands(project: String) -> Overview {
+    public static func commands(project: String) -> Overview {
         var rows: [Row] = []
         func add(root: String, source: String) {
             guard let enumerator = FileManager.default.enumerator(atPath: root) else { return }
@@ -555,7 +555,7 @@ enum AgentConfig {
          ("\(project)/.claude/settings.json", "project"), ("\(project)/.claude/settings.local.json", "project local")]
     }
 
-    static func hooks(project: String) -> Overview {
+    public static func hooks(project: String) -> Overview {
         var rows: [Row] = []
         for file in settingsFiles(project: project) {
             guard let hooks = json(file.path)?["hooks"] as? [String: Any] else { continue }
@@ -575,7 +575,7 @@ enum AgentConfig {
                         rows: rows, command: "/hooks")
     }
 
-    static func permissions(project: String) -> Overview {
+    public static func permissions(project: String) -> Overview {
         var rows: [Row] = []
         var mode: String?
         for file in settingsFiles(project: project) {

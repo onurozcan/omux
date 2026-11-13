@@ -1,52 +1,52 @@
 import Foundation
 
-enum RecentConversation: Identifiable {
+public enum RecentConversation: Identifiable {
     case claude(RecentSession), codex(CodexConversation)
 
-    var id: String {
+    public var id: String {
         switch self {
         case .claude(let session): return "claude:" + session.id.uuidString.lowercased()
         case .codex(let session): return "codex:" + session.id
         }
     }
-    var cwd: String {
+    public var cwd: String {
         switch self { case .claude(let s): return s.cwd; case .codex(let s): return s.cwd }
     }
-    var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
-    var prompt: String {
+    public var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
+    public var prompt: String {
         switch self { case .claude(let s): return s.prompt; case .codex(let s): return s.name }
     }
-    var date: Date {
+    public var date: Date {
         switch self { case .claude(let s): return s.date; case .codex(let s): return s.date }
     }
 }
 
 /// A Claude Code conversation found in ~/.claude/projects.
-struct RecentSession: Identifiable, Hashable {
-    let id: UUID
-    let cwd: String
-    let prompt: String
-    let date: Date
+public struct RecentSession: Identifiable, Hashable {
+    public let id: UUID
+    public let cwd: String
+    public let prompt: String
+    public let date: Date
 
-    var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
+    public var folder: String { (cwd as NSString).abbreviatingWithTildeInPath }
 
     /// Short name for a tab: first words of the first prompt.
-    var tabName: String {
+    public var tabName: String {
         let words = prompt.split(separator: " ").prefix(5).joined(separator: " ")
         return words.count > 32 ? String(words.prefix(32)) + "…" : words
     }
 
     private struct Record: Decodable {
         struct Message: Decodable {
-            let content: Content?
-            enum Content: Decodable {
+            public let content: Content?
+            public enum Content: Decodable {
                 case text(String), blocks([Block])
-                struct Block: Decodable { let text: String? }
-                init(from decoder: Decoder) throws {
+                public struct Block: Decodable { let text: String? }
+                public init(from decoder: Decoder) throws {
                     let c = try decoder.singleValueContainer()
                     if let s = try? c.decode(String.self) { self = .text(s) } else { self = .blocks(try c.decode([Block].self)) }
                 }
-                var text: String {
+                public var text: String {
                     switch self {
                     case .text(let s): return s
                     case .blocks(let b): return b.compactMap(\.text).joined(separator: " ")
@@ -62,7 +62,7 @@ struct RecentSession: Identifiable, Hashable {
     }
 
     /// Scans transcripts, newest first. Reads only the head of each file.
-    static func load(limit: Int = 300) -> [RecentSession] {
+    public static func load(limit: Int = 300) -> [RecentSession] {
         let root = URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects")
         let fm = FileManager.default
         guard let projects = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return [] }
