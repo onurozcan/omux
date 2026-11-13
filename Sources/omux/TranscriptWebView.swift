@@ -256,7 +256,7 @@ struct TranscriptWebView: NSViewRepresentable {
             Task { @MainActor in
                 guard let url = action.request.url else { decisionHandler(.cancel); return }
                 if url.isFileURL { decisionHandler(.allow); return }
-                if ["http", "https", "mailto"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
+                if ["http", "https", "mailto"].contains(url.scheme ?? "") { Store.shared.openLink(url, in: self.page?.session) }
                 decisionHandler(.cancel)
             }
         }
@@ -269,7 +269,7 @@ struct TranscriptWebView: NSViewRepresentable {
                 case "open":
                     if let href = body["href"] as? String, let url = URL(string: href),
                        ["http", "https", "mailto"].contains(url.scheme ?? "") {
-                        NSWorkspace.shared.open(url)
+                        Store.shared.openLink(url, in: page?.session)
                     }
                 case "copy":
                     if let text = body["text"] as? String {
