@@ -89,8 +89,16 @@ public enum Mirror {
     public static func apply(_ update: Update, to folder: URL) throws {
         func url(_ path: String) throws -> URL {
             // Only ever inside the folder: a path that climbs out of it is refused.
-            guard !path.hasPrefix("/"), !path.split(separator: "/").contains("..") else { throw Failure.outside(path) }
-            return folder.appendingPathComponent(path)
+            // Judged as the file system reads it, byte by byte: split as text, a "/" with a
+            // combining mark after it is no separator, and the ".." beside it goes unseen.
+            let parts = path.utf8.split(separator: UInt8(ascii: "/"), omittingEmptySubsequences: false)
+            guard !path.isEmpty, !path.utf8.contains(0), !parts.contains(where: { $0.isEmpty || $0.elementsEqual("..".utf8) || $0.elementsEqual(".".utf8) }) else {
+                throw Failure.outside(path)
+            }
+            // And as it resolves: the place it names must be inside the folder.
+            let file = folder.appendingPathComponent(path).standardizedFileURL
+            guard file.path.hasPrefix(folder.standardizedFileURL.path + "/") else { throw Failure.outside(path) }
+            return file
         }
         switch update {
         case .synced:

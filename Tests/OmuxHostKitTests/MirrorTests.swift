@@ -82,6 +82,12 @@ final class MirrorTests: XCTestCase {
         XCTAssertEqual(read("\(session).jsonl"), "once\n")
         XCTAssertThrowsError(try Mirror.apply(.data(path: "../escaped.txt", offset: 0, data: Data("x".utf8)), to: copy))
         XCTAssertThrowsError(try Mirror.apply(.data(path: "/tmp/escaped.txt", offset: 0, data: Data("x".utf8)), to: copy))
+        // A "/" followed by a combining mark is one character to Swift and a separator to
+        // the file system: the ".." before it must still be seen.
+        for path in ["../\u{0301}x", "a/../\u{0301}x", "a//b", "./x", "a/./b", "", "a\u{0}b"] {
+            XCTAssertThrowsError(try Mirror.apply(.data(path: path, offset: 0, data: Data("x".utf8)), to: copy), path.debugDescription)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: copy.deletingLastPathComponent().appendingPathComponent("\u{0301}x").path))
     }
 
     func testServingStopsWhenTheOtherSideIsGone() throws {
