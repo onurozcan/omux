@@ -1,5 +1,6 @@
 # SwiftPM build output
 .build/
+.build-linux/
 .swiftpm/
 
 # App bundle made by build.sh
