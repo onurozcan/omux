@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import omux
 @testable import OmuxCore
@@ -12,6 +13,21 @@ final class TranscriptTests: XCTestCase {
 
     private func object(_ json: String) -> [String: Any] {
         try! JSONSerialization.jsonObject(with: Data(json.utf8)) as! [String: Any]
+    }
+
+    /// The model announces changes by hand since it left SwiftUI's @Published behind for the
+    /// core: views and the session host must both hear a new block before it lands.
+    func testAChangeIsAnnouncedToSwiftUIAndToTheHost() {
+        let m = model()
+        var published = 0, called = 0
+        let watching = m.objectWillChange.sink { published += 1 }
+        m.onChange = { called += 1 }
+        let before = m.version
+        m.ingest([object(#"{"type":"user","timestamp":"2026-11-04T10:00:00.000Z","message":{"role":"user","content":"hello"}}"#)])
+        XCTAssertGreaterThan(m.version, before)
+        XCTAssertGreaterThan(published, 0)
+        XCTAssertEqual(published, called)
+        watching.cancel()
     }
 
     func testTurnsToolsAndResults() {

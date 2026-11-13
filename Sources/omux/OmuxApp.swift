@@ -944,6 +944,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ShellPath.warmUp()
+        Timing.logToSystem()
+        SessionTranscript.playAgentName = { UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? "Codex" : "Claude Code" }
         ClaudeModels.shared.refresh()
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()

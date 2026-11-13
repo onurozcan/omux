@@ -51,7 +51,7 @@ final class CodexManager: ObservableObject {
     var onStatus: ((UUID, CodexStatus) -> Void)?
     /// What a session's thread does, for the transcript showing it: items starting and
     /// completing, turns, and the reply's text as it streams in.
-    enum TranscriptEvent { case item(id: String, type: String, completed: Bool), turn(completed: Bool), delta(item: String, text: String) }
+    typealias TranscriptEvent = CodexTranscriptEvent
     private var transcriptListeners: [UUID: (TranscriptEvent) -> Void] = [:]
     func listen(_ tabID: UUID, _ handler: ((TranscriptEvent) -> Void)?) { transcriptListeners[tabID] = handler }
     @Published private(set) var approvals: [String: [CodexApproval]] = [:]
