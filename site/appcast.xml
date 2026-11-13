@@ -3,6 +3,35 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.11.2</title>
+            <pubDate>Fri, 13 Nov 2026 20:55:32 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>0.11.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Changed</h3>
+<ul>
+<li><strong>Pages open in the Browser tab.</strong> Choosing an <code>.html</code> file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.</li>
+<li><strong>A project moves to the top of the sidebar when it is activated.</strong> That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.</li>
+<li><strong>The sidebar closes.</strong> A button at the left of the session header, Sidebar in the View menu, or ⌃⌘S hides the project list and brings it back, like the right panel; it stays as you left it across launches.</li>
+<li><strong>Agents have their own tab.</strong> The right panel gains Agents (⌥⌘4), beside Files, Changes and Browser: the session's subagents with what each is doing, a count of those still running on the tab, and the transcript of the one you pick. Clicking an agent anywhere opens it there; Files keeps the file you were looking at.</li>
+<li><strong>A Neutral accent.</strong> Settings › Appearance › Accent has a Neutral choice: the send button, the compose box's focus ring, pickers, prominent buttons, selection and links go grey, links told apart by an underline, while the sidebar keeps the system's colour.</li>
+<li><strong>Your prompts sit in a neutral bubble in dark themes.</strong> The blue-grey tint is gone; the bubble is a plain lighter shade of the background.</li>
+<li><strong>Less redrawing while agents work.</strong> A session's status line used to redraw every view of every session each time it changed, many times a turn; now it redraws that session's row, header and transcript only, and the rest of the window hears just what matters to it, such as a session starting work or asking for you. The question card parses the terminal only when its screen changes, the scan for mentioned files runs only while the Files list is in view, and the count on the Agents tab no longer redraws the whole right panel.</li>
+<li><strong>Smoother motion in the transcript.</strong> The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>Done no longer shows before the reply.</strong> Claude Code reports a turn over a moment before it writes the reply to the transcript, so Done appeared over a blank and the text landed after it. The card now stays on Working, with the last of the reply read off the screen, until the reply is in; then Done and the message arrive together.</li>
+<li><strong>The question card reads as a choice list.</strong> Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.2/omux-0.11.2.zip" length="5965584" type="application/octet-stream" sparkle:edSignature="i63c6Tj6sm0W7+23xqwUhRWzCfqm4DTp8ZVCpeQW557hWekRFwi9xY8XeC6uAQ/N5O15+kGtn/iKEo9XG+hEAA=="/>
+        </item>
+        <item>
             <title>0.11.1</title>
             <pubDate>Wed, 11 Nov 2026 11:35:35 +0300</pubDate>
             <link>https://omux.app</link>
@@ -54,34 +83,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.0/omux-0.11.0.zip" length="5901736" type="application/octet-stream" sparkle:edSignature="PRJIUAmbuLnV0zbaDWBcRYrLi9NTYSEyTyLgY8b3qyla4XfGcpPPyYHhvNDnEGfJKP/eYWVsPqNp3jcItRjJBw=="/>
-        </item>
-        <item>
-            <title>0.10.1</title>
-            <pubDate>Sat, 07 Nov 2026 22:51:04 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>14</sparkle:version>
-            <sparkle:shortVersionString>0.10.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Changed</h3>
-<ul>
-<li><strong>Projects in the sidebar sit in the order they were last put to work.</strong> When an agent starts a turn in a project, after a prompt, an answered permission or its start, the project moves to the top and the others shift down. Status ticks during a turn don't reorder, so two projects working side by side hold their places. Dragging a project or Move Up/Down still works and holds until the next turn starts somewhere.</li>
-<li><strong>▶ in a plain shell of a project with history resumes its latest conversation.</strong> A new shell in a project whose sessions were all closed used to start Claude Code from nothing; it now picks up the folder's newest conversation, skipping one that another session holds. New sessions made from the + button still start fresh.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li><strong>A prompt sent while the agent starts leaves the box right away</strong> and shows as sending. It used to stay in the box until the agent was up, looking stuck, and Return again sent it a second time, so the agent got it twice, or several times, at once. A prompt the agent never took comes back to the box.</li>
-<li><strong>Prompts held behind a Claude Code dialog go out one at a time</strong> once it closes, instead of pasted together as one prompt. Queued prompts now say what they wait on: Claude Code reads its queue when the running tool call returns, not only at the end of the turn.</li>
-<li><strong>A subagent stopped with TaskStop no longer stays listed as running</strong> under its session for half an hour. Claude Code never marks it finished; once the session is idle and lists no such child, omux shows it as done and drops it after the usual while.</li>
-<li><strong>A refused /restart is done by omux.</strong> Claude Code can't restart itself while Remote Control is connected; when it says so, omux exits it and resumes the conversation, as the message asks. Run /remote-control again afterwards.</li>
-<li><strong>An attached image no longer stays in the compose box after sending</strong> when the message went out later: once the agent was up, or once a dialog was answered.</li>
-<li><strong>omux no longer redraws the window ten times a second while an agent works.</strong> Claude Code and Codex animate a spinner in the terminal title; each frame counted as a title change and re-rendered everything. With a dozen sessions open that kept the app busy enough to stop answering Accessibility.</li>
-<li><strong>Picking "default" in the permission-mode chip</strong> cycled past it and landed back where it started: Claude Code's status line says nothing in the default mode, and the chip only knew the named ones.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.10.1/omux-0.10.1.zip" length="5844775" type="application/octet-stream" sparkle:edSignature="NFDXirOWvTapVnqGhfgmpBJ/CJSUOztpPRdcRdgt8z7dQg/kcwp3/+Q4A8iPVvnjtUaZmiw8c3bLeE2agB6ZDw=="/>
         </item>
     </channel>
 </rss>
