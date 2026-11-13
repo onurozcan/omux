@@ -1,4 +1,5 @@
 import Foundation
+import OmuxCore
 import OmuxHostKit
 #if canImport(Glibc)
 import Glibc
@@ -20,6 +21,11 @@ omux-host new [--name NAME] [--dir DIR] [--attach] [-- PROGRAM ARGS…]
 omux-host list                the sessions here
 omux-host attach SESSION      show a session and type into it; Ctrl-\\ leaves it running
 omux-host close SESSION       hang up on a running session, or clear an ended one
+omux-host session ID [--dir DIR] [--name NAME] [--run COMMAND]
+                              show the session with this id, starting it first if it isn't
+                              running: a login shell, with COMMAND typed into it
+omux-host mirror --dir DIR --session ID
+                              send a Claude Code session's files as they grow (for the app)
 omux-host serve               run the host in the foreground (it starts itself when needed)
 omux-host connect             speak the host's protocol on standard input and output
 omux-host version
@@ -189,6 +195,78 @@ case "close":
     guard let name = arguments.first else { fail("close needs a session") }
     let client = connect()
     if case .failed(let why) = client.request(.close(session: find(name, client).id)) { fail(why) }
+
+case "session":
+    // What the app runs at the far end of SSH for a session of its own: the one with this id
+    // if it is still running, as after a dropped connection or a restart of the app; else new.
+    guard let id = arguments.first else { fail("session needs an id") }
+    var request = StartRequest(id: id)
+    var rest = Array(arguments.dropFirst())
+    while let argument = rest.first {
+        rest.removeFirst()
+        guard !rest.isEmpty else { fail("\(argument) needs a value") }
+        switch argument {
+        case "--name": request.name = rest.removeFirst()
+        case "--dir": request.directory = rest.removeFirst()
+        case "--run": request.initialInput = rest.removeFirst() + "\n"
+        default: fail("unknown option \(argument)")
+        }
+    }
+    if let size = terminalSize() { request.columns = size.columns; request.rows = size.rows }
+    let client = connect()
+    switch client.request(.start(request: request)) {
+    case .started(let info): attach(info, client)
+    case .failed(let why): fail(why)
+    default: fail("the host didn't start the session")
+    }
+
+case "mirror":
+    var directory: String?
+    var session: String?
+    var rest = arguments
+    while let argument = rest.first {
+        rest.removeFirst()
+        guard !rest.isEmpty else { fail("\(argument) needs a value") }
+        switch argument {
+        case "--dir": directory = rest.removeFirst()
+        case "--session": session = rest.removeFirst()
+        default: fail("unknown option \(argument)")
+        }
+    }
+    guard let directory, let session else { fail("mirror needs --dir and --session") }
+    let folder = (directory as NSString).expandingTildeInPath
+    let root = ClaudePaths.projectURL(for: folder.isEmpty ? NSHomeDirectory() : folder).path
+    // The other side says first what it holds; then standard input stays open for as long
+    // as it is there, and its end is the sign to stop.
+    final class Input: @unchecked Sendable { var have = Mirror.Have(); var closed = false; let ready = DispatchSemaphore(value: 0) }
+    let input = Input()
+    Thread.detachNewThread {
+        var splitter = Wire.Splitter()
+        var buffer = [UInt8](repeating: 0, count: 64 << 10)
+        var told = false
+        while true {
+            let count = read(STDIN_FILENO, &buffer, buffer.count)
+            if count <= 0 { if count < 0, errno == EINTR { continue }; break }
+            if !told, let frame = (try? splitter.feed(Data(buffer[0..<count])))?.first, let have = try? Wire.decode(Mirror.Have.self, from: frame) {
+                input.have = have; told = true; input.ready.signal()
+            }
+        }
+        input.closed = true
+        input.ready.signal()
+    }
+    _ = input.ready.wait(timeout: .now() + 5)
+    Mirror.serve(root: root, session: session, have: input.have, stopped: { input.closed }) { update in
+        guard let frame = try? Wire.encode(update) else { return true }
+        return frame.withUnsafeBytes { bytes in
+            var sent = 0
+            while sent < bytes.count {
+                let wrote = write(STDOUT_FILENO, bytes.baseAddress! + sent, bytes.count - sent)
+                if wrote <= 0 { if wrote < 0, errno == EINTR { continue }; return false }
+                sent += wrote
+            }
+            return true
+        }
+    }
 
 case "connect":
     // Standard input and output become the socket: what the app runs at the far end of SSH.

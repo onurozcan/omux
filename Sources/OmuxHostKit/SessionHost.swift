@@ -89,7 +89,17 @@ public final class SessionHost: @unchecked Sendable {
 
     private func start(_ request: StartRequest) -> HostMessage {
         var id: String
-        repeat { id = String(format: "%08x", UInt32.random(in: 0...UInt32.max)) } while sessions[id] != nil
+        if let wanted = request.id, !wanted.isEmpty {
+            // Asked for by id: the one running is the answer, and one that ended makes room.
+            if let existing = sessions[wanted] {
+                if existing.info.exited == nil { return .started(info: existing.info) }
+                sessions[wanted] = nil
+                order.removeAll { $0 == wanted }
+            }
+            id = wanted
+        } else {
+            repeat { id = String(format: "%08x", UInt32.random(in: 0...UInt32.max)) } while sessions[id] != nil
+        }
         let home = NSHomeDirectory()
         let directory = request.directory.map { ($0 as NSString).expandingTildeInPath } ?? home
         var isDirectory: ObjCBool = false
@@ -119,6 +129,10 @@ public final class SessionHost: @unchecked Sendable {
         }
         sessions[id] = session
         order.append(id)
+        if let input = request.initialInput, !input.isEmpty {
+            // A beat for the shell to come up; a terminal holds what is typed before the prompt.
+            queue.asyncAfter(deadline: .now() + 0.4) { [weak session] in session?.process?.write(input) }
+        }
         return .started(info: info)
     }
 

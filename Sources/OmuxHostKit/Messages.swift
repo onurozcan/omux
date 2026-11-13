@@ -29,6 +29,12 @@ public struct SessionInfo: Codable, Equatable, Sendable {
 }
 
 public struct StartRequest: Codable, Equatable, Sendable {
+    /// The id the session is to have, when the client keeps its own, as the app does with a
+    /// tab's. A running session with that id is answered with, not started twice.
+    public var id: String?
+    /// Typed into the program once it is up: an agent's command into a new shell. Not typed
+    /// when the session was already running.
+    public var initialInput: String?
     public var name: String?
     /// The folder to start in; the host's home folder when nil.
     public var directory: String?
@@ -39,7 +45,9 @@ public struct StartRequest: Codable, Equatable, Sendable {
     public var columns: Int
     public var rows: Int
 
-    public init(name: String? = nil, directory: String? = nil, command: [String] = [], environment: [String: String] = [:], columns: Int = 80, rows: Int = 24) {
+    public init(id: String? = nil, name: String? = nil, directory: String? = nil, command: [String] = [], environment: [String: String] = [:],
+                initialInput: String? = nil, columns: Int = 80, rows: Int = 24) {
+        self.id = id; self.initialInput = initialInput
         self.name = name; self.directory = directory; self.command = command; self.environment = environment; self.columns = columns; self.rows = rows
     }
 }

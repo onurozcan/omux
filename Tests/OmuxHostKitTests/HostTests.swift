@@ -141,6 +141,33 @@ final class HostTests: XCTestCase {
         XCTAssertTrue(screen.text.contains(String(format: "%0100d", 1999)), "the end is there")
     }
 
+    /// The app names its sessions itself and asks again after a restart or a dropped
+    /// connection: the running one is the answer, with nothing typed into it a second time.
+    func testASessionAskedForByIdIsStartedOnceAndGetsItsCommandOnce() throws {
+        let screen = Screen()
+        let client = try client(screen)
+        let request = StartRequest(id: "tab-1", directory: "/usr", command: ["/bin/sh"], initialInput: "echo typed-$((40+2))\n")
+        guard case .started(let first) = client.request(.start(request: request)) else { return XCTFail() }
+        XCTAssertEqual(first.id, "tab-1")
+        _ = client.request(.attach(session: "tab-1", from: nil))
+        until { screen.text.contains("typed-42") }
+        XCTAssertTrue(screen.text.contains("typed-42"), screen.text)
+
+        guard case .started(let second) = client.request(.start(request: request)) else { return XCTFail() }
+        XCTAssertEqual(second.started, first.started, "the same session, not a second one")
+        Thread.sleep(forTimeInterval: 0.8)
+        XCTAssertEqual(screen.text.components(separatedBy: "typed-42").count - 1, 1, "typed once")
+        guard case .sessions(let list) = client.request(.list) else { return XCTFail() }
+        XCTAssertEqual(list.count, 1)
+
+        // Ended, its id is free for a new session.
+        _ = client.request(.input(session: "tab-1", data: Data("exit\n".utf8)))
+        until { screen.status != nil }
+        guard case .started(let third) = client.request(.start(request: request)) else { return XCTFail() }
+        XCTAssertNotEqual(third.started, first.started)
+        XCTAssertNil(third.exited)
+    }
+
     func testWhatCannotBeDoneIsSaid() throws {
         let client = try client()
         if case .failed = client.request(.attach(session: "nope", from: nil)) {} else { XCTFail() }

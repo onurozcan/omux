@@ -14,7 +14,7 @@ var targets: [Target] = [
     // The session host: the protocol, the sessions it keeps, and the socket it answers on.
     .target(name: "OmuxHostKit", dependencies: ["OmuxCore"], path: "Sources/OmuxHostKit"),
     // The host as a program, and the command line that talks to it: `omux-host`.
-    .executableTarget(name: "omux-host", dependencies: ["OmuxHostKit"], path: "Sources/omux-host"),
+    .executableTarget(name: "omux-host", dependencies: ["OmuxHostKit", "OmuxCore"], path: "Sources/omux-host"),
     .testTarget(name: "OmuxHostKitTests", dependencies: ["OmuxHostKit"]),
 ]
 

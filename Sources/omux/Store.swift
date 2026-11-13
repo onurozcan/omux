@@ -977,8 +977,7 @@ final class Store: ObservableObject {
     /// Claude Code's folder name for a project: its path with everything but ASCII letters
     /// and digits turned into "-".
     nonisolated static func claudeProjectFolder(for directory: String) -> String {
-        let path = ((directory as NSString).expandingTildeInPath as NSString).standardizingPath
-        return String(path.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+        ClaudePaths.projectFolder(for: ((directory as NSString).expandingTildeInPath as NSString).standardizingPath)
     }
 
     /// The folder's newest Claude conversation that has something in it, skipping the ones
