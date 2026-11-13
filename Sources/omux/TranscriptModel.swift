@@ -1178,6 +1178,25 @@ final class SessionTranscript: ObservableObject {
         return waiting.map { blocks[$0].text }.joined(separator: "\n\n")
     }
 
+    /// Whether a prompt still shows as waiting in the agent's queue.
+    var hasQueuedEchoes: Bool { blocks.contains { $0.kind == .user && ($0.pending == "queued" || $0.pending == "queuing") } }
+
+    /// Called once the agent has been idle for a moment. An agent with a prompt in its queue
+    /// starts on it at once, so whatever still shows as queued then was taken without a record
+    /// this reader matched: the prompts stand as sent, where they are, and no label waits on a
+    /// record that isn't coming.
+    func settleQueue() {
+        var list = blocks
+        var touched: Set<Int> = []
+        for index in list.indices where list[index].kind == .user && (list[index].pending == "queued" || list[index].pending == "queuing") {
+            list[index].pending = nil
+            touched.insert(index)
+        }
+        guard !touched.isEmpty else { return }
+        takenEchoes = []; dequeues = 0
+        commit(list, touched: touched)
+    }
+
     /// Drops a queued prompt the user pulled back: the block stays, hidden, since ids are positions.
     func dismissEcho(_ id: Int) {
         guard blocks.indices.contains(id), blocks[id].pending != nil else { return }
