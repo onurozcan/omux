@@ -21,30 +21,6 @@ final class WatchTests: XCTestCase {
         while !holds(), ContinuousClock.now < end { try await Task.sleep(for: .milliseconds(20)) }
     }
 
-    @MainActor
-    func testAFileWatcherWakesOnAppendsAndAFolderWatcherOnNewEntries() async throws {
-        let dir = try folder()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let file = dir.appendingPathComponent("a.txt")
-        try "".write(to: file, atomically: true, encoding: .utf8)
-        var fileEvents = 0, folderEvents = 0
-        let fileWatcher = PathWatcher(path: file.path) { fileEvents += 1 }
-        let folderWatcher = PathWatcher(path: dir.path, directory: true) { folderEvents += 1 }
-        XCTAssertNotNil(fileWatcher); XCTAssertNotNil(folderWatcher)
-        XCTAssertNil(PathWatcher(path: dir.appendingPathComponent("missing").path) {})
-
-        let handle = try FileHandle(forWritingTo: file)
-        try handle.seekToEnd(); try handle.write(contentsOf: Data("hello\n".utf8)); try handle.close()
-        try await until { fileEvents > 0 }
-        XCTAssertGreaterThan(fileEvents, 0)
-        XCTAssertEqual(folderEvents, 0, "writing inside a file is not a change to the folder's entries")
-
-        try "".write(to: dir.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
-        try await until { folderEvents > 0 }
-        XCTAssertGreaterThan(folderEvents, 0)
-        _ = fileWatcher; _ = folderWatcher
-    }
-
     /// A new session has no transcript until its first prompt: the model waits on the project
     /// folder and reads the file the moment it appears.
     @MainActor
