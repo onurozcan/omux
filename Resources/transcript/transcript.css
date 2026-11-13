@@ -271,3 +271,9 @@ body.compact .tools { font-size: 11px; }
 body.bubbles-outline .user .bubble { background: transparent; border-color: var(--line); }
 body.bubbles-plain .user .bubble { background: transparent; border: none; padding: 2px 0; border-left: 2px solid var(--accent); padding-left: 10px; border-radius: 0; }
 body.no-times .user .time { display: none; }
+
+/* Neutral accent: no colour for links and the like, so they are told apart by an underline. */
+body.neutral a, body.neutral .path, body.neutral .more-output, body.neutral .tool .changes, body.neutral .info-head .manage { color: var(--fg); }
+body.neutral a { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
+body.neutral .path { border-bottom-color: var(--faint); }
+body.neutral ::selection { background: rgba(128,128,128,0.35); }

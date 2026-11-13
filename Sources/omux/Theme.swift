@@ -147,8 +147,9 @@ enum Theme: String, CaseIterable, Identifiable {
 
 /// The accent colour and the transcript's typography and layout, from Settings.
 enum Appearance {
-    /// Accent choices: the system's, the theme's blue, or a fixed colour.
-    static let accents: [(id: String, label: String)] = [("system", "System"), ("theme", "Theme"), ("blue", "Blue"), ("purple", "Purple"), ("pink", "Pink"),
+    /// Accent choices: the system's, the theme's blue, a fixed colour, or none: Neutral greys
+    /// everything but the sidebar, whose selection keeps the system's colour.
+    static let accents: [(id: String, label: String)] = [("system", "System"), ("neutral", "Neutral"), ("theme", "Theme"), ("blue", "Blue"), ("purple", "Purple"), ("pink", "Pink"),
                                                         ("red", "Red"), ("orange", "Orange"), ("yellow", "Yellow"), ("green", "Green"), ("graphite", "Graphite")]
 
     static func accent(_ choice: String, theme: Theme) -> NSColor {
@@ -162,6 +163,7 @@ enum Appearance {
         case "yellow": return NSColor(hex: 0xD9A50B)
         case "green": return NSColor(hex: 0x22A55B)
         case "graphite": return NSColor(hex: 0x8E8E93)
+        case "neutral": return NSColor(hex: 0x808086)
         default: return .controlAccentColor
         }
     }

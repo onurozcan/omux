@@ -857,6 +857,7 @@
     const root = document.documentElement.style;
     if (theme.bg) root.setProperty('--bg', theme.bg);
     if (theme.fg) root.setProperty('--fg', theme.fg);
+    document.body.classList.toggle('neutral', !!theme.neutral);
     if (theme.accent) {
       root.setProperty('--accent', theme.accent);
       root.setProperty('--accent-soft', theme.accentSoft || theme.accent);

@@ -175,7 +175,7 @@ private struct AppearanceSettings: View {
                         .tag(choice.id)
                     }
                 }
-                SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue.")
+                SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue. Neutral is grey everywhere but the sidebar, which keeps the system's colour.")
             }
             Section("Terminal") {
                 Picker("Font", selection: $fontFamily) {
@@ -394,6 +394,7 @@ struct ContentView: View {
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
     @AppStorage(Prefs.showFiles) private var showFiles = false
     @AppStorage(Prefs.showSidebar) private var showSidebar = true
+    @AppStorage(Prefs.accent) private var accentChoice = "system"
     @AppStorage("panelWidth") private var panelWidth = 250.0
 
     /// The sidebar closes like the right panel does, and stays closed across launches.
@@ -420,6 +421,8 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: columns) {
             Sidebar(theme: theme)
+                // Neutral leaves the sidebar its colour: the rest of the window goes grey.
+                .tint(Color(nsColor: accentChoice == "neutral" ? .controlAccentColor : Appearance.accent(accentChoice, theme: theme)))
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             HStack(spacing: 0) {

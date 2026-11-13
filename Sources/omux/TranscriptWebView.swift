@@ -227,7 +227,7 @@ struct TranscriptWebView: NSViewRepresentable {
             let font = Fonts.terminal()
             let object: [String: Any] = [
                 "bg": hex(theme.background), "fg": hex(theme.foreground), "accent": hex(accent), "accentSoft": soft,
-                "dark": luminance(theme.background) < 0.5,
+                "dark": luminance(theme.background) < 0.5, "neutral": style.accent == "neutral",
                 "mono": "'\(font.familyName ?? "Menlo")', ui-monospace, Menlo, monospace",
                 "font": style.fontStack, "size": style.size, "width": style.width, "density": style.density,
                 "bubbles": style.bubbles, "timestamps": style.timestamps,
