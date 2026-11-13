@@ -277,3 +277,8 @@ body.neutral a, body.neutral .path, body.neutral .more-output, body.neutral .too
 body.neutral a { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
 body.neutral .path { border-bottom-color: var(--faint); }
 body.neutral ::selection { background: rgba(128,128,128,0.35); }
+/* Neutral also greys the working colour: the Bash tag, running rows, spinners, the caret and the Working dot. */
+body.neutral { --blue: #9a9aa0; }
+body.neutral .tag.bash { background: rgba(128,128,128,0.16); }
+body.neutral .spin { border-color: rgba(128,128,128,0.3); border-top-color: var(--blue); }
+html.light body.neutral { --blue: #6e6e73; }

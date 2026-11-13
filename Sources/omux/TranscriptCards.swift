@@ -365,7 +365,7 @@ struct ScreenPromptCard: View {
             let lines = store.screenLines(tabID, count: 14)
             let text = lines.joined(separator: "\n")
             if text.contains(ClaudeScreen.switchModel) || text.contains(ClaudeScreen.changeEffort) {
-                Card(color: Palette.working, title: text.contains(ClaudeScreen.switchModel) ? ClaudeScreen.switchModel : ClaudeScreen.changeEffort) {
+                Card(color: Color.accent, title: text.contains(ClaudeScreen.switchModel) ? ClaudeScreen.switchModel : ClaudeScreen.changeEffort) {
                     HStack(spacing: 8) {
                         Button("Yes, switch") { store.sendKeys("\r", to: tabID) }.buttonStyle(.borderedProminent)
                         Button("No, go back") { store.sendKeys("\u{1b}", to: tabID) }.buttonStyle(.bordered)
@@ -375,7 +375,7 @@ struct ScreenPromptCard: View {
                     .font(.system(size: 11))
                 }
             } else if text.localizedCaseInsensitiveContains(ClaudeScreen.trustFolder) {
-                Card(color: Palette.working, title: "Claude Code asks whether to trust this folder") {
+                Card(color: Color.accent, title: "Claude Code asks whether to trust this folder") {
                     HStack(spacing: 8) {
                         Button("Trust folder") {
                             // Its menu starts on "No, exit": move down one row, then confirm.
@@ -390,7 +390,7 @@ struct ScreenPromptCard: View {
                     .font(.system(size: 11))
                 }
             } else if starting, !lines.isEmpty {
-                Card(color: Palette.working, title: "Starting · answer in the terminal if it asks something") {
+                Card(color: Color.accent, title: "Starting · answer in the terminal if it asks something") {
                     Text(lines.suffix(6).joined(separator: "\n"))
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(.secondary)
