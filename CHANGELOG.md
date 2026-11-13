@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Changed
+- **Neutral reaches the transcript's working colour.** With the Neutral accent, the Bash tag, running tool rows, spinners, the reply's caret, the Working dot and the starting cards are grey too. The sidebar and the session header keep the working blue.
+
 ## [0.11.2] - 2026-11-13
 
 ### Changed
