@@ -33,18 +33,25 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    container: swift:6.2
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Tools for packing
-        run: apt-get update -qq && apt-get install -y -qq xz-utils binutils
+      # Built on Amazon Linux 2 for its old C library (2.26): the program then runs on that
+      # version and every later one, which reaches Debian 10, Ubuntu 18.04, RHEL 8 and up.
+      # Run by hand, not as the job's container: the actions themselves need a newer one.
       - name: Build
-        run: swift build -c release --product omux-host --static-swift-stdlib
+        run: |
+          docker run --rm -v "$PWD":/src -w /src swift:6.2-amazonlinux2 \
+            swift build -c release --product omux-host --static-swift-stdlib
       - name: Pack
         run: |
           mkdir -p out
+          sudo chown -R "$(id -u)" .build
           strip -o out/omux-host-linux-${{ matrix.arch }} .build/release/omux-host
+          # Nothing newer than the baseline may be asked of the machine it lands on.
+          needs=$(objdump -T out/omux-host-linux-${{ matrix.arch }} | grep -o 'GLIBC_[0-9.]*' | sort -V | uniq | tail -1)
+          echo "Needs $needs"
+          [ "$(printf '%s\n' "$needs" GLIBC_2.26 | sort -V | tail -1)" = "GLIBC_2.26" ] || { echo "Built against too new a C library"; exit 1; }
           cd out
           # The hash is of the program itself: what the app compares with the copy on a machine.
           sha256sum omux-host-linux-${{ matrix.arch }} | cut -d' ' -f1 > omux-host-linux-${{ matrix.arch }}.sha256

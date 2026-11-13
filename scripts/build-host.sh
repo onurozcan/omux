@@ -16,9 +16,12 @@ mkdir -p build/host
 
 build() {  # docker platform, name suffix
   echo "Building omux-host for linux/$2…"
-  docker run --rm --platform "linux/$1" -v "$PWD":/src -w /src swift:6.2 bash -c "
-    swift build -c release --product omux-host --static-swift-stdlib --scratch-path .build-linux-$2 2>&1 | tail -1 &&
-    strip -o build/host/omux-host-linux-$2 .build-linux-$2/release/omux-host"
+  # Built on Amazon Linux 2 for its old C library (2.26): a program runs on that version and
+  # every later one, so this reaches Debian 10, Ubuntu 18.04, RHEL 8 and up. Built on a
+  # current Ubuntu it asked for 2.38, and wouldn't start on Debian 12 or Ubuntu 22.04.
+  docker run --rm --platform "linux/$1" -v "$PWD":/src -w /src swift:6.2-amazonlinux2 bash -c "
+    swift build -c release --product omux-host --static-swift-stdlib --scratch-path .build-al2-$2 2>&1 | tail -1 &&
+    strip -o build/host/omux-host-linux-$2 .build-al2-$2/release/omux-host"
   pack "build/host/omux-host-linux-$2"
 }
 
