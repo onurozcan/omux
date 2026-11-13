@@ -49,11 +49,47 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
+<article class="release" id="vUnreleased">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#vUnreleased">Unreleased</a></h2>
+    <span class="badge badge-latest">Latest</span>
+    <p></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/vUnreleased">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+</ul>
+  </div>
+</article>
+<article class="release" id="v0.11.2">
+  <div class="release-rail"><span class="node"></span></div>
+  <div class="release-meta">
+    <h2><a href="#v0.11.2">0.11.2</a></h2>
+    
+    <p><time datetime="2026-11-13">November 13, 2026</time></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.11.2">Release on GitHub</a></p>
+  </div>
+  <div class="release-body">
+<ul class="entries">
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Pages open in the Browser tab.</strong> Choosing an <code>.html</code> file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>A project moves to the top of the sidebar when it is activated.</strong> That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>The sidebar closes.</strong> A button at the left of the session header, Sidebar in the View menu, or ⌃⌘S hides the project list and brings it back, like the right panel; it stays as you left it across launches.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Agents have their own tab.</strong> The right panel gains Agents (⌥⌘4), beside Files, Changes and Browser: the session's subagents with what each is doing, a count of those still running on the tab, and the transcript of the one you pick. Clicking an agent anywhere opens it there; Files keeps the file you were looking at.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>A Neutral accent.</strong> Settings › Appearance › Accent has a Neutral choice: the send button, the compose box's focus ring, pickers, prominent buttons, selection and links go grey, links told apart by an underline, while the sidebar keeps the system's colour.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Your prompts sit in a neutral bubble in dark themes.</strong> The blue-grey tint is gone; the bubble is a plain lighter shade of the background.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Less redrawing while agents work.</strong> A session's status line used to redraw every view of every session each time it changed, many times a turn; now it redraws that session's row, header and transcript only, and the rest of the window hears just what matters to it, such as a session starting work or asking for you. The question card parses the terminal only when its screen changes, the scan for mentioned files runs only while the Files list is in view, and the count on the Agents tab no longer redraws the whole right panel.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>Smoother motion in the transcript.</strong> The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Done no longer shows before the reply.</strong> Claude Code reports a turn over a moment before it writes the reply to the transcript, so Done appeared over a blank and the text landed after it. The card now stays on Working, with the last of the reply read off the screen, until the reply is in; then Done and the message arrive together.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>The question card reads as a choice list.</strong> Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.</div></li>
+</ul>
+  </div>
+</article>
 <article class="release" id="v0.11.1">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
     <h2><a href="#v0.11.1">0.11.1</a></h2>
-    <span class="badge badge-latest">Latest</span>
+    
     <p><time datetime="2026-11-11">November 11, 2026</time></p>
     <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.11.1">Release on GitHub</a></p>
   </div>

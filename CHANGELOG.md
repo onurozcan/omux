@@ -4,6 +4,8 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-11-13
+
 ### Changed
 - **Pages open in the Browser tab.** Choosing an `.html` file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.
 - **A project moves to the top of the sidebar when it is activated.** That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.
