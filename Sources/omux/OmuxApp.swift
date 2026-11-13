@@ -36,6 +36,7 @@ enum Prefs {
     static let theme = "theme"
     static let autoResume = "autoResume"
     static let showFiles = "showFiles"
+    static let showSidebar = "showSidebar"
     static let filesByDate = "filesByDate"
     static let filesBrowserCollapsed = "filesBrowserCollapsed"
     static let previewWrapLines = "previewWrapLines"
@@ -66,7 +67,7 @@ enum Prefs {
     static let transcriptBubbles = "transcriptBubbles"
     static let transcriptTimestamps = "transcriptTimestamps"
 
-    static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, filesByDate,
+    static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
                       sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
@@ -392,7 +393,13 @@ struct ContentView: View {
     @AppStorage(Prefs.fontFamily) private var fontFamily = ""
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
     @AppStorage(Prefs.showFiles) private var showFiles = false
+    @AppStorage(Prefs.showSidebar) private var showSidebar = true
     @AppStorage("panelWidth") private var panelWidth = 250.0
+
+    /// The sidebar closes like the right panel does, and stays closed across launches.
+    private var columns: Binding<NavigationSplitViewVisibility> {
+        Binding(get: { showSidebar ? .all : .detailOnly }, set: { showSidebar = $0 != .detailOnly })
+    }
 
     private var theme: Theme { Theme(rawValue: themeName) ?? .dark }
 
@@ -411,13 +418,13 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: columns) {
             Sidebar(theme: theme)
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    SessionHeader(theme: theme, showFiles: $showFiles)
+                    SessionHeader(theme: theme, showFiles: $showFiles, showSidebar: $showSidebar)
                         // Above the panes: their layout is measured with GeometryReader, which
                         // otherwise paints over the header.
                         .zIndex(1)
@@ -486,9 +493,13 @@ struct SessionHeader: View {
     @EnvironmentObject var store: Store
     let theme: Theme
     @Binding var showFiles: Bool
+    @Binding var showSidebar: Bool
 
     var body: some View {
         HStack(spacing: 10) {
+            Button { withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() } } label: { Image(systemName: "sidebar.leading") }
+                .foregroundStyle(showSidebar ? .primary : .secondary)
+                .help("Sidebar (⌃⌘S)")
             if let shown = store.shownLayout {
                 // Every pane has its own header; this one names the project they belong to.
                 Image(systemName: "folder").foregroundStyle(.tertiary)
@@ -563,6 +574,8 @@ struct SessionHeader: View {
         .foregroundStyle(.secondary)
         .font(.system(size: 11))
         .padding(.horizontal, 10)
+        // With the sidebar closed the header reaches the window's corner: room for its buttons.
+        .padding(.leading, showSidebar ? 0 : 68)
         .frame(height: 28)
         .background(Color(nsColor: theme.chrome))
         .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
@@ -842,6 +855,11 @@ struct AppCommands: Commands {
                 .keyboardShortcut("w", modifiers: [.command, .shift])
         }
         CommandGroup(after: .sidebar) {
+            Button("Sidebar") {
+                let shown = UserDefaults.standard.object(forKey: Prefs.showSidebar) as? Bool ?? true
+                UserDefaults.standard.set(!shown, forKey: Prefs.showSidebar)
+            }
+            .keyboardShortcut("s", modifiers: [.command, .control])
             Button("Files Panel") {
                 UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: Prefs.showFiles), forKey: Prefs.showFiles)
             }

@@ -1,7 +1,7 @@
 :root {
   --bg: #161618; --fg: #e6e6e6; --muted: #8d8d93; --faint: #6f6f75; --line: rgba(128,128,128,0.18);
   --card: rgba(128,128,128,0.07); --card-strong: rgba(128,128,128,0.12); --accent: #2f6fed; --accent-soft: rgba(47,111,237,0.16);
-  --bubble: rgba(110,135,180,0.17); --bubble-line: rgba(110,135,180,0.22); --amber: #f59e0b; --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --violet: #a78bfa;
+  --bubble: rgba(255,255,255,0.075); --bubble-line: rgba(255,255,255,0.09); --amber: #f59e0b; --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --violet: #a78bfa;
   --font: -apple-system, 'SF Pro Text', system-ui, sans-serif; --mono: ui-monospace, 'SF Mono', Menlo, monospace; --size: 13px;
 }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: var(--size); line-height: 1.55; -webkit-font-smoothing: antialiased; }

@@ -7,6 +7,8 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ### Changed
 - **Pages open in the Browser tab.** Choosing an `.html` file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.
 - **A project moves to the top of the sidebar when it is activated.** That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.
+- **The sidebar closes.** A button at the left of the session header, Sidebar in the View menu, or ⌃⌘S hides the project list and brings it back, like the right panel; it stays as you left it across launches.
+- **Your prompts sit in a neutral bubble in dark themes.** The blue-grey tint is gone; the bubble is a plain lighter shade of the background.
 - **Smoother motion in the transcript.** The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.
 
 ### Fixed
