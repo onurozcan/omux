@@ -1,5 +1,4 @@
 import XCTest
-@testable import omux
 @testable import OmuxCore
 
 /// Screens captured from Claude Code 2.1.319's question dialog.

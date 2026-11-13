@@ -1,0 +1,40 @@
+name: Linux core
+
+# The headless session host is built from OmuxCore. This keeps the core compiling and its
+# tests passing on Linux, where none of Apple's frameworks exist.
+on:
+  push:
+    branches: [main, core]
+    paths:
+      - "Sources/OmuxCore/**"
+      - "Sources/OmuxCLIProtocol/**"
+      - "Tests/OmuxCoreTests/**"
+      - "Package.swift"
+      - ".github/workflows/linux.yml"
+  pull_request:
+    paths:
+      - "Sources/OmuxCore/**"
+      - "Sources/OmuxCLIProtocol/**"
+      - "Tests/OmuxCoreTests/**"
+      - "Package.swift"
+      - ".github/workflows/linux.yml"
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    container: swift:6.2
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: swift --version
+      - name: Build the core
+        run: swift build --target OmuxCore
+      - name: Core tests
+        run: swift test --filter OmuxCoreTests
