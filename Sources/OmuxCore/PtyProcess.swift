@@ -60,12 +60,18 @@ public final class PtyProcess: @unchecked Sendable {
         guard pid > 0 else { throw Failure.noTerminal(errno) }
         let slave = ptsname(opened).map { String(cString: $0) }
         #else
-        opened = posix_openpt(O_RDWR | O_NOCTTY)
+        // glibc keeps posix_openpt and its companions from Swift, so the terminal is made the
+        // way they make it: open the multiplexer, unlock the new terminal, ask for its number.
+        opened = open("/dev/ptmx", O_RDWR | O_NOCTTY)
         guard opened >= 0 else { throw Failure.noTerminal(errno) }
-        guard grantpt(opened) == 0, unlockpt(opened) == 0, let name = ptsname(opened) else {
+        var unlocked: Int32 = 0
+        var number: UInt32 = 0
+        guard ioctl(opened, 0x4004_5431, &unlocked) == 0,  // TIOCSPTLCK
+              ioctl(opened, 0x8004_5430, &number) == 0 else {  // TIOCGPTN
             let code = errno; close(opened); throw Failure.noTerminal(code)
         }
-        let slave: String? = String(cString: name)
+        let name = "/dev/pts/\(number)"
+        let slave: String? = name
         Self.setSize(size, on: opened)
         // A session of its own, and the terminal opened as descriptor 0 while it has no
         // controlling terminal yet: on Linux that makes this one its controlling terminal.
