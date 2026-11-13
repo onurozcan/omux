@@ -270,7 +270,7 @@ struct BrowserPanel: View {
                     .onSubmit { session.load(session.address) }
                 Button { session.togglePick() } label: {
                     Image(systemName: "scope")
-                        .foregroundStyle(session.picking ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(session.picking ? Color.accent : Color.secondary)
                 }
                 .disabled(session.currentURL == nil)
                 .help("Pick an element to send to this session")
@@ -289,11 +289,11 @@ struct BrowserPanel: View {
             if session.picking {
                 Text("Click an element to add it to the session prompt. Esc cancels.")
                     .font(.caption)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.1))
+                    .background(Color.accent.opacity(0.1))
             }
 
             ZStack {
@@ -309,7 +309,7 @@ struct BrowserPanel: View {
 
             if let notice = session.notice {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                    Image(systemName: "checkmark").foregroundStyle(Color.accent)
                     Text(notice).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Button { session.notice = nil } label: { Image(systemName: "xmark") }

@@ -280,14 +280,14 @@ struct FilePreview: View {
                 if isMarkdown, isSmall {
                     Button { editingMarkdown.toggle() } label: {
                         Image(systemName: editingMarkdown ? "doc.richtext" : "pencil")
-                            .foregroundStyle(editingMarkdown ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(editingMarkdown ? Color.accent : Color.secondary)
                     }
                     .help(editingMarkdown ? "Show rendered" : "Edit the markdown")
                 }
                 if isText {
                     Button { wrapLines.toggle() } label: {
                         Image(systemName: "arrow.turn.down.left")
-                            .foregroundStyle(wrapLines ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(wrapLines ? Color.accent : Color.secondary)
                     }
                     .help(wrapLines ? "Don't wrap lines" : "Wrap lines")
                 }

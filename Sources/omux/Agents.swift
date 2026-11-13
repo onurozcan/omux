@@ -535,7 +535,7 @@ struct AgentRows: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(
-                            store.openAgent?.agentID == agent.id ? Color.accentColor.opacity(0.22) : .clear,
+                            store.openAgent?.agentID == agent.id ? Color.accent.opacity(0.22) : .clear,
                             in: RoundedRectangle(cornerRadius: 4)
                         )
                         .contentShape(Rectangle())

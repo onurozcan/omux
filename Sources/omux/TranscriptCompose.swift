@@ -156,7 +156,7 @@ struct ComposeBox: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(empty ? Color.secondary : Color.white)
                         .frame(width: 26, height: 26)
-                        .background(empty ? Color.primary.opacity(0.08) : Color.accentColor, in: Circle())
+                        .background(empty ? Color.primary.opacity(0.08) : Color.accent, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(empty)
@@ -167,7 +167,7 @@ struct ComposeBox: View {
             .padding(.bottom, 10)
         }
         .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropping ? Color.accentColor : focused ? Color.accentColor.opacity(0.7) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropping ? Color.accent : focused ? Color.accent.opacity(0.7) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
         .animation(.easeOut(duration: 0.12), value: dropping)
         .padding(12)
         .background(Color(nsColor: theme.chrome))
@@ -375,7 +375,7 @@ struct ComposeBox: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 24)
-                .background(index == selected ? Color.accentColor.opacity(0.18) : .clear)
+                .background(index == selected ? Color.accent.opacity(0.18) : .clear)
                 .contentShape(Rectangle())
                 .onTapGesture { selected = index; _ = accept() }
             }

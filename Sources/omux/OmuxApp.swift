@@ -237,7 +237,7 @@ private struct AppearanceSettings: View {
                                 .background(Color(nsColor: option.chrome))
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(option == current ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: option == current ? 2 : 1))
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(option == current ? Color.accent : Color.primary.opacity(0.12), lineWidth: option == current ? 2 : 1))
                     }
                     .buttonStyle(.plain)
                     .help(option.label)
@@ -691,7 +691,7 @@ struct SplitPane: View {
             .onDrag { NSItemProvider(object: tabID.uuidString as NSString) }
             .help("Drag onto another pane's edge to move this session there")
             .overlay(alignment: .bottom) {
-                Rectangle().fill(selected ? Color.accentColor.opacity(0.8) : .primary.opacity(0.08)).frame(height: 1)
+                Rectangle().fill(selected ? Color.accent.opacity(0.8) : .primary.opacity(0.08)).frame(height: 1)
             }
             if let term = store.terminal(for: tabID) {
                 SessionSurface(tabID: tabID, theme: theme, slot: tabID.uuidString, hooks: hooks) {
@@ -789,8 +789,8 @@ struct DropIntoPane<Content: View>: View {
                 case .bottom: CGRect(x: 0, y: h / 2, width: w, height: h / 2)
                 }
                 Rectangle()
-                    .fill(Color.accentColor.opacity(0.18))
-                    .overlay(Rectangle().stroke(Color.accentColor.opacity(0.8), lineWidth: 1))
+                    .fill(Color.accent.opacity(0.18))
+                    .overlay(Rectangle().stroke(Color.accent.opacity(0.8), lineWidth: 1))
                     .frame(width: rect.width, height: rect.height)
                     .offset(x: rect.minX, y: rect.minY)
             }

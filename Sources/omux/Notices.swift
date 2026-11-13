@@ -56,7 +56,7 @@ struct NoticeStack: View {
     private func row(_ notice: Notices.Notice) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(notice.isError ? Palette.needs : Color.accentColor)
+                .foregroundStyle(notice.isError ? Palette.needs : Color.accent)
             VStack(alignment: .leading, spacing: 2) {
                 Text(notice.title).fontWeight(.medium)
                 if !notice.detail.isEmpty {

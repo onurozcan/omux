@@ -145,6 +145,12 @@ enum Theme: String, CaseIterable, Identifiable {
     }
 }
 
+extension SwiftUI.Color {
+    /// The accent chosen in Settings. Not `accentColor`, which stays the system's whatever the
+    /// window's tint is, so a Neutral or fixed accent never reached the views that used it.
+    static var accent: SwiftUI.Color { SwiftUI.Color(nsColor: Appearance.accent) }
+}
+
 /// The accent colour and the transcript's typography and layout, from Settings.
 enum Appearance {
     /// Accent choices: the system's, the theme's blue, a fixed colour, or none: Neutral greys

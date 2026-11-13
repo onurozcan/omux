@@ -248,7 +248,7 @@ struct QuestionCard: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: mark)
                     .font(.system(size: 13))
-                    .foregroundStyle(checked ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(checked ? Color.accent : Color.secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(question.options[i]).font(.system(size: 12, weight: checked ? .semibold : .regular))
@@ -259,7 +259,7 @@ struct QuestionCard: View {
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 5).padding(.horizontal, 7)
-            .background(highlighted ? Color.accentColor.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+            .background(highlighted ? Color.accent.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -276,7 +276,7 @@ struct QuestionCard: View {
             ForEach(dialog.review.indices, id: \.self) { i in
                 let parts = dialog.review[i].components(separatedBy: " → ")
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(Color.accentColor)
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 11)).foregroundStyle(Color.accent)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(parts.first ?? "").font(.system(size: 11)).foregroundStyle(.secondary)
                         Text(parts.dropFirst().joined(separator: " → ")).font(.system(size: 12, weight: .medium))

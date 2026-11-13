@@ -866,7 +866,7 @@ struct TranscriptStandIn: View {
                 switch block.kind {
                 case .user:
                     HStack { Spacer(minLength: 48); Text(Self.clip(block.text, 400)).font(.system(size: 13)).padding(.horizontal, 13).padding(.vertical, 9)
-                        .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 12)) }
+                        .background(Color.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 12)) }
                 case .assistant:
                     Text(Self.clip(block.text, 1200)).font(.system(size: 13)).lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
                 case .tools:
