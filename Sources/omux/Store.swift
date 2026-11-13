@@ -6,6 +6,29 @@ extension UUID: Identifiable {
     public var id: UUID { self }
 }
 
+/// One session's live state, published to the views that show that session and to no others.
+@MainActor
+final class SessionState: ObservableObject {
+    @Published fileprivate(set) var runtime: TabRuntime
+    init(_ runtime: TabRuntime) { self.runtime = runtime }
+    /// Stands in where no session is selected.
+    static let none = SessionState(TabRuntime())
+}
+
+/// Draws its content again when one session's live state changes. The content reads the state
+/// as before, from `store.runtime`; this only says when to look again.
+struct WithRuntime<Content: View>: View {
+    @ObservedObject private var session: SessionState
+    private let content: (TabRuntime) -> Content
+
+    init(_ id: UUID?, @ViewBuilder content: @escaping (TabRuntime) -> Content) {
+        session = Store.shared.session(id)
+        self.content = content
+    }
+
+    var body: some View { content(session.runtime) }
+}
+
 @MainActor
 final class Store: ObservableObject {
     static let shared = Store()
@@ -22,11 +45,28 @@ final class Store: ObservableObject {
             }
         }
     }
-    @Published private(set) var runtime: [UUID: TabRuntime] = [:] {
+    /// Every session's live state. Not published: a status line changes many times a turn, and
+    /// publishing it here redrew every view of every session. A session's own views watch its
+    /// `SessionState` (through `WithRuntime`); the store announces only the changes that matter
+    /// beyond the session, such as it starting to work or asking for attention. See `update`.
+    private(set) var runtime: [UUID: TabRuntime] = [:] {
         didSet {
             let count = runtime.values.filter(\.needsAttention).count
+            guard count != attentionCount else { return }
+            attentionCount = count
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
+    }
+    private var attentionCount = 0
+    private var sessions: [UUID: SessionState] = [:]
+
+    /// The observable state of one session, for the views that show it.
+    func session(_ id: UUID?) -> SessionState {
+        guard let id else { return SessionState.none }
+        if let state = sessions[id] { return state }
+        let state = SessionState(runtime[id] ?? TabRuntime())
+        sessions[id] = state
+        return state
     }
     @Published var renamingID: UUID?
     @Published var editingTabID: UUID?
@@ -1255,7 +1295,11 @@ final class Store: ObservableObject {
         var value = runtime[id] ?? TabRuntime()
         let before = value
         mutate(&value)
-        if value != before { runtime[id] = value }
+        guard value != before else { return }
+        // The sidebar's order, the panes and the dock care about the coarse state only.
+        if value.coarse != before.coarse || runtime[id] == nil { objectWillChange.send() }
+        runtime[id] = value
+        sessions[id]?.runtime = value
     }
 
     // MARK: Tabs
@@ -1319,7 +1363,9 @@ final class Store: ObservableObject {
             killTree(view)
             view.removeFromSuperview()
         }
+        objectWillChange.send()
         runtime[id] = nil
+        sessions[id] = nil
         // Only the closed pane goes; its neighbours fill the space and one of them takes the selection.
         let wasOnCanvas = layout(near: id)?.contains(id) == true
         removeFromSplit(id)

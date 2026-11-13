@@ -78,7 +78,10 @@ struct ComposeBox: View {
         return String(draft[draft.index(after: last)...])
     }
 
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let runtime = store.runtime[tabID] ?? TabRuntime()
         VStack(alignment: .leading, spacing: 0) {

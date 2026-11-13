@@ -4,6 +4,31 @@ enum PanelTab: String, CaseIterable {
     case files, changes, browser, agents
 }
 
+/// A count on one of the panel's tabs.
+struct PanelBadge: View {
+    let count: Int
+    var body: some View {
+        Text("\(count)")
+            .font(.system(size: 9, weight: .semibold))
+            .padding(.horizontal, 4)
+            .frame(minWidth: 15, minHeight: 14)
+            .background(.primary.opacity(0.14), in: Capsule())
+    }
+}
+
+/// The agents still at work in a session. A view of its own, so the agent monitors redraw this
+/// number and not the whole panel.
+struct RunningAgentsBadge: View {
+    @ObservedObject private var monitor = AgentMonitor.shared
+    @ObservedObject private var codex = CodexManager.shared
+    let tabID: UUID
+
+    var body: some View {
+        let running = (monitor.agents[tabID] ?? []).filter { !$0.finished }.count + (codex.agents[tabID] ?? []).filter { !$0.finished }.count
+        if running > 0 { PanelBadge(count: running) }
+    }
+}
+
 /// The Agents tab: the session's subagents, and the transcript of the one picked.
 struct AgentsPanel: View {
     @EnvironmentObject var store: Store
@@ -33,19 +58,11 @@ struct AgentsPanel: View {
 struct RightPanel: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var changes = Changes.shared
-    @ObservedObject private var monitor = AgentMonitor.shared
-    @ObservedObject private var codex = CodexManager.shared
     let root: URL
     let theme: Theme
     @AppStorage(Prefs.panelTab) private var tab = PanelTab.files.rawValue
 
     private var current: PanelTab { PanelTab(rawValue: tab) ?? .files }
-
-    /// Agents still at work in the selected session, for the tab's badge.
-    private var runningAgents: Int {
-        guard let id = store.selectedTabID else { return 0 }
-        return (monitor.agents[id] ?? []).filter { !$0.finished }.count + (codex.agents[id] ?? []).filter { !$0.finished }.count
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,7 +71,7 @@ struct RightPanel: View {
                 button(.changes, "Changes", "plusminus", shortcut: "2",
                        badge: changes.tabID == store.selectedTabID ? changes.files.count : 0)
                 button(.browser, "Browser", "globe", shortcut: "3")
-                button(.agents, "Agents", "person.2", shortcut: "4", badge: runningAgents)
+                button(.agents, "Agents", "person.2", shortcut: "4", agentsOf: store.selectedTabID)
                 Spacer()
             }
             .padding(.horizontal, 6)
@@ -66,7 +83,7 @@ struct RightPanel: View {
 
             ZStack {
                 // Files stays alive so its preview and scroll position survive tab switches.
-                FilePanel(root: root, theme: theme)
+                FilePanel(root: root, theme: theme, visible: current == .files)
                     .opacity(current == .files ? 1 : 0)
                     .allowsHitTesting(current == .files)
                     .accessibilityHidden(current != .files)
@@ -91,19 +108,14 @@ struct RightPanel: View {
         }
     }
 
-    private func button(_ value: PanelTab, _ title: String, _ icon: String, shortcut: String, badge: Int = 0) -> some View {
+    private func button(_ value: PanelTab, _ title: String, _ icon: String, shortcut: String, badge: Int = 0, agentsOf: UUID? = nil) -> some View {
         let selected = current == value
         return Button { tab = value.rawValue } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon).imageScale(.small)
                 Text(title)
-                if badge > 0 {
-                    Text("\(badge)")
-                        .font(.system(size: 9, weight: .semibold))
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 15, minHeight: 14)
-                        .background(.primary.opacity(0.14), in: Capsule())
-                }
+                if badge > 0 { PanelBadge(count: badge) }
+                if let agentsOf { RunningAgentsBadge(tabID: agentsOf) }
             }
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(selected ? .primary : .secondary)

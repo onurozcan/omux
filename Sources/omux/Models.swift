@@ -217,6 +217,15 @@ struct TabRuntime: Equatable {
 
     enum StatusState: String { case idle, working, done, blocked, error }
 
+    /// The state without what changes many times a turn: the status wording, the subagent
+    /// records, the window title and the time of the last sign of life. Two states equal in this
+    /// look the same to everything but the session's own views.
+    var coarse: TabRuntime {
+        var copy = self
+        copy.statusDetail = nil; copy.statusChildren = []; copy.title = ""; copy.lastActivity = nil
+        return copy
+    }
+
     struct StatusChild: Equatable {
         let id: String
         let state: StatusState?

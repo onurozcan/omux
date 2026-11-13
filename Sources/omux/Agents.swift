@@ -672,7 +672,10 @@ struct AgentTranscriptView: View {
         _transcript = StateObject(wrappedValue: AgentTranscript(url: ref.transcript))
     }
 
-    var body: some View {
+    var body: some View { WithRuntime(ref.tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let live = monitor.agents[ref.tabID]?.first { $0.id == ref.agentID }
         VStack(spacing: 0) {
             HStack(spacing: 8) {

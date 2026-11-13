@@ -84,8 +84,14 @@ struct FilePanel: View {
     @EnvironmentObject var store: Store
     let root: URL
     let theme: Theme
+    /// Files is the panel's tab in view. Behind another tab it stays alive but stops scanning.
+    var visible = true
     @AppStorage(Prefs.filesByDate) private var byDate = false
     @AppStorage(Prefs.filesBrowserCollapsed) private var browserCollapsed = false
+
+    /// Whether the list of mentioned files can be seen at all; reading the scrollback for it is
+    /// the dear part.
+    private var listsMentions: Bool { visible && !browserCollapsed }
     @State private var rootNode: FileNode?
     @State private var watcher: FolderWatcher?
     @State private var version = 0
@@ -197,8 +203,9 @@ struct FilePanel: View {
         .onAppear { load(); showRequested(); store.scanMentionedPaths() }
         .onChange(of: root) { _, _ in load() }
         .onChange(of: store.previewRequest) { _, _ in showRequested() }
-        .onChange(of: store.selectedTabID) { _, _ in store.scanMentionedPaths() }
-        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in store.scanMentionedPaths() }
+        .onChange(of: store.selectedTabID) { _, _ in if listsMentions { store.scanMentionedPaths() } }
+        .onChange(of: listsMentions) { _, shown in if shown { store.scanMentionedPaths() } }
+        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in if listsMentions { store.scanMentionedPaths() } }
         .onChange(of: byDate) { _, _ in refresh() }
         .onChange(of: selected) { _, path in
             guard let path else { return }

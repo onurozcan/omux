@@ -75,7 +75,10 @@ struct TranscriptPanel: View {
 
     private var isAgent: Bool { provider == .claude || provider == .codex }
 
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let runtime = store.runtime[tabID] ?? TabRuntime()
         VStack(spacing: 0) {
             header(runtime)

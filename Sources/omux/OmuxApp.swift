@@ -498,7 +498,10 @@ struct SessionHeader: View {
     @Binding var showFiles: Bool
     @Binding var showSidebar: Bool
 
-    var body: some View {
+    var body: some View { WithRuntime(store.selectedTabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         HStack(spacing: 10) {
             Button { withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() } } label: { Image(systemName: "sidebar.leading") }
                 .foregroundStyle(showSidebar ? .primary : .secondary)
@@ -644,7 +647,10 @@ struct SplitPane: View {
     @EnvironmentObject var store: Store
     let tabID: UUID
     let theme: Theme
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let selected = store.selectedTabID == tabID
         DropIntoPane(target: tabID) { hooks in
         VStack(spacing: 0) {

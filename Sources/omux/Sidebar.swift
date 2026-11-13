@@ -258,7 +258,10 @@ struct TabRow: View {
         return running > 0 ? "\(running) agent\(running == 1 ? "" : "s")" : nil
     }
 
-    var body: some View {
+    var body: some View { WithRuntime(tab.id) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let rt = store.runtime[tab.id] ?? TabRuntime()
         // Top-aligned so the dot stays beside the name when agent rows or buttons follow.
         HStack(alignment: .top, spacing: 8) {

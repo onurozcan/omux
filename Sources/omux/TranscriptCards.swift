@@ -28,7 +28,10 @@ struct PermissionCard: View {
     let provider: SessionProvider
     let pending: ToolRow?
 
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let approval = codex.approval(for: tabID)
         let runtime = store.runtime[tabID]
         let detail = approval?.detail
@@ -130,10 +133,27 @@ struct QuestionCard: View {
     @State private var toggled: [Int: [Int: Bool]] = [:]
     /// Keys are on their way; clicks before the dialog redraws would land twice.
     @State private var busyUntil = Date.distantPast
+    /// The dialog as last read, and the output it was read at: an unchanged screen isn't parsed again.
+    @State private var read = DialogRead()
+
+    private final class DialogRead {
+        var output: UInt64?
+        var questions: [Question] = []
+        var dialog: QuestionDialog?
+        var known = false
+    }
+
+    private var dialogNow: QuestionDialog? {
+        let output = store.outputGeneration(tabID)
+        if read.known, read.output == output, read.questions == questions { return read.dialog }
+        read.dialog = QuestionScreen.parse(store.screenLines(tabID, count: 60), questions: questions)
+        read.output = output; read.questions = questions; read.known = true
+        return read.dialog
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.3)) { _ in
-            let dialog = QuestionScreen.parse(store.screenLines(tabID, count: 60), questions: questions)
+            let dialog = dialogNow
             Card(color: Palette.needs, title: title(dialog)) {
                 if questions.count > 1 { tabs(dialog) }
                 switch dialog?.page {
