@@ -47,7 +47,7 @@ public struct StartRequest: Codable, Equatable, Sendable {
 public enum ClientMessage: Codable, Equatable, Sendable {
     case hello(version: Int)
     case list
-    case start(StartRequest)
+    case start(request: StartRequest)
     /// Output from byte `from` on, then everything new as it comes; nil asks for all the host
     /// still holds. A session can be attached to by any number of clients.
     case attach(session: String, from: UInt64?)
@@ -60,14 +60,14 @@ public enum ClientMessage: Codable, Equatable, Sendable {
 
 public enum HostMessage: Codable, Equatable, Sendable {
     case welcome(version: Int, host: String, system: String)
-    case sessions([SessionInfo])
-    case started(SessionInfo)
+    case sessions(list: [SessionInfo])
+    case started(info: SessionInfo)
     /// Bytes the session printed, starting at byte `offset` of its output. A client that adds
     /// each chunk's length to its offset knows what to ask for after a reconnect.
     case output(session: String, offset: UInt64, data: Data)
     case exited(session: String, code: Int32)
     case done
-    case failed(String)
+    case failed(reason: String)
 }
 
 /// A request, numbered so its answer can be told from the output streaming alongside it.

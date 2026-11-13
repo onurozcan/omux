@@ -52,7 +52,7 @@ final class HostTests: XCTestCase {
     }
 
     private func start(_ client: HostClient, _ script: String) throws -> SessionInfo {
-        guard case .started(let info) = client.request(.start(StartRequest(name: "t", directory: "/usr", command: ["/bin/sh", "-c", script]))) else {
+        guard case .started(let info) = client.request(.start(request: StartRequest(name: "t", directory: "/usr", command: ["/bin/sh", "-c", script]))) else {
             throw XCTSkip("the session didn't start")
         }
         return info
@@ -63,7 +63,7 @@ final class HostTests: XCTestCase {
         guard case .welcome(let version, _, let system) = client.request(.hello(version: HostProtocol.version)) else { return XCTFail() }
         XCTAssertEqual(version, HostProtocol.version)
         XCTAssertFalse(system.isEmpty)
-        XCTAssertEqual(client.request(.list), .sessions([]))
+        XCTAssertEqual(client.request(.list), .sessions(list: []))
     }
 
     func testStartAttachTypeAndExit() throws {
@@ -82,7 +82,7 @@ final class HostTests: XCTestCase {
         XCTAssertEqual(listed.map(\.exited), [3])
         XCTAssertEqual(listed.first?.outputEnd, screen.end)
         XCTAssertEqual(client.request(.close(session: info.id)), .done)
-        XCTAssertEqual(client.request(.list), .sessions([]))
+        XCTAssertEqual(client.request(.list), .sessions(list: []))
     }
 
     /// The point of a host: the session goes on with nobody attached, and a client that comes
@@ -144,8 +144,8 @@ final class HostTests: XCTestCase {
     func testWhatCannotBeDoneIsSaid() throws {
         let client = try client()
         if case .failed = client.request(.attach(session: "nope", from: nil)) {} else { XCTFail() }
-        if case .failed = client.request(.start(StartRequest(directory: "/no/such/folder", command: ["/bin/sh"]))) {} else { XCTFail() }
-        if case .failed = client.request(.start(StartRequest(command: ["/no/such/program"]))) {} else { XCTFail() }
+        if case .failed = client.request(.start(request: StartRequest(directory: "/no/such/folder", command: ["/bin/sh"]))) {} else { XCTFail() }
+        if case .failed = client.request(.start(request: StartRequest(command: ["/no/such/program"]))) {} else { XCTFail() }
     }
 
     func testMessagesSurviveBeingSplitOnTheWire() throws {

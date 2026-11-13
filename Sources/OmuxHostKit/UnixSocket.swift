@@ -104,11 +104,17 @@ public enum UnixSocket {
 
     /// Connects to the socket at `path`.
     public static func connect(_ path: String) throws -> Connection {
+        let descriptor = try rawConnect(path)
+        return Connection(input: descriptor, output: descriptor)
+    }
+
+    /// The connected descriptor itself, for passing bytes through untouched.
+    public static func rawConnect(_ path: String) throws -> Int32 {
         let descriptor = make()
         guard descriptor >= 0 else { throw Failure.system("socket", errno) }
         let result = try with(path) { Foundation.connect(descriptor, $0, $1) }
         guard result == 0 else { let code = errno; close(descriptor); throw Failure.system("connect", code) }
-        return Connection(input: descriptor, output: descriptor)
+        return descriptor
     }
 
     /// Listens at `path`, in a folder only this user can enter. A socket left there by a host
@@ -166,7 +172,7 @@ public final class HostServer: @unchecked Sendable {
         let client = SessionHost.Client { [weak connection] frame in connection?.send(frame) }
         connection.start(onFrame: { body in
             guard let frame = try? Wire.decode(ClientFrame.self, from: body) else {
-                connection.send(HostFrame(message: .failed("A message this host doesn't understand")))
+                connection.send(HostFrame(message: .failed(reason: "A message this host doesn't understand")))
                 return
             }
             connection.send(HostFrame(reply: frame.id, message: host.handle(frame.message, from: client)))
@@ -210,7 +216,7 @@ public final class HostClient: @unchecked Sendable {
         }, onClose: { [weak self] in
             guard let self else { return }
             self.lock.lock(); let handlers = Array(self.waiting.values); self.waiting = [:]; self.lock.unlock()
-            handlers.forEach { $0(.failed("The host closed the connection")) }
+            handlers.forEach { $0(.failed(reason: "The host closed the connection")) }
             self.onClose?()
         })
     }
@@ -227,7 +233,7 @@ public final class HostClient: @unchecked Sendable {
         let done = DispatchSemaphore(value: 0)
         let box = Box()
         send(message) { box.value = $0; done.signal() }
-        return done.wait(timeout: .now() + timeout) == .success ? (box.value ?? .failed("No answer")) : .failed("The host didn't answer")
+        return done.wait(timeout: .now() + timeout) == .success ? (box.value ?? .failed(reason: "No answer")) : .failed(reason: "The host didn't answer")
     }
 
     public func close() { connection.close() }

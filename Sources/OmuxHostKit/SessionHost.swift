@@ -39,11 +39,11 @@ public final class SessionHost: @unchecked Sendable {
             case .hello:
                 return .welcome(version: HostProtocol.version, host: ProcessInfo.processInfo.hostName, system: Self.system)
             case .list:
-                return .sessions(order.compactMap { sessions[$0]?.info })
+                return .sessions(list: order.compactMap { sessions[$0]?.info })
             case .start(let request):
                 return start(request)
             case .attach(let id, let from):
-                guard let session = sessions[id] else { return .failed("No session \(id)") }
+                guard let session = sessions[id] else { return .failed(reason: "No session \(id)") }
                 // What the client is missing first, then it hears the rest as it comes.
                 let end = session.base + UInt64(session.buffer.count)
                 let from = min(max(from ?? session.base, session.base), end)
@@ -51,21 +51,21 @@ public final class SessionHost: @unchecked Sendable {
                 Self.send(Data(missing), at: from, of: id, to: client)
                 if let code = session.info.exited { client.send(HostFrame(message: .exited(session: id, code: code))) }
                 session.watchers[client.id] = client
-                return .started(session.info)
+                return .started(info: session.info)
             case .detach(let id):
                 sessions[id]?.watchers[client.id] = nil
                 return .done
             case .input(let id, let data):
-                guard let process = sessions[id]?.process else { return .failed("Session \(id) isn't running") }
+                guard let process = sessions[id]?.process else { return .failed(reason: "Session \(id) isn't running") }
                 process.write(data)
                 return .done
             case .resize(let id, let columns, let rows):
-                guard let session = sessions[id] else { return .failed("No session \(id)") }
+                guard let session = sessions[id] else { return .failed(reason: "No session \(id)") }
                 session.info.columns = columns; session.info.rows = rows
                 session.process?.resize(.init(columns: columns, rows: rows))
                 return .done
             case .close(let id):
-                guard let session = sessions[id] else { return .failed("No session \(id)") }
+                guard let session = sessions[id] else { return .failed(reason: "No session \(id)") }
                 if let process = session.process {
                     process.terminate()
                 } else {
@@ -94,7 +94,7 @@ public final class SessionHost: @unchecked Sendable {
         let directory = request.directory.map { ($0 as NSString).expandingTildeInPath } ?? home
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
-            return .failed("No folder \(directory)")
+            return .failed(reason: "No folder \(directory)")
         }
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = "xterm-256color"
@@ -115,11 +115,11 @@ public final class SessionHost: @unchecked Sendable {
                 onOutput: { [weak self] data in self?.queue.async { self?.printed(data, by: id) } },
                 onExit: { [weak self] code in self?.queue.async { self?.ended(id, code: code) } })
         } catch {
-            return .failed("Couldn't start \(command[0]): \(error)")
+            return .failed(reason: "Couldn't start \(command[0]): \(error)")
         }
         sessions[id] = session
         order.append(id)
-        return .started(info)
+        return .started(info: info)
     }
 
     private func printed(_ data: Data, by id: String) {
