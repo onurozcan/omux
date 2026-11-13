@@ -38,7 +38,7 @@ final class TranscriptTests: XCTestCase {
         let wrapped = #"<pasted_content id=\"d420\">\nwhat is this\nlong pasted text\n</pasted_content id=\"d420\">"#
         m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-13T19:46:54.110Z","content":"\#(wrapped)"}"#)])
         XCTAssertEqual(m.blocks.filter { $0.kind == .user }.count, 1, "the record is the echo, not a second prompt")
-        XCTAssertEqual(m.blocks.last?.pending, "queued")
+        XCTAssertEqual(m.blocks.last?.pending, .queued)
         m.ingest([object(#"{"type":"queue-operation","operation":"remove","timestamp":"2026-11-13T19:47:16.697Z","content":"\#(wrapped)","reason":"absorbed_mid_turn"}"#)])
         XCTAssertNil(m.blocks.last?.pending)
     }
@@ -55,6 +55,83 @@ final class TranscriptTests: XCTestCase {
         XCTAssertFalse(m.hasQueuedEchoes)
         XCTAssertEqual(m.blocks.filter { $0.kind == .user }.map(\.pending), [nil, nil])
         XCTAssertEqual(m.blocks.filter { $0.kind == .user }.map(\.text), ["first", "second, never confirmed"])
+    }
+
+    private func claude() -> SessionTranscript {
+        SessionTranscript(tab: TabItem(name: "t"), provider: .claude, claudeFile: { nil }, codexThread: { nil })
+    }
+
+    private func queue(_ operation: String, _ content: String, reason: String? = nil) -> [String: Any] {
+        var record: [String: Any] = ["type": "queue-operation", "operation": operation, "timestamp": "2026-11-13T19:46:54.110Z", "content": content]
+        if let reason { record["reason"] = reason }
+        return record
+    }
+
+    private func prompt(_ text: String) -> [String: Any] {
+        ["type": "user", "timestamp": "2026-11-13T19:47:30.000Z", "message": ["role": "user", "content": text]]
+    }
+
+    // The queue's records, in the shapes Claude Code 2.1 writes them (surveyed over 2,400 of
+    // them): enqueue and popAll carry only the text, remove a reason or none, dequeue nothing.
+
+    /// A record's text is cut where it is long and spaced differently where an image path
+    /// was taken out; the echo holds the text as typed. They are still the same prompt.
+    func testAQueueRecordFindsItsEchoThroughLengthAndSpacing() {
+        let m = claude()
+        let long = String(repeating: "lorem ipsum dolor ", count: 7000)
+        m.echo(long, queued: true)
+        m.ingest([queue("enqueue", long)])
+        XCTAssertEqual(m.blocks.filter(\.inQueue).count, 1)
+        XCTAssertEqual(m.blocks.last?.pending, .queued)
+        m.echo("look  at\nthis", queued: true)
+        m.ingest([queue("enqueue", "look at this")])
+        XCTAssertEqual(m.blocks.filter { $0.kind == .user }.count, 2, "each record is its echo, not a new prompt")
+        XCTAssertEqual(m.blocks.filter(\.inQueue).map(\.pending), [.queued, .queued])
+    }
+
+    /// Delivered to the agent, under either reason Claude Code gives, a prompt stands as sent;
+    /// removed with no reason, it was pulled back.
+    func testRemovalReasonsTellDeliveredFromPulledBack() {
+        for reason in ["absorbed_mid_turn", "delivered_to_agent"] {
+            let m = claude()
+            m.echo("carry on", queued: true)
+            m.ingest([queue("enqueue", "carry on"), queue("remove", "carry on", reason: reason)])
+            XCTAssertNil(m.blocks.last?.pending, reason)
+            XCTAssertFalse(m.hasQueuedEchoes)
+        }
+        let m = claude()
+        m.echo("never mind", queued: true)
+        m.ingest([queue("enqueue", "never mind"), queue("remove", "never mind")])
+        XCTAssertEqual(m.blocks.last?.pending, .removed)
+    }
+
+    /// Prompts waiting at the turn's end are taken together: one popAll each, then a single
+    /// prompt record with them all. The first echo becomes it and the others fold away.
+    func testPromptsTakenTogetherBecomeOneRecord() {
+        let m = claude()
+        m.echo("one", queued: true); m.echo("two", queued: true)
+        m.ingest([queue("enqueue", "one"), queue("enqueue", "two"), queue("popAll", "one"), queue("popAll", "two"), prompt("one\ntwo")])
+        let prompts = m.blocks.filter { $0.kind == .user }
+        XCTAssertEqual(prompts.map(\.pending), [nil, .removed])
+        XCTAssertEqual(prompts.first?.text, "one\ntwo")
+        XCTAssertFalse(m.hasQueuedEchoes)
+    }
+
+    /// One prompt taken from the queue: a dequeue, then its record, which the oldest waiting
+    /// echo becomes even if the text differs.
+    func testADequeuedPromptBecomesItsRecord() {
+        let m = claude()
+        m.echo("first", queued: true); m.echo("second", queued: true)
+        m.ingest([queue("enqueue", "first"), queue("enqueue", "second"), ["type": "queue-operation", "operation": "dequeue"], prompt("first")])
+        XCTAssertEqual(m.blocks.filter { $0.kind == .user }.map(\.pending), [nil, .queued])
+    }
+
+    /// Task notifications and agent messages pass through the queue too. They are not prompts.
+    func testInjectedQueueRecordsAreNotPrompts() {
+        let m = claude()
+        m.ingest([queue("enqueue", "<task-notification>\n<task-id>bab55qonx</task-id>\n</task-notification>"),
+                  queue("remove", "<task-notification>\n<task-id>bab55qonx</task-id>\n</task-notification>", reason: "delivered_to_agent")])
+        XCTAssertTrue(m.blocks.filter { $0.kind == .user }.isEmpty)
     }
 
     func testTurnsToolsAndResults() {
@@ -82,14 +159,14 @@ final class TranscriptTests: XCTestCase {
         m.ingest([object(#"{"type":"user","timestamp":"2026-11-04T10:00:00.000Z","message":{"role":"user","content":"start"}}"#)])
         // Sent from the compose box while the agent worked, then recorded by Claude Code.
         m.echo("polish settings", queued: true)
-        XCTAssertEqual(m.blocks[1].pending, "queuing", "on its way until Claude Code records it")
+        XCTAssertEqual(m.blocks[1].pending, .queuing, "on its way until Claude Code records it")
         m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:00:05.000Z","content":"polish settings"}"#)])
         XCTAssertEqual(m.blocks.filter { $0.kind == .user }.count, 2, "the record matches the echo instead of adding a bubble")
-        XCTAssertEqual(m.blocks[1].pending, "queued")
+        XCTAssertEqual(m.blocks[1].pending, .queued)
         // Typed straight into the terminal: no echo, so the record makes the bubble.
         m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-04T10:00:06.000Z","content":"and the icon"}"#)])
         XCTAssertEqual(m.blocks[2].text, "and the icon")
-        XCTAssertEqual(m.blocks[2].pending, "queued")
+        XCTAssertEqual(m.blocks[2].pending, .queued)
         // Taken in the middle of the turn: a real prompt now, and no user record will follow.
         m.ingest([object(#"{"type":"queue-operation","operation":"remove","reason":"absorbed_mid_turn","timestamp":"2026-11-04T10:00:07.000Z","content":"polish settings"}"#)])
         XCTAssertNil(m.blocks[1].pending)
@@ -103,7 +180,7 @@ final class TranscriptTests: XCTestCase {
         ])
         XCTAssertEqual(m.blocks[2].text, "and the icon\none more")
         XCTAssertNil(m.blocks[2].pending)
-        XCTAssertEqual(m.blocks[3].pending, "removed")
+        XCTAssertEqual(m.blocks[3].pending, .removed)
         XCTAssertEqual(m.blocks.filter { $0.kind == .user && $0.pending == nil }.count, 3)
         // Injected content passes through the queue too and never shows.
         m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","content":"<task-notification>x</task-notification>"}"#)])
@@ -240,9 +317,9 @@ final class TranscriptTests: XCTestCase {
         let m = SessionTranscript(tab: TabItem(name: "t"), provider: .codex, claudeFile: { nil }, codexThread: { nil })
         XCTAssertNil(m.takeUnsent())
         m.echo("Reply with just the word pong.", queued: false)
-        XCTAssertEqual(m.blocks.last?.pending, "sent")
+        XCTAssertEqual(m.blocks.last?.pending, .sent)
         XCTAssertEqual(m.takeUnsent(), "Reply with just the word pong.")
-        XCTAssertEqual(m.blocks.last?.pending, "removed")
+        XCTAssertEqual(m.blocks.last?.pending, .removed)
         XCTAssertNil(m.takeUnsent())
     }
 

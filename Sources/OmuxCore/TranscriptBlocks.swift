@@ -15,6 +15,28 @@ public struct Todo: Equatable, Encodable {
 /// One block of the transcript: a prompt, a reply, thinking, a run of tool calls, a todo list, a note, or an overview.
 public struct ChatBlock: Identifiable, Equatable, Encodable {
     public enum Kind: String, Equatable, Encodable { case user, assistant, thinking, tools, todos, note, info, summary }
+
+    /// Where a prompt sent from the compose box stands until the agent's own record of it
+    /// arrives. The record ends it: the block becomes that record, with no state.
+    ///
+    ///     sent ──────────────────────────────▶ recorded
+    ///     queuing ──▶ queued ──▶ taken at the turn's end, or mid-turn ──▶ recorded
+    ///         └──────────┴─────▶ removed (pulled back, dropped, or folded into another prompt)
+    public enum Pending: String, Equatable, Encodable, Sendable {
+        /// Sent to an idle agent; its record follows at once.
+        case sent
+        /// Sent while the agent worked; Claude Code hasn't recorded it in its queue yet.
+        case queuing
+        /// In Claude Code's queue, where it can be reordered or removed.
+        case queued
+        /// No longer a prompt of its own. The block stays, hidden, since ids are positions.
+        case removed
+    }
+
+    /// A prompt the agent hasn't recorded yet and may still take.
+    public var isWaiting: Bool { kind == .user && pending != nil && pending != .removed }
+    /// A prompt in the agent's queue, or on its way into it.
+    public var inQueue: Bool { kind == .user && (pending == .queued || pending == .queuing) }
     public let id: Int
     public var kind: Kind
     public var text: String
@@ -34,7 +56,7 @@ public struct ChatBlock: Identifiable, Equatable, Encodable {
     public var info: AgentConfig.Overview?
     /// A prompt sent from the compose box that the agent hasn't recorded yet: "sent" while it
     /// takes it, "queued" when it arrived mid-turn and waits for the next one.
-    public var pending: String?
+    public var pending: Pending?
     /// Bumped whenever the block changes after it was first shown; the page redraws by it.
     public var rev = 0
 
@@ -57,7 +79,7 @@ public struct ChatBlock: Identifiable, Equatable, Encodable {
         try c.encodeIfPresent(tokensOut, forKey: .tokensOut)
     }
 
-    public init(id: Int, kind: Kind, text: String, time: Date? = nil, tools: [ToolRow] = [], todos: [Todo] = [], images: [String] = [], model: String? = nil, tokensIn: Int? = nil, tokensOut: Int? = nil, claude: Bool = false, messageID: String? = nil, info: AgentConfig.Overview? = nil, pending: String? = nil, rev: Int = 0) {
+    public init(id: Int, kind: Kind, text: String, time: Date? = nil, tools: [ToolRow] = [], todos: [Todo] = [], images: [String] = [], model: String? = nil, tokensIn: Int? = nil, tokensOut: Int? = nil, claude: Bool = false, messageID: String? = nil, info: AgentConfig.Overview? = nil, pending: Pending? = nil, rev: Int = 0) {
         self.id = id; self.kind = kind; self.text = text; self.time = time; self.tools = tools; self.todos = todos; self.images = images; self.model = model; self.tokensIn = tokensIn; self.tokensOut = tokensOut; self.claude = claude; self.messageID = messageID; self.info = info; self.pending = pending; self.rev = rev
     }
 }

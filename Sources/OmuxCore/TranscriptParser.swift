@@ -75,17 +75,17 @@ public enum TranscriptParser {
         case "queue-operation":
             if object["operation"] as? String == "dequeue" { return [.dequeued] }
             guard let content = object["content"] as? String else { return [] }
-            // A pasted prompt is queued in its <pasted_content> wrapper; without it, it is the
-            // prompt as typed, which is what its echo holds.
-            let text = content.replacingOccurrences(of: #"\n?</?pasted_content[^>]*>\n?"#, with: "\n", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = typed(content)
             // Injected records (task notifications, agent messages) pass through the queue too.
             guard !text.isEmpty, !text.hasPrefix("<") else { return [] }
             let shown = cap(inlineImages(in: text, thumbnails: false).text)
             switch object["operation"] as? String {
             case "enqueue": return [.queued(shown, date(of: object))]
             case "popAll": return [.taken(shown)]
-            case "remove": return [(object["reason"] as? String) == "absorbed_mid_turn" ? .absorbed(shown, date(of: object)) : .unqueued(shown)]
+            case "remove":
+                // Handed to the agent, mid-turn or otherwise, as against pulled back or dropped.
+                let delivered = ["absorbed_mid_turn", "delivered_to_agent"].contains(object["reason"] as? String ?? "")
+                return [delivered ? .absorbed(shown, date(of: object)) : .unqueued(shown)]
             default: return []
             }
         case "user":
@@ -250,22 +250,34 @@ public enum TranscriptParser {
     /// A typed prompt, or what Claude Code records as prompts without the user typing it:
     /// slash commands and their output, interruptions, background agent notifications, and
     /// other injected records.
-    public static func userEvents(_ raw: String, images: [String], time: Date?) -> [Event] {
+    /// A prompt as it was typed, out of the record that holds it: without the reminders Claude
+    /// Code attaches and the <pasted_content id="…"> wrapper it puts around pasted text. Prompt
+    /// records and queue records both go through here, so they agree on what a prompt is.
+    public static func typed(_ raw: String) -> String {
         var text = raw
-        // Reminders Claude Code attaches around a real prompt.
         while let start = text.range(of: "<system-reminder>"), let end = text.range(of: "</system-reminder>", range: start.upperBound..<text.endIndex) {
             text.removeSubrange(start.lowerBound..<end.upperBound)
         }
-        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.contains("<pasted_content") {
+            text = text.replacingOccurrences(of: #"\n?</?pasted_content[^>]*>\n?"#, with: "\n", options: .regularExpression)
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// What two forms of one prompt share, for telling that a record is a prompt's echo: the
+    /// start of the text with its whitespace evened out. A record's text may be cut where it is
+    /// long, and spaced differently where an image path was taken out of it.
+    public static func matchKey(_ text: String) -> String {
+        String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(2000))
+    }
+
+    public static func userEvents(_ raw: String, images: [String], time: Date?) -> [Event] {
+        let text = typed(raw)
         guard !text.isEmpty || !images.isEmpty else { return [] }
         if let name = element("command-name", in: text) {
             return [.command(name: name.hasPrefix("/") ? String(name.dropFirst()) : name, args: element("command-args", in: text) ?? "")]
         }
         if text.hasPrefix("[Request interrupted") { return [.note("Interrupted")] }
-        // Long pastes are wrapped in <pasted_content id="…"> … </pasted_content id="…">; show what was pasted.
-        if text.contains("<pasted_content") {
-            text = text.replacingOccurrences(of: #"\n?</?pasted_content[^>]*>\n?"#, with: "\n", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
         // A record that is one XML element start to end was injected, not typed.
         if let tagRange = text.range(of: #"^<[a-z][\w-]*>"#, options: .regularExpression),
            case let tag = String(text[tagRange].dropFirst().dropLast()), text.hasSuffix("</\(tag)>") {

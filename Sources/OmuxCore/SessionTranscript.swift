@@ -49,7 +49,7 @@ public final class SessionTranscript {
     /// from the panel that the conversation doesn't hold (slash commands, ones not yet recorded).
     public var history: [String] {
         var list: [String] = []
-        for block in blocks where block.kind == .user && block.pending != "removed" {
+        for block in blocks where block.kind == .user && block.pending != .removed {
             let text = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty, list.last != text { list.append(text) }
         }
@@ -202,14 +202,14 @@ public final class SessionTranscript {
         running = []; takenEchoes = []; dequeues = 0; countedMessages = []; commandNote = nil
         lastPrompt = nil
         var list = blocks
-        for index in list.indices where list[index].kind == .user && list[index].pending != nil { list[index].pending = "removed" }
+        for index in list.indices where list[index].kind == .user && list[index].pending != nil { list[index].pending = .removed }
         list.append(ChatBlock(id: next, kind: .note, text: "Continued with \(to.label)" + (from == .claude || from == .codex ? ", handed the conversation so far" : ""))); next += 1
         codexBase = list.count
         codexLive = nil; codexLiveBlock = nil; codexUserCount = 0; codexReloadPending = false
         // An agent that ran here before resumes its conversation: only what it adds now is read.
         startAtEnd = to == .claude && claudeFile() != nil
         codexSkipThrough = to == .codex && codexThread() != nil ? codexLastItem : nil
-        commit(list, touched: Set(list.indices.filter { list[$0].kind == .user && list[$0].pending == "removed" }))
+        commit(list, touched: Set(list.indices.filter { list[$0].kind == .user && list[$0].pending == .removed }))
         loaded = true
     }
 
@@ -381,12 +381,12 @@ public final class SessionTranscript {
                 // Typed here, it's already echoed and now confirmed; typed in the terminal, it shows now.
                 if let index = pendingIndex(for: text, in: list) {
                     if list[index].time == nil { list[index].time = time }
-                    list[index].pending = "queued"
+                    list[index].pending = .queued
                     touched.insert(index)
                     continue
                 }
                 var block = ChatBlock(id: next, kind: .user, text: text, time: time)
-                block.pending = "queued"
+                block.pending = .queued
                 append(block)
             case .absorbed(let text, let time):
                 // Handed to the agent mid-turn: a real prompt from here on, with no record coming.
@@ -401,7 +401,7 @@ public final class SessionTranscript {
                 if let index = pendingIndex(for: text, in: list) { takenEchoes.insert(index) }
             case .unqueued(let text):
                 guard let index = pendingIndex(for: text, in: list) else { continue }
-                list[index].pending = "removed"
+                list[index].pending = .removed
                 touched.insert(index)
             case .dequeued:
                 dequeues += 1
@@ -412,12 +412,12 @@ public final class SessionTranscript {
                 var taken = takenEchoes.sorted().filter { list.indices.contains($0) && list[$0].pending != nil }
                 takenEchoes = []
                 // One taken from the queue: the oldest waiting prompt is the one this record is.
-                if taken.isEmpty, dequeues > 0, let oldest = list.indices.first(where: { list[$0].kind == .user && list[$0].pending != nil && list[$0].pending != "removed" }) {
+                if taken.isEmpty, dequeues > 0, let oldest = list.indices.first(where: { list[$0].isWaiting }) {
                     dequeues -= 1
                     taken = [oldest]
                 }
                 if let first = taken.first {
-                    for index in taken.dropFirst() { list[index].pending = "removed"; touched.insert(index) }
+                    for index in taken.dropFirst() { list[index].pending = .removed; touched.insert(index) }
                     list[first].text = text
                     list[first].time = time
                     list[first].images = keep(images)
@@ -450,9 +450,9 @@ public final class SessionTranscript {
                     append(ChatBlock(id: next, kind: .note, text: "Worked for " + Self.duration(end.timeIntervalSince(start))))
                 }
                 // Anything still waiting from long before this prompt was never taken: hide it.
-                for index in list.indices where list[index].kind == .user && list[index].pending != nil && list[index].pending != "removed"
+                for index in list.indices where list[index].isWaiting
                     && (list[index].time.map { (time ?? Date()).timeIntervalSince($0) > 600 } ?? false) {
-                    list[index].pending = "removed"; touched.insert(index)
+                    list[index].pending = .removed; touched.insert(index)
                 }
                 append(ChatBlock(id: next, kind: .user, text: text, time: time, images: keep(images)))
                 lastPrompt = time
@@ -726,7 +726,7 @@ public final class SessionTranscript {
         let inline = TranscriptParser.inlineImages(in: text)
         var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date(), images: keep(inline.images))
         // "queuing" until Claude Code's own queue record confirms it; then it can be reordered.
-        block.pending = queued ? "queuing" : "sent"
+        block.pending = queued ? .queuing : .sent
         list.append(block); next += 1
         commit(list, touched: [])
         Timing.mark("echo", tabID, queued ? "queued" : "sent")
@@ -734,30 +734,32 @@ public final class SessionTranscript {
 
     /// The waiting prompt a queue record names: the one with that text, newest first.
     private func pendingIndex(for text: String, in list: [ChatBlock]) -> Int? {
-        list.indices.last { list[$0].kind == .user && list[$0].pending != nil && list[$0].pending != "removed" && list[$0].text.trimmingCharacters(in: .whitespacesAndNewlines) == text }
+        let key = TranscriptParser.matchKey(text)
+        return list.indices.last { list[$0].isWaiting && TranscriptParser.matchKey(list[$0].text) == key }
     }
 
     /// The echo a real prompt record stands for: the one with the same text, else the oldest
     /// still waiting. Echoes from more than ten minutes before the record were never taken.
     private func echoIndex(for text: String, in list: [ChatBlock], at time: Date?) -> Int? {
         let now = time ?? Date()
-        let fresh = list.indices.filter { list[$0].kind == .user && list[$0].pending != nil && list[$0].pending != "removed" && (list[$0].time.map { now.timeIntervalSince($0) < 600 } ?? false) }
-        return fresh.first { list[$0].text == text } ?? fresh.first
+        let fresh = list.indices.filter { list[$0].isWaiting && (list[$0].time.map { now.timeIntervalSince($0) < 600 } ?? false) }
+        let key = TranscriptParser.matchKey(text)
+        return fresh.first { TranscriptParser.matchKey(list[$0].text) == key } ?? fresh.first
     }
 
     /// Pulls back the prompts the agent never took: their echoes go, and the text comes back
     /// for the compose box. Nil when none was waiting.
     public func takeUnsent() -> String? {
-        let waiting = blocks.indices.filter { blocks[$0].kind == .user && blocks[$0].pending != nil && blocks[$0].pending != "removed" }
+        let waiting = blocks.indices.filter { blocks[$0].isWaiting }
         guard !waiting.isEmpty else { return nil }
         var list = blocks
-        for index in waiting { list[index].pending = "removed" }
+        for index in waiting { list[index].pending = .removed }
         commit(list, touched: Set(waiting))
         return waiting.map { blocks[$0].text }.joined(separator: "\n\n")
     }
 
     /// Whether a prompt still shows as waiting in the agent's queue.
-    public var hasQueuedEchoes: Bool { blocks.contains { $0.kind == .user && ($0.pending == "queued" || $0.pending == "queuing") } }
+    public var hasQueuedEchoes: Bool { blocks.contains { $0.kind == .user && ($0.pending == .queued || $0.pending == .queuing) } }
 
     /// Called once the agent has been idle for a moment. An agent with a prompt in its queue
     /// starts on it at once, so whatever still shows as queued then was taken without a record
@@ -766,7 +768,7 @@ public final class SessionTranscript {
     public func settleQueue() {
         var list = blocks
         var touched: Set<Int> = []
-        for index in list.indices where list[index].kind == .user && (list[index].pending == "queued" || list[index].pending == "queuing") {
+        for index in list.indices where list[index].inQueue {
             list[index].pending = nil
             touched.insert(index)
         }
@@ -779,7 +781,7 @@ public final class SessionTranscript {
     public func dismissEcho(_ id: Int) {
         guard blocks.indices.contains(id), blocks[id].pending != nil else { return }
         var list = blocks
-        list[id].pending = "removed"
+        list[id].pending = .removed
         commit(list, touched: [id])
     }
 
@@ -926,7 +928,7 @@ public final class SessionTranscript {
                 let users = fresh.filter { $0.kind == .user }.count
                 var echoes: [ChatBlock] = []
                 var index = blocks.count - 1
-                while index >= base, blocks[index].kind == .user, let pending = blocks[index].pending, pending != "removed" {
+                while index >= base, blocks[index].kind == .user, let pending = blocks[index].pending, pending != .removed {
                     echoes.insert(blocks[index], at: 0); index -= 1
                 }
                 echoes.removeFirst(min(max(0, users - codexUserCount), echoes.count))

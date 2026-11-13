@@ -521,9 +521,9 @@ struct TranscriptPanel: View {
         // ⌃X ⌃S: Claude Code interrupts the turn and takes the queue now.
         if action == "now" { store.sendKeys("\u{18}\u{13}", to: tabID); return }
         // Only prompts Claude Code has confirmed as queued; one still on its way can't be pulled back yet.
-        let queued = model.blocks.filter { $0.kind == .user && $0.pending == "queued" }
+        let queued = model.blocks.filter { $0.kind == .user && $0.pending == .queued }
         guard let index = queued.firstIndex(where: { $0.id == id }) else { return }
-        if model.blocks.contains(where: { $0.kind == .user && $0.pending == "queuing" }) { model.note("A prompt is still on its way to the queue; try again in a moment."); return }
+        if model.blocks.contains(where: { $0.kind == .user && $0.pending == .queuing }) { model.note("A prompt is still on its way to the queue; try again in a moment."); return }
         // ⌃U clears one line of the prompt, so a multi-line prompt can't be pulled back cleanly.
         if queued.contains(where: { $0.text.contains("\n") }) { model.note("A queued prompt spans several lines; reorder it with ↑ in the terminal."); return }
         var texts = queued.map(\.text)
