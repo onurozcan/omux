@@ -8,6 +8,7 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 - **Neutral reaches the transcript's working colour.** With the Neutral accent, the Bash tag, running tool rows, spinners, the reply's caret, the Working dot and the starting cards are grey too. The sidebar and the session header keep the working blue.
 
 ### Fixed
+- **A prompt can no longer be stuck on "Queued".** Once the agent has been idle for five seconds, any prompt still shown as queued is settled as sent: an agent with something in its queue starts on it at once, so by then it was taken. A record omux fails to match now costs a short delay, not a label that stays until restart.
 - **A pasted prompt no longer stays "Queued" after the agent takes it.** A prompt that was pasted, sent while the agent worked and picked up mid-turn kept its Queued label for good, because Claude Code records pasted text in a wrapper omux mistook for a system message.
 
 ## [0.11.2] - 2026-11-13

@@ -43,6 +43,20 @@ final class TranscriptTests: XCTestCase {
         XCTAssertNil(m.blocks.last?.pending)
     }
 
+    /// A queue record this reader can't match must not leave a prompt "Queued" for good:
+    /// once the agent is idle, what still waits is settled as sent.
+    func testQueuedPromptsSettleOnceTheAgentIsIdle() {
+        let m = SessionTranscript(tab: TabItem(name: "t"), provider: .claude, claudeFile: { nil }, codexThread: { nil })
+        m.echo("first", queued: true)
+        m.ingest([object(#"{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-13T19:46:54.110Z","content":"first"}"#)])
+        m.echo("second, never confirmed", queued: true)
+        XCTAssertTrue(m.hasQueuedEchoes)
+        m.settleQueue()
+        XCTAssertFalse(m.hasQueuedEchoes)
+        XCTAssertEqual(m.blocks.filter { $0.kind == .user }.map(\.pending), [nil, nil])
+        XCTAssertEqual(m.blocks.filter { $0.kind == .user }.map(\.text), ["first", "second, never confirmed"])
+    }
+
     func testTurnsToolsAndResults() {
         let m = model()
         m.ingest([

@@ -147,6 +147,13 @@ struct TranscriptPanel: View {
                     }
                     // The dialog is gone: what was held goes now, in order.
                     if state != .blocked { releaseHeld() }
+                    // Idle and staying idle: nothing is waiting in the agent's queue any more.
+                    if state != .working, state != .blocked, model.hasQueuedEchoes {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                            let now = store.runtime[tabID]?.statusState
+                            if now != .working, now != .blocked { model.settleQueue() }
+                        }
+                    }
                 }
                 .onChange(of: model.version) { _, _ in
                     if replyPending, replyLanded { replyPending = false; Timing.mark("reply-shown", tabID) }
