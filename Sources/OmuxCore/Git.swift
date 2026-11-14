@@ -18,7 +18,14 @@ public enum Git {
     /// with whatever git the session itself is running.
     @discardableResult
     public static func run(_ args: [String], in dir: String) -> Result {
-        exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath])
+        // A folder on another machine: the same command, run there, over the connection the
+        // session already holds.
+        if let remote = RemotePath.parse(dir) {
+            let script = RemotePath.entering(remote.path) + "GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 exec git " + args.map(quote).joined(separator: " ")
+            let answer = RemotePath.run(script, on: remote.host)
+            return Result(status: answer.status, out: answer.text, err: answer.error)
+        }
+        return exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath])
     }
 
     /// The login shell's PATH, looked up once. Opened from Finder, omux only has
@@ -33,6 +40,8 @@ public enum Git {
     /// match their terminal (needed for push and anything that may call gh).
     @discardableResult
     public static func login(_ command: String, in dir: String) -> Result {
+        // Pushing and pull requests from another machine aren't done from here.
+        if RemotePath.isRemote(dir) { return Result(status: -1, out: "", err: "Not available for a project on another machine") }
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         return exec(shell, ["-lc", command], in: dir, env: ["GIT_TERMINAL_PROMPT": "0"])
     }
@@ -238,6 +247,21 @@ public enum Git {
                                          status: kinds[fields[2]] ?? .modified))
             }
         }
+        if let remote = RemotePath.parse(dir) {
+            // Counted there, in one go: a look at each file from here would be a connection each.
+            let script = RemotePath.entering(remote.path) + #"""
+            git ls-files --others --exclude-standard 2>/dev/null | head -300 | while IFS= read -r f; do
+              n=$(wc -l < "$f" 2>/dev/null | tr -d ' '); printf '%s\t%s\n' "$n" "$f"
+            done
+            """#
+            for line in RemotePath.run(script, on: remote.host).text.split(whereSeparator: \.isNewline) {
+                let fields = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+                guard fields.count == 2, !fields[1].isEmpty else { continue }
+                let lines = Int(fields[0])
+                files.append(ChangedFile(path: fields[1], added: lines, removed: lines == nil ? nil : 0, status: .untracked))
+            }
+            return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        }
         let untracked = run(["ls-files", "--others", "--exclude-standard", "-z"], in: dir).out
         for path in untracked.split(separator: "\0").map(String.init).prefix(300) {
             let full = (dir as NSString).appendingPathComponent(path)
@@ -250,6 +274,18 @@ public enum Git {
     private static func emptyTree(_ dir: String) -> String? {
         let r = run(["hash-object", "-t", "tree", "/dev/null"], in: dir)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+    }
+
+    /// The lines of a small text file in `dir`, which may be on another machine; nil for
+    /// binaries and big files.
+    public static func fileLines(dir: String, path: String) -> [String]? {
+        guard let remote = RemotePath.parse(dir) else { return textLines(atPath: (dir as NSString).appendingPathComponent(path)) }
+        let script = RemotePath.entering(remote.path) + "F=" + quote(path) + #"; [ "$(wc -c < "$F" 2>/dev/null || echo 9999999)" -lt 1000000 ] && cat -- "$F""#
+        let answer = RemotePath.run(script, on: remote.host)
+        guard answer.status == 0, !answer.output.prefix(8000).contains(0), let text = String(data: answer.output, encoding: .utf8) else { return nil }
+        var lines = text.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        return lines
     }
 
     /// The lines of a small text file, or nil for binaries and big files.
@@ -267,7 +303,7 @@ public enum Git {
 
     public static func diff(dir: String, base: String?, file: ChangedFile) -> [DiffLine] {
         if file.status == .untracked || base == nil {
-            guard let lines = textLines(atPath: (dir as NSString).appendingPathComponent(file.path)) else {
+            guard let lines = fileLines(dir: dir, path: file.path) else {
                 return [DiffLine(index: 0, kind: .info, oldNumber: nil, newNumber: nil, text: "Binary or large file")]
             }
             return [DiffLine(index: 0, kind: .hunk, oldNumber: nil, newNumber: nil, text: "New file")] +

@@ -7,11 +7,7 @@ import OmuxHostKit
 /// connection attached to it: the same terminal view as a local session, fed from afar, so
 /// status, titles and everything read off the screen work as they do locally.
 enum RemoteHost {
-    /// One authenticated connection per host, shared by everything omux runs there, so a
-    /// password or a key's passphrase is asked for once and later connections open at once.
-    /// Keep-alives notice a dead link in under a minute instead of hanging.
-    static let options = ["-o", "ControlMaster=auto", "-o", "ControlPath=~/.ssh/omux-%C", "-o", "ControlPersist=600",
-                          "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"]
+    static let options = RemotePath.options
     static let remoteBinary = "~/.omux/bin/omux-host"
 
     /// Where this build keeps `omux-host` for the systems it can set up: in the app bundle,

@@ -29,6 +29,7 @@ final class Changes: ObservableObject {
     private var watcher: FolderWatcher?
     /// Commits and resets touch only HEAD and the index, which can be outside `dir`.
     private var gitWatcher: FolderWatcher?
+    private var remotePoll: Timer?
     private var refreshing = false
     private var again = false
 
@@ -41,6 +42,7 @@ final class Changes: ObservableObject {
         self.worktree = worktree
         files = []
         base = nil
+        remotePoll?.invalidate(); remotePoll = nil
         watcher = nil
         gitWatcher = nil
         isRepo = false
@@ -55,6 +57,16 @@ final class Changes: ObservableObject {
             await MainActor.run {
                 guard self.dir == dir, inRepo, !self.isRepo else { return }
                 self.isRepo = true
+                // A folder on another machine tells nothing when it changes: look every few
+                // seconds while its session is the one in view.
+                if RemotePath.isRemote(dir) {
+                    self.remotePoll?.invalidate()
+                    self.remotePoll = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                        Task { @MainActor in if let self, self.dir == dir { self.refresh() } }
+                    }
+                    self.refresh()
+                    return
+                }
                 self.watcher = FolderWatcher(path: dir) { [weak self] in self?.refresh() }
                 if let gitDir, !gitDir.hasPrefix(dir + "/") {
                     self.gitWatcher = FolderWatcher(path: gitDir) { [weak self] in self?.refresh() }
@@ -444,7 +456,9 @@ struct ChangesPanel: View {
     }
 
     private func url(_ file: ChangedFile) -> URL? {
-        changes.dir.map { URL(fileURLWithPath: $0).appendingPathComponent(file.path) }
+        // Nothing here to open or reveal when the folder is on another machine.
+        guard let dir = changes.dir, !RemotePath.isRemote(dir) else { return nil }
+        return URL(fileURLWithPath: dir).appendingPathComponent(file.path)
     }
 
     private func open(_ file: ChangedFile) {

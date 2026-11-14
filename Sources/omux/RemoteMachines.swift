@@ -122,19 +122,8 @@ final class RemoteMachines: ObservableObject {
     nonisolated static func run(_ script: String, on host: String, timeout: Int = 10, input: URL? = nil) async -> Answer {
         guard isValid(host) else { return Answer(status: 255, output: "", error: "not a machine name") }
         return await Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            process.arguments = RemoteHost.options + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=\(timeout)", host, "sh -c " + Git.quote(script)]
-            let output = Pipe(), error = Pipe()
-            // A file to send goes in as the script's standard input.
-            process.standardInput = input.flatMap { try? FileHandle(forReadingFrom: $0) } ?? FileHandle.nullDevice
-            process.standardOutput = output
-            process.standardError = error
-            do { try process.run() } catch { return Answer(status: 255, output: "", error: "\(error)") }
-            let out = output.fileHandleForReading.readDataToEndOfFile()
-            let err = error.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return Answer(status: process.terminationStatus, output: String(decoding: out, as: UTF8.self), error: String(decoding: err, as: UTF8.self))
+            let answer = RemotePath.run(script, on: host, input: input, timeout: timeout)
+            return Answer(status: answer.status, output: answer.text, error: answer.error)
         }.value
     }
 
@@ -152,7 +141,7 @@ final class RemoteMachines: ObservableObject {
 
     /// `~` and `~/x` made into real paths on the machine, without the machine's shell ever
     /// expanding anything of the user's.
-    private nonisolated static let resolve = #"case "$D" in "~") D=$HOME ;; "~/"*) D="$HOME/${D#\~/}" ;; esac"#
+    private nonisolated static let resolve = RemotePath.resolve
 
     nonisolated static func probeScript(folder: String?) -> String {
         """

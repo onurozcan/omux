@@ -92,6 +92,8 @@ final class FileDocument: ObservableObject {
             dirty = false
             changedOnDisk = false
             error = nil
+            // A copy of a file on another machine goes back to where it came from.
+            RemoteFiles.saved(url)
         } catch {
             self.error = "Couldn't save: \(error.localizedDescription)"
         }

@@ -427,7 +427,7 @@ struct ContentView: View {
     /// Changes follow the selected session and its folder, which may be its project's.
     private var changesKey: String {
         let tab = store.selectedTab
-        return "\(tab?.id.uuidString ?? "")|\(tab.flatMap(store.directory(of:)) ?? "")|\(tab?.worktree?.branch ?? "")"
+        return "\(tab?.id.uuidString ?? "")|\(tab.flatMap(store.gitLocation(of:)) ?? "")|\(tab?.worktree?.branch ?? "")"
     }
 
     /// Folder the file panel shows: the selected session's folder, else its project's.
@@ -493,7 +493,7 @@ struct ContentView: View {
         .onChange(of: store.previewRequest) { _, path in if path != nil { store.showPanel(.files) } }
         .onChange(of: changesKey, initial: true) { _, _ in
             let tab = store.selectedTab
-            Changes.shared.track(tabID: tab?.id, dir: tab.flatMap(store.directory(of:)), worktree: tab?.worktree)
+            Changes.shared.track(tabID: tab?.id, dir: tab.flatMap(store.gitLocation(of:)), worktree: tab?.worktree)
         }
         .sheet(item: $store.newWorktreeGroupID) { WorktreeSheet(groupID: $0).environmentObject(store) }
         .sheet(isPresented: $store.showQuickSwitcher) { QuickSwitcher().environmentObject(store) }

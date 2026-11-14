@@ -361,6 +361,12 @@ struct TranscriptPanel: View {
             store.showPanel(.changes)
         case "path":
             guard let raw = message["path"] as? String else { return }
+            if let group = store.group(containing: tabID), group.isRemote {
+                // A path on the session's machine: the Files tab gets it from there.
+                let folder = store.runtime[tabID]?.cwd ?? store.tab(tabID)?.directory ?? group.directory ?? "~"
+                store.previewRequest = raw.hasPrefix("/") || raw.hasPrefix("~") ? raw : folder + "/" + raw
+                return
+            }
             let path = raw.hasPrefix("/") || raw.hasPrefix("~") ? (raw as NSString).expandingTildeInPath
                 : (baseDirectory as NSString).appendingPathComponent(raw)
             if FileManager.default.fileExists(atPath: path) { store.preview(path) }

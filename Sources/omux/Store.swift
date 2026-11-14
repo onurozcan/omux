@@ -1539,6 +1539,13 @@ final class Store: ObservableObject {
 
     // MARK: Groups
 
+    /// Where a session's folder is, for what looks at its Git state: the folder itself, or for a
+    /// project on another machine, that folder there.
+    func gitLocation(of tab: TabItem) -> String? {
+        guard let group = group(containing: tab.id), group.isRemote, let host = group.host else { return directory(of: tab) }
+        return RemotePath.make(host: host, path: tab.directory ?? group.directory ?? "~")
+    }
+
     /// A project on another machine, with its first session, which sets the machine up if
     /// it isn't and starts the agent there.
     func newRemoteGroup(name: String, host: String, directory: String?, provider: SessionProvider) {
