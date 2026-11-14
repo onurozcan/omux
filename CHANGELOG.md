@@ -4,6 +4,9 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+- **More commands in the compose box.** Typing `/` now offers `/remote-control` and the rest of Claude Code's commands that were missing from the list, such as `/add-dir`, `/fast`, `/code-review`, `/security-review`, `/export` and `/tasks`, along with the commands and skills of installed plugins, named as Claude Code names them. They could be typed in full before, but nothing suggested them.
+
 ### Changed
 - **Links open in the session's browser.** A web address clicked in the transcript, or ⌘-clicked in the terminal, shows in that session's Browser tab, beside the conversation it came from, where it used to open the default browser in another window. The Browser tab's button still takes the page to the default browser. Mail addresses and other apps' links go to the system as before.
 - **Neutral reaches the transcript's working colour.** With the Neutral accent, the Bash tag, running tool rows, spinners, the reply's caret, the Working dot and the starting cards are grey too. The sidebar and the session header keep the working blue.

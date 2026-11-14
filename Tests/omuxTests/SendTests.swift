@@ -87,6 +87,30 @@ final class SendTests: XCTestCase {
         XCTAssertFalse(Store.startsTurn(from: .done, to: nil))
     }
 
+    /// The compose box offers Claude Code's own commands, /remote-control among them, and
+    /// what installed plugins add, under the names Claude Code gives those.
+    func testTheCommandListHasRemoteControlAndPluginCommands() throws {
+        XCTAssertTrue(CommandIndex.claude.contains { $0.name == "remote-control" })
+        XCTAssertEqual(Set(CommandIndex.claude.map(\.name)).count, CommandIndex.claude.count, "no command listed twice")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("omux-plugins-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for path in ["mine/commands/git", "mine/skills/deploy", "theirs/commands"] {
+            try FileManager.default.createDirectory(at: dir.appendingPathComponent(path), withIntermediateDirectories: true)
+        }
+        try "x".write(to: dir.appendingPathComponent("mine/commands/git/commit.md"), atomically: true, encoding: .utf8)
+        try "x".write(to: dir.appendingPathComponent("mine/skills/deploy/SKILL.md"), atomically: true, encoding: .utf8)
+        try "x".write(to: dir.appendingPathComponent("theirs/commands/audit.md"), atomically: true, encoding: .utf8)
+        let registry: [String: Any] = ["version": 2, "plugins": [
+            "mine@market": [["scope": "user", "installPath": dir.appendingPathComponent("mine").path]],
+            "theirs@market": [["scope": "project", "projectPath": "/work/other", "installPath": dir.appendingPathComponent("theirs").path]],
+        ]]
+        let file = dir.appendingPathComponent("installed_plugins.json")
+        try JSONSerialization.data(withJSONObject: registry).write(to: file)
+        XCTAssertEqual(CommandIndex.pluginCommands(project: "/work/app", registry: file.path).map(\.name), ["mine:git:commit", "mine:deploy"])
+        XCTAssertEqual(CommandIndex.pluginCommands(project: "/work/other/sub", registry: file.path).map(\.name).sorted(), ["mine:deploy", "mine:git:commit", "theirs:audit"])
+    }
+
     func testAProjectIsActivatedByAFreshStartOrAfterAnHour() {
         let now = Date()
         // No turn on record: the first one activates, whatever is up.

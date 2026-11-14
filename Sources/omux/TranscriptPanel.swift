@@ -826,7 +826,8 @@ struct TranscriptPanel: View {
         let builtIn: Set<String> = ["mcp", "config", "permissions", "plugins", "plugin", "skills", "hooks", "agents", "memory", "doctor",
                                     "resume", "rewind", "help", "login", "logout", "status", "usage", "context", "cost", "vim",
                                     "terminal-setup", "statusline", "bug", "release-notes", "upgrade", "export", "privacy-settings",
-                                    "settings", "theme", "keybindings", "ide", "install-github-app", "install-slack-app", "model", "effort"]
+                                    "settings", "theme", "keybindings", "ide", "install-github-app", "install-slack-app", "model", "effort",
+                                    "output-style", "tasks", "todos", "feedback"]
         // A custom command or skill replies in the conversation; anything else built in draws on screen.
         return builtIn.contains(command)
     }
