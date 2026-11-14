@@ -15,6 +15,10 @@ public enum AgentConfig {
         public var actions: [String] = []
         /// What the action needs: a scope, a plugin id with scope, or a settings file.
         public var arg: String = ""
+
+        public init(name: String, detail: String, note: String, state: String = "", actions: [String] = [], arg: String = "") {
+            self.name = name; self.detail = detail; self.note = note; self.state = state; self.actions = actions; self.arg = arg
+        }
     }
 
     public struct Overview: Equatable, Encodable {
@@ -32,6 +36,12 @@ public enum AgentConfig {
         /// One extra button in the header, and the action it posts.
         public var actionID: String?
         public var actionLabel: String?
+
+        public init(title: String, summary: String, rows: [Row], command: String, form: String? = nil, kind: String = "", empty: String? = nil,
+                    actionID: String? = nil, actionLabel: String? = nil) {
+            self.title = title; self.summary = summary; self.rows = rows; self.command = command; self.form = form; self.kind = kind
+            self.empty = empty; self.actionID = actionID; self.actionLabel = actionLabel
+        }
     }
 
     /// Claude Code's user-scope MCP servers, as configured: name and its config object.

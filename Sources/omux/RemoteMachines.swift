@@ -119,14 +119,15 @@ final class RemoteMachines: ObservableObject {
 
     /// Runs `script` under sh on the machine and waits for it, without ever asking the user
     /// for anything.
-    nonisolated static func run(_ script: String, on host: String, timeout: Int = 10) async -> Answer {
+    nonisolated static func run(_ script: String, on host: String, timeout: Int = 10, input: URL? = nil) async -> Answer {
         guard isValid(host) else { return Answer(status: 255, output: "", error: "not a machine name") }
         return await Task.detached {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
             process.arguments = RemoteHost.options + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=\(timeout)", host, "sh -c " + Git.quote(script)]
             let output = Pipe(), error = Pipe()
-            process.standardInput = FileHandle.nullDevice
+            // A file to send goes in as the script's standard input.
+            process.standardInput = input.flatMap { try? FileHandle(forReadingFrom: $0) } ?? FileHandle.nullDevice
             process.standardOutput = output
             process.standardError = error
             do { try process.run() } catch { return Answer(status: 255, output: "", error: "\(error)") }
@@ -248,6 +249,68 @@ final class RemoteMachines: ObservableObject {
         let answer = await Self.run(script, on: host, timeout: 15)
         await check(host, quietly: true)
         return answer.status == 0 ? nil : Self.explain(answer.error, host: host)
+    }
+
+    // MARK: For the compose box
+
+    /// The files of a folder on the machine, for @ mentions: what Git tracks there, or, where
+    /// it isn't a checkout, what is in it short of the usual heaps.
+    nonisolated static func files(on host: String, in folder: String) async -> [String] {
+        let script = """
+        D=\(Git.quote(folder.isEmpty ? "~" : folder))
+        \(resolve)
+        cd "$D" 2>/dev/null || exit 3
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git ls-files 2>/dev/null
+        else find . -type f -not -path '*/.*' -not -path '*/node_modules/*' -not -path '*/target/*' -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null | sed 's|^\\./||'
+        fi | head -8000
+        """
+        let answer = await run(script, on: host, timeout: 10)
+        guard answer.status == 0 else { return [] }
+        return answer.output.split(whereSeparator: \.isNewline).map(String.init)
+    }
+
+    /// The name a sent file gets on the machine: its own, kept recognisable, behind a few
+    /// random characters so two files of one name don't land on each other.
+    nonisolated static func attachmentName(for file: URL) -> String {
+        let kept = String(file.lastPathComponent.unicodeScalars.map { scalar -> Character in
+            let c = Character(scalar)
+            return scalar.isASCII && (c.isLetter || c.isNumber || c == "." || c == "-" || c == "_") ? c : "_"
+        }.suffix(80))
+        return String(format: "%08x", UInt32.random(in: 0...UInt32.max)) + "-" + (kept.isEmpty || kept.hasPrefix(".") ? "file" + kept : kept)
+    }
+
+    /// Copies a file from this Mac to the machine, for an agent there to read: an image pasted
+    /// into the prompt, a file attached. Returns where it landed, or nil.
+    nonisolated static func upload(_ file: URL, to host: String) async -> String? {
+        let script = """
+        mkdir -p "$HOME/.omux/attachments" && f="$HOME/.omux/attachments/\(attachmentName(for: file))" && cat > "$f" && printf '%s' "$f"
+        """
+        let answer = await run(script, on: host, timeout: 20, input: file)
+        let path = answer.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return answer.status == 0 && path.hasPrefix("/") ? path : nil
+    }
+
+    /// The machines as a card in the transcript, for /machines: each with how it was when last
+    /// looked at, and what uses it.
+    func overview(hosts: [String], projects: [String: [String]]) -> AgentConfig.Overview {
+        let rows = hosts.map { host -> AgentConfig.Row in
+            let used = projects[host].map { "used by " + $0.joined(separator: ", ") } ?? "no project"
+            switch state(of: host) {
+            case .unknown, .checking:
+                return .init(name: host, detail: "Looking…", note: used)
+            case .unreachable(let why):
+                return .init(name: host, detail: why, note: used, state: "off")
+            case .reachable(let report):
+                let parts = [report.system, !report.supported ? "not supported yet" : report.hostVersion != nil ? "omux set up" : "omux not set up yet",
+                             report.claude ? "Claude Code installed" : "no Claude Code",
+                             report.running.isEmpty ? nil : "\(report.running.count) session\(report.running.count == 1 ? "" : "s") running"].compactMap { $0 }
+                return .init(name: host, detail: parts.joined(separator: " · "), note: used, state: "on")
+            }
+        }
+        return AgentConfig.Overview(title: "Machines", summary: rows.isEmpty ? "" : "Where projects run besides this Mac. /remote makes a project on one.",
+                                    rows: rows, command: "", kind: "machines",
+                                    empty: "No machines yet. /remote devbox ~/code/app makes a project on one you reach with ssh.",
+                                    actionID: "machines-open", actionLabel: "Open Machines…")
     }
 
     // MARK: Keeping watch

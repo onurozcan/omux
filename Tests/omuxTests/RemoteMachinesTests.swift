@@ -85,6 +85,35 @@ final class RemoteMachinesTests: XCTestCase {
         XCTAssertEqual(check.terminationStatus, 0)
     }
 
+    func testAFileSentToAMachineKeepsARecognisableSafeName() {
+        let name = RemoteMachines.attachmentName(for: URL(fileURLWithPath: "/tmp/Screen Shot $(rm -rf ~) 'x'.png"))
+        XCTAssertTrue(name.hasSuffix("-Screen_Shot___rm_-rf_____x_.png"), name)
+        XCTAssertNotNil(name.range(of: #"^[0-9a-f]{8}-[A-Za-z0-9._-]+$"#, options: .regularExpression), name)
+        XCTAssertNotEqual(name, RemoteMachines.attachmentName(for: URL(fileURLWithPath: "/tmp/Screen Shot $(rm -rf ~) 'x'.png")), "two of one name don't collide")
+        XCTAssertTrue(RemoteMachines.attachmentName(for: URL(fileURLWithPath: "/tmp/.env")).hasSuffix("-file.env"))
+    }
+
+    /// /machines in the compose box: a card with each machine, how it is and what uses it.
+    @MainActor
+    func testTheMachinesCard() {
+        let machines = RemoteMachines()
+        let empty = machines.overview(hosts: [], projects: [:])
+        XCTAssertTrue(empty.rows.isEmpty)
+        XCTAssertNotNil(empty.empty)
+        let card = machines.overview(hosts: ["devbox"], projects: ["devbox": ["api", "web"]])
+        XCTAssertEqual(card.title, "Machines")
+        XCTAssertEqual(card.rows.map(\.name), ["devbox"])
+        XCTAssertEqual(card.rows.first?.note, "used by api, web")
+        XCTAssertEqual(card.rows.first?.detail, "Looking…", "not looked at yet")
+        XCTAssertEqual(card.actionID, "machines-open")
+    }
+
+    func testTheComposeBoxOffersTheMachineCommands() {
+        for list in [CommandIndex.claude, CommandIndex.codex] {
+            XCTAssertTrue(["machines", "machine", "remote"].allSatisfy { name in list.contains { $0.name == name } })
+        }
+    }
+
     /// Against a real machine, when one is named: OMUX_LIVE_HOST=devbox swift test --filter RemoteMachinesTests
     @MainActor
     func testALiveMachine() async throws {
@@ -104,6 +133,19 @@ final class RemoteMachinesTests: XCTestCase {
         let home = try await RemoteMachines.folders(on: host, in: "~").get()
         XCTAssertEqual(home.path, report.home)
         if case .success = await RemoteMachines.folders(on: host, in: "/no/such/folder") { XCTFail("listed a folder that isn't there") }
+        // What the compose box needs there: the folder's files for @, and a file sent over.
+        let files = await RemoteMachines.files(on: host, in: "/etc/ssh")
+        print("LIVE files:", files.prefix(4))
+        XCTAssertTrue(files.contains("ssh_config"))
+        let local = FileManager.default.temporaryDirectory.appendingPathComponent("omux up load \(UUID().uuidString).txt")
+        try "sent from the Mac\n".write(to: local, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: local) }
+        let uploaded = await RemoteMachines.upload(local, to: host)
+        let remote = try XCTUnwrap(uploaded)
+        print("LIVE uploaded to:", remote)
+        XCTAssertTrue(remote.hasPrefix(report.home + "/.omux/attachments/"))
+        let back = await RemoteMachines.run("cat \(remote); rm -f \(remote)", on: host)
+        XCTAssertEqual(back.output, "sent from the Mac\n")
         let nowhere = await machines.check("no-such-machine-omux-test.invalid")
         XCTAssertNotNil(nowhere.problem)
         print("LIVE unreachable:", nowhere.problem ?? "")

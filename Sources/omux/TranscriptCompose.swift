@@ -50,6 +50,8 @@ struct ComposeBox: View {
     @State private var files: FileIndex?
     @State private var saveWork: DispatchWorkItem?
     @State private var attachments: [URL] = []
+    /// Attached files are on their way to the session's machine; the message goes when they are there.
+    @State private var uploading = false
     @State private var dropping = false
     /// ⌘V with an image or files on the clipboard attaches them; the field takes text as usual.
     @State private var pasteMonitor: Any?
@@ -186,7 +188,7 @@ struct ComposeBox: View {
             // would otherwise fight over it and move the selection to the last one.
             if store.selectedTabID == tabID { focused = true }
             commands.load(provider: provider, project: projectDirectory)
-            files = FileIndex.shared(for: projectDirectory)
+            files = machine.map { FileIndex.shared(for: remoteDirectory, host: $0) } ?? FileIndex.shared(for: projectDirectory)
         }
         .onChange(of: store.selectedTabID) { _, id in
             if id == tabID, !focused { focused = true }
@@ -227,6 +229,14 @@ struct ComposeBox: View {
 
     private var projectDirectory: String {
         store.tab(tabID)?.directory.map { ($0 as NSString).expandingTildeInPath } ?? store.runtime[tabID]?.cwd ?? NSHomeDirectory()
+    }
+
+    /// The machine this session runs on, when it isn't this Mac.
+    private var machine: String? { store.group(containing: tabID).flatMap { $0.isRemote ? $0.host : nil } }
+
+    /// The session's folder there, as the project names it: "~" is that machine's home.
+    private var remoteDirectory: String {
+        store.tab(tabID)?.directory ?? store.group(containing: tabID)?.directory ?? "~"
     }
 
     // MARK: Chips
@@ -437,10 +447,34 @@ struct ComposeBox: View {
 
     private func submit() {
         if accept() { return }
-        var text = draft
-        // Attached files go after the message as paths, the way a drop onto the terminal lands.
-        let paths = attachments.map { $0.path.contains(" ") ? "\"\($0.path)\"" : $0.path }
-        if !paths.isEmpty { text = (text.trimmingCharacters(in: .whitespacesAndNewlines) + " " + paths.joined(separator: " ")).trimmingCharacters(in: .whitespaces) }
+        let draft = draft
+        func message(_ paths: [String]) -> String {
+            // Attached files go after the message as paths, the way a drop onto the terminal lands.
+            let quoted = paths.map { $0.contains(" ") ? "\"\($0)\"" : $0 }
+            return quoted.isEmpty ? draft : (draft.trimmingCharacters(in: .whitespacesAndNewlines) + " " + quoted.joined(separator: " ")).trimmingCharacters(in: .whitespaces)
+        }
+        // An agent on another machine can't read a file on this one: what is attached is
+        // copied there first, and it is the copy's path that goes into the prompt.
+        if let machine, !attachments.isEmpty {
+            guard !uploading else { return }
+            uploading = true
+            let files = attachments
+            Task {
+                var paths: [String] = []
+                for file in files {
+                    guard let path = await RemoteMachines.upload(file, to: machine) else {
+                        uploading = false
+                        Notices.shared.post("Couldn't send \(file.lastPathComponent) to \(machine)", detail: "The message wasn't sent. Check the connection and try again.", isError: true)
+                        return
+                    }
+                    paths.append(path)
+                }
+                uploading = false
+                send(message(paths))
+            }
+            return
+        }
+        let text = message(attachments.map(\.path))
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // The panel clears the draft, attachments included, once the message went out; that
         // may be now, or once the agent is up or a dialog answered.
@@ -623,7 +657,7 @@ struct CommandIndex {
         .init(name: "plan", detail: "Plan before editing"), .init(name: "review", detail: "Review a pull request"),
         .init(name: "resume", detail: "Resume a conversation"), .init(name: "rewind", detail: "Go back to an earlier turn"),
         .init(name: "context", detail: "What's in the context window"), .init(name: "usage", detail: "Plan limits"),
-    ]
+    ] + machines
     static let codex: [Command] = [
         .init(name: "mcp", detail: "MCP servers · overview here"), .init(name: "skills", detail: "Skills · overview here"),
         .init(name: "hooks", detail: "Hooks · overview here"), .init(name: "permissions", detail: "Approvals and sandbox · overview here"),
@@ -631,6 +665,12 @@ struct CommandIndex {
         .init(name: "new", detail: "Start a new thread"), .init(name: "init", detail: "Write an AGENTS.md"), .init(name: "compact", detail: "Summarize the thread"),
         .init(name: "diff", detail: "Show the diff"), .init(name: "mention", detail: "Mention a file"), .init(name: "status", detail: "Session status"),
         .init(name: "quit", detail: "Exit Codex"),
+    ] + machines
+    /// omux's own, about the machines projects run on; they never reach the agent.
+    static let machines: [Command] = [
+        .init(name: "machines", detail: "Machines projects run on · overview here"),
+        .init(name: "machine", detail: "How this session's machine is · overview here"),
+        .init(name: "remote", detail: "New project on another machine: /remote devbox ~/code/app"),
     ]
 
     mutating func load(provider: SessionProvider, project: String) {
@@ -675,12 +715,16 @@ final class FileIndex: @unchecked Sendable {
     private static let skipped: Set<String> = ["node_modules", ".git", ".build", "build", "dist", ".next", "target", "DerivedData", "Pods", ".worktrees", "vendor", ".venv", "venv", "__pycache__"]
     private static let maxAge: TimeInterval = 120
 
-    private init(root: String) { self.root = root }
+    /// The machine the folder is on, when it isn't this Mac.
+    let host: String?
 
-    static func shared(for root: String) -> FileIndex {
+    private init(root: String, host: String? = nil) { self.root = root; self.host = host }
+
+    static func shared(for root: String, host: String? = nil) -> FileIndex {
         registry.lock(); defer { registry.unlock() }
-        let index = indexes[root] ?? FileIndex(root: root)
-        indexes[root] = index
+        let key = host.map { $0 + ":" + root } ?? root
+        let index = indexes[key] ?? FileIndex(root: root, host: host)
+        indexes[key] = index
         index.refreshIfStale()
         return index
     }
@@ -692,6 +736,14 @@ final class FileIndex: @unchecked Sendable {
         loading = true
         lock.unlock()
         let root = root
+        if let host {
+            // A folder on another machine is listed there, in one go.
+            Task.detached { [self] in
+                let found = await RemoteMachines.files(on: host, in: root)
+                take(found, keepingWhatIsThereIfEmpty: true)
+            }
+            return
+        }
         DispatchQueue.global(qos: .utility).async { [self] in
             var found: [String] = []
             let url = URL(fileURLWithPath: root)
@@ -710,6 +762,16 @@ final class FileIndex: @unchecked Sendable {
             loading = false
             lock.unlock()
         }
+    }
+
+    /// What a listing found. A listing from another machine that came back empty, as when it
+    /// couldn't be reached, leaves what was known in place.
+    private func take(_ found: [String], keepingWhatIsThereIfEmpty keep: Bool) {
+        lock.lock()
+        if !found.isEmpty || !keep || paths.isEmpty { paths = found }
+        loadedAt = Date()
+        loading = false
+        lock.unlock()
     }
 
     func search(_ query: String, limit: Int) -> [String] {

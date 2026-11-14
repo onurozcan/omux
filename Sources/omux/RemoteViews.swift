@@ -240,6 +240,12 @@ struct RemoteProjectSheet: View {
         .formStyle(.grouped)
         .frame(width: 500)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear {
+            // Asked for with a machine named, as /remote devbox ~/code/app does: have a look at once.
+            (host, folder) = store.remoteDraft
+            store.remoteDraft = ("", "")
+            if valid { test() }
+        }
     }
 
     private func test() {

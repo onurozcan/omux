@@ -7,6 +7,7 @@ import SwiftUI
 
 struct TranscriptPanel: View {
     @EnvironmentObject var store: Store
+    @Environment(\.openSettings) private var openSettings
     @ObservedObject private var codex = CodexManager.shared
     @ObservedObject private var agents = AgentMonitor.shared
     @StateObject private var model: SessionTranscript
@@ -400,6 +401,11 @@ struct TranscriptPanel: View {
     /// or its settings files, then the overview is redrawn.
     private func configure(_ message: [String: Any]) {
         guard let action = message["action"] as? String, let blockID = message["block"] as? Int else { return }
+        if action == "machines-open" {
+            UserDefaults.standard.set(SettingsView.Pane.machines.rawValue, forKey: SettingsView.paneKey)
+            openSettings()
+            return
+        }
         let fields = message["fields"] as? [String: String] ?? [:]
         let name = (fields["name"] ?? message["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         let arg = message["arg"] as? String ?? ""
@@ -656,11 +662,53 @@ struct TranscriptPanel: View {
         return rt.tuiReady || (rt.agentConnectedAt.map { Date().timeIntervalSince($0) > 8 } ?? false)
     }
 
+    /// omux's own commands about machines: /machines, /machine and /remote. They are answered
+    /// here and never typed into the agent. True when `text` was one.
+    private func machineCommand(_ text: String) -> Bool {
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let command = words.first, ["/machines", "/machine", "/remote"].contains(command) else { return false }
+        sendNotice = nil
+        ComposeDrafts.text[tabID] = ""
+        ComposeDrafts.version += 1
+        let machines = RemoteMachines.shared
+        if command == "/remote" {
+            store.remoteDraft = (words.count > 1 ? words[1] : "", words.count > 2 ? words[2...].joined(separator: " ") : "")
+            store.showRemoteProject = true
+            return true
+        }
+        let remote = store.groups.filter(\.isRemote)
+        var hosts: [String]
+        if command == "/machine" {
+            guard let host = store.group(containing: tabID).flatMap({ $0.isRemote ? $0.host : nil }) else {
+                model.note("This session runs on this Mac. /remote devbox ~/code/app makes a project on another machine.")
+                return true
+            }
+            hosts = [host]
+        } else {
+            var seen: Set<String> = []
+            hosts = (remote.compactMap(\.host) + machines.remembered).filter { seen.insert($0).inserted }
+        }
+        let projects = Dictionary(grouping: remote, by: { $0.host ?? "" }).mapValues { $0.map(\.name) }
+        // What is known now, then what a fresh look at each finds.
+        let id = model.show(machines.overview(hosts: hosts, projects: projects))
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for host in hosts { group.addTask { await machines.check(host, quietly: true) } }
+            }
+            model.update(info: id, with: machines.overview(hosts: hosts, projects: projects))
+        }
+        return true
+    }
+
     private func send(_ text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        if machineCommand(text) { return }
         // Overviews omux can draw from the agent's files, instead of the terminal's dialog.
-        if provider != .custom, text.hasPrefix("/"), !text.contains(" "), AgentConfig.hasOverview(for: String(text.dropFirst())) {
+        // Not for a session on another machine: the files that count are there, and the
+        // agent's own dialog reads those.
+        if provider != .custom, text.hasPrefix("/"), !text.contains(" "), store.group(containing: tabID)?.isRemote != true,
+           AgentConfig.hasOverview(for: String(text.dropFirst())) {
             let command = String(text.dropFirst())
             let project = projectDirectory
             let agent: SessionProvider = provider == .codex ? .codex : .claude

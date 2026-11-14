@@ -75,6 +75,8 @@ final class Store: ObservableObject {
     @Published var showQuickSwitcher = false
     @Published var showRecentSessions = false
     @Published var showRemoteProject = false
+    /// What the New Remote Project sheet starts with, when asked for with a machine and folder.
+    var remoteDraft: (host: String, folder: String) = ("", "")
     @Published var showWelcome = false
     /// A file the user ⌘-clicked in a terminal; the files panel shows it.
     @Published var previewRequest: String?
