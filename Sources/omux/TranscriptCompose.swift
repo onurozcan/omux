@@ -657,6 +657,17 @@ struct CommandIndex {
         .init(name: "plan", detail: "Plan before editing"), .init(name: "review", detail: "Review a pull request"),
         .init(name: "resume", detail: "Resume a conversation"), .init(name: "rewind", detail: "Go back to an earlier turn"),
         .init(name: "context", detail: "What's in the context window"), .init(name: "usage", detail: "Plan limits"),
+        .init(name: "remote-control", detail: "Continue this session from claude.ai or your phone"),
+        .init(name: "add-dir", detail: "Let the agent work in another folder too"), .init(name: "fast", detail: "Faster output, on or off"),
+        .init(name: "code-review", detail: "Review the current changes for bugs"), .init(name: "security-review", detail: "Security review of the pending changes"),
+        .init(name: "simplify", detail: "Clean up the changed code"), .init(name: "pr-comments", detail: "Read a pull request's comments"),
+        .init(name: "loop", detail: "Repeat a prompt or command on an interval"), .init(name: "schedule", detail: "Scheduled cloud agents"),
+        .init(name: "output-style", detail: "How replies are written · opens in the terminal"), .init(name: "export", detail: "Save the conversation · opens in the terminal"),
+        .init(name: "tasks", detail: "Background tasks · opens in the terminal"), .init(name: "todos", detail: "The agent's to-do list · opens in the terminal"),
+        .init(name: "ide", detail: "Connect an editor · opens in the terminal"), .init(name: "statusline", detail: "Set up the status line"),
+        .init(name: "terminal-setup", detail: "Key bindings for the terminal"), .init(name: "vim", detail: "Vim keys in the prompt"),
+        .init(name: "release-notes", detail: "What's new in Claude Code"), .init(name: "feedback", detail: "Send feedback to Anthropic"),
+        .init(name: "upgrade", detail: "Change plan"), .init(name: "login", detail: "Sign in · opens in the terminal"), .init(name: "logout", detail: "Sign out"),
     ] + machines
     static let codex: [Command] = [
         .init(name: "mcp", detail: "MCP servers · overview here"), .init(name: "skills", detail: "Skills · overview here"),
@@ -686,8 +697,34 @@ struct CommandIndex {
                 list.append(.init(name: name, detail: label))
             }
         }
+        list += Self.pluginCommands(project: project)
         var seen: Set<String> = []
         items = list.filter { seen.insert($0.name).inserted }
+    }
+
+    /// Commands and skills of installed plugins, as Claude Code names them: "plugin:command".
+    /// A plugin installed for one project counts only in that project.
+    static func pluginCommands(project: String, registry: String = NSHomeDirectory() + "/.claude/plugins/installed_plugins.json") -> [Command] {
+        guard let data = FileManager.default.contents(atPath: registry),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let plugins = object["plugins"] as? [String: Any] else { return [] }
+        let here = ((project as NSString).expandingTildeInPath as NSString).standardizingPath
+        var found: [Command] = []
+        for key in plugins.keys.sorted() {
+            let plugin = String(key.split(separator: "@").first ?? Substring(key))
+            for install in plugins[key] as? [[String: Any]] ?? [] {
+                guard let path = install["installPath"] as? String else { continue }
+                if install["scope"] as? String == "project" {
+                    guard let owner = install["projectPath"] as? String, here == owner || here.hasPrefix(owner + "/") else { continue }
+                }
+                for name in markdownNames(in: path + "/commands") { found.append(.init(name: "\(plugin):\(name)", detail: "\(plugin) plugin")) }
+                for name in ((try? FileManager.default.contentsOfDirectory(atPath: path + "/skills")) ?? []).sorted()
+                where FileManager.default.fileExists(atPath: "\(path)/skills/\(name)/SKILL.md") {
+                    found.append(.init(name: "\(plugin):\(name)", detail: "\(plugin) plugin skill"))
+                }
+            }
+        }
+        return found
     }
 
     /// "review.md" → "review", "git/commit.md" → "git:commit".

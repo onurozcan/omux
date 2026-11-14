@@ -764,6 +764,21 @@ final class Store: ObservableObject {
         showPanel(.browser)
     }
 
+    /// Opens a link from a session, clicked in its terminal or its transcript. A web address
+    /// shows in that session's own browser, beside the conversation it came from; the Browser
+    /// tab has a button to take the page to the default browser. Anything else, such as a
+    /// mail address, is the system's to open.
+    func openLink(_ url: URL, in id: UUID?) {
+        guard let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        browser(for: id).load(url.absoluteString)
+        // The panel shows the selected session's browser: bring the link's session forward.
+        if selectedTabID != id { selectedTabID = id }
+        showPanel(.browser)
+    }
+
     func browser(for id: UUID) -> BrowserSession {
         if let browser = browsers[id] { return browser }
         let browser = BrowserSession(tabID: id)
@@ -1179,6 +1194,8 @@ final class Store: ObservableObject {
             update(id) { $0.exited = true; $0.statusState = nil; $0.statusKind = nil; $0.statusChildren = []; $0.busy = false }
         case .openPath(let path):
             preview(path)
+        case .openLink(let url):
+            openLink(url, in: id)
         case .status(let state, let kind, let message, let children):
             // Codex also emits terminal OSC status. Its protocol is authoritative, particularly
             // for approval IDs; mixing both can revive stale buttons. Its first idle does say

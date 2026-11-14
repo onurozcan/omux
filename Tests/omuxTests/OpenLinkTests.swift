@@ -44,4 +44,22 @@ final class OpenLinkTests: XCTestCase {
         XCTAssertEqual(previews, [script.path, script.path])
         XCTAssertEqual(revealed.count, 2)
     }
+
+    /// A web address clicked in a session opens in that session's browser, not in the
+    /// default browser in another window. Only http and https count as web addresses.
+    @MainActor
+    func testWebAddressesGoToTheSessionsBrowser() {
+        let view = TermView(tabID: UUID())
+        var links: [URL] = []
+        view.onEvent = { if case .openLink(let url) = $0 { links.append(url) } }
+        view.requestOpenLink(source: view, link: "https://example.com/docs?page=2", params: [:])
+        view.requestOpenLink(source: view, link: " http://localhost:3000 ", params: [:])
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(links.map(\.absoluteString), ["https://example.com/docs?page=2", "http://localhost:3000"])
+
+        XCTAssertNotNil(TermView.webURL(from: "HTTPS://Example.com"))
+        for other in ["mailto:someone@example.com", "file:///etc/hosts", "javascript:alert(1)", "ssh://host", "https://", "not a link"] {
+            XCTAssertNil(TermView.webURL(from: other), other)
+        }
+    }
 }
