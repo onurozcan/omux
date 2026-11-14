@@ -49,6 +49,12 @@ public final class SessionHost: @unchecked Sendable {
                 // After the answer has gone out.
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { retire?() }
                 return .done
+            case .shutdown:
+                for session in sessions.values { session.process?.terminate() }
+                let retire = onRetire
+                // A moment for the programs to take the hang-up before the host goes.
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { retire?() }
+                return .done
             case .list:
                 return .sessions(list: order.compactMap { sessions[$0]?.info })
             case .start(let request):

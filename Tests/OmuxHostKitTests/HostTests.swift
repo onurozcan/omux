@@ -190,6 +190,21 @@ final class HostTests: XCTestCase {
         XCTAssertEqual(retired.wait(timeout: .now() + 2), .success)
     }
 
+    /// Removing omux from a machine: the host hangs up on what runs and then goes.
+    func testShutdownHangsUpOnEverythingAndStopsTheHost() throws {
+        let stopped = DispatchSemaphore(value: 0)
+        server.host.onRetire = { stopped.signal() }
+        let screen = Screen()
+        let client = try client(screen)
+        let info = try start(client, "echo ready; sleep 60")
+        _ = client.request(.attach(session: info.id, from: nil))
+        until { screen.text.contains("ready") }
+        XCTAssertEqual(client.request(.shutdown), .done)
+        until { screen.status != nil }
+        XCTAssertEqual(screen.status, 129)
+        XCTAssertEqual(stopped.wait(timeout: .now() + 3), .success)
+    }
+
     /// A request this host has never heard of, from a newer omux, is refused under its own
     /// number at once, not left unanswered.
     func testAnUnknownRequestIsRefusedByNumber() throws {

@@ -76,6 +76,9 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Asks a host with nothing running to stop, so a newer one can start in its place.
     /// Refused while any session runs: a host never drops sessions to be replaced.
     case retire
+    /// Hangs up on every session and stops the host: what removing omux from a machine does
+    /// first. Unlike `retire`, it is the user saying so, with the sessions named to them.
+    case shutdown
 }
 
 public enum HostMessage: Codable, Equatable, Sendable {

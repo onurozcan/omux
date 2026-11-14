@@ -26,6 +26,7 @@ omux-host session ID [--dir DIR] [--name NAME] [--run COMMAND]
                               running: a login shell, with COMMAND typed into it
 omux-host mirror --dir DIR --session ID
                               send a Claude Code session's files as they grow (for the app)
+omux-host shutdown            hang up on every session and stop the host
 omux-host serve               run the host in the foreground (it starts itself when needed)
 omux-host connect             speak the host's protocol on standard input and output
 omux-host version
@@ -169,6 +170,20 @@ case "serve":
         stops.append(source)
     }
     dispatchMain()
+
+case "list" where arguments.first == "--json":
+    // For the app: the sessions as data, and no host started just to say there are none.
+    var list: [SessionInfo] = []
+    if let client = try? Daemon.connect(to: socket, startingHost: false), case .sessions(let found) = client.request(.list) { list = found }
+    FileHandle.standardOutput.write((try? JSONEncoder().encode(list)) ?? Data("[]".utf8))
+    print("")
+
+case "shutdown":
+    // Hangs up on everything and stops the host; nothing to do when none is running.
+    if let client = try? Daemon.connect(to: socket, startingHost: false) {
+        _ = client.request(.shutdown)
+        for _ in 0..<60 where FileManager.default.fileExists(atPath: socket) { Thread.sleep(forTimeInterval: 0.05) }
+    }
 
 case "list":
     let list = sessions(connect())
