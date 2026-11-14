@@ -540,6 +540,9 @@ final class Store: ObservableObject {
         if provider == .claude {
             RemoteMirrors.shared.follow(tab: tab.id, host: host, directory: directory ?? "~", session: tab.claudeSessionID.uuidString.lowercased())
         }
+        // Codex is driven through its app-server, started on the machine and reached through a
+        // tunnel; its TUI is then typed into the session's shell, as it is locally.
+        if provider == .codex, command == nil { startCodex(view, tab: tab, cwd: directory ?? "~") }
     }
 
     /// What the host types into a new remote session's shell. For Claude Code, the session's
@@ -548,7 +551,8 @@ final class Store: ObservableObject {
     private func remoteStartupCommand(tab: TabItem, group: TabGroup) -> String? {
         let provider = tab.resolvedProvider(in: group)
         let raw = (tab.command ?? group.command ?? "").trimmingCharacters(in: .whitespaces)
-        guard provider != .shell, !raw.isEmpty else { return nil }
+        // Codex is started through its app-server, not by typing its name.
+        guard provider != .shell, provider != .codex, !raw.isEmpty else { return nil }
         guard provider == .claude else { return raw }
         var flags = ""
         if let model = (tab.model ?? group.model)?.trimmingCharacters(in: .whitespaces), !model.isEmpty, model != "default", !raw.contains("--model") {
@@ -565,6 +569,7 @@ final class Store: ObservableObject {
 
     private func startCodex(_ view: TermView, tab: TabItem, cwd: String) {
         guard codexStarts[tab.id] == nil else { return }
+        let host = group(containing: tab.id).flatMap { $0.isRemote ? $0.host : nil }
         update(tab.id) { $0.busy = true; $0.statusState = .working; $0.statusDetail = "Connecting to Codex…" }
         codexStarts[tab.id] = Task { [weak self, weak view] in
             defer {
@@ -572,7 +577,10 @@ final class Store: ObservableObject {
             }
             do {
                 let choice = self?.codexChoice(tabID: tab.id) ?? (model: nil, effort: nil)
-                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name, model: choice.model, effort: choice.effort)
+                var cwd = cwd
+                // Codex wants the folder's real path: on another machine, "~" is worked out there.
+                if let host, let resolved = try? await RemoteMachines.folders(on: host, in: cwd).get().path { cwd = resolved }
+                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name, model: choice.model, effort: choice.effort, host: host)
                 try Task.checkCancellation()
                 guard let self, let view, self.terminals[tab.id] === view else { return }
                 self.updateTab(tab.id) { $0.codexThreadID = launch.threadID }

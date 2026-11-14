@@ -33,6 +33,54 @@ final class CodexConnectionTests: XCTestCase {
         XCTAssertFalse(disconnected)
     }
 
+    /// What starts Codex's app-server on another machine, and where its token is kept there.
+    func testTheRemoteServerCommand() throws {
+        let script = CodexConnection.remoteServerScript(port: 51234, digest: "abc123")
+        XCTAssertTrue(script.contains("codex app-server --listen ws://127.0.0.1:51234 --ws-auth capability-token --ws-token-sha256 abc123"))
+        XCTAssertTrue(script.contains("cat >/dev/null"), "stops when the connection to this Mac goes")
+        let check = Process()
+        check.executableURL = URL(fileURLWithPath: "/bin/sh")
+        check.arguments = ["-n", "-c", script]
+        try check.run(); check.waitUntilExit()
+        XCTAssertEqual(check.terminationStatus, 0)
+        XCTAssertEqual(CodexConnection.remoteTokenPath(name: "tab-1"), "$HOME/.omux/codex/tab-1.token")
+    }
+
+    /// Against a real machine, with a stand-in for Codex on it: the token stored there, the
+    /// app-server started, reached through the tunnel with the token, asked something, and
+    /// stopped with the connection. OMUX_LIVE_HOST=devbox swift test --filter CodexConnectionTests
+    @MainActor
+    func testATunnelToAnAppServerOnALiveMachine() async throws {
+        guard let host = ProcessInfo.processInfo.environment["OMUX_LIVE_HOST"], !host.isEmpty else { throw XCTSkip("no OMUX_LIVE_HOST") }
+        let fake = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/fake-codex.py")
+        // On the login shell's PATH there, as the real one would be.
+        let installed = RemotePath.run(#"mkdir -p "$HOME/.local/bin" "$HOME/bin" && cat > "$HOME/bin/codex" && chmod +x "$HOME/bin/codex" && "${SHELL:-/bin/sh}" -lc 'command -v codex'"#, on: host, input: fake)
+        try XCTSkipIf(installed.status != 0 || !installed.text.contains("/bin/codex"), "couldn't put a stand-in codex on the PATH there: \(installed.text) \(installed.error)")
+        defer { _ = RemotePath.run(#"rm -f "$HOME/bin/codex"; rm -rf "$HOME/.omux""#, on: host) }
+
+        let connection = CodexConnection(remote: (host, "live-test"))
+        try await connection.connect()
+        XCTAssertNotEqual(connection.endpoint, connection.tuiEndpoint, "this Mac's end of the tunnel and the machine's")
+        let started = try await connection.request("thread/start", params: ["cwd": "/tmp"])
+        XCTAssertEqual((started["thread"] as? [String: Any])?["id"] as? String, "fake-thread-1")
+
+        let there = RemotePath.run(#"stat -c '%a' "$HOME/.omux/codex/live-test.token"; pgrep -f '[c]odex app-server' | wc -l"#, on: host).text.split(whereSeparator: \.isNewline).map(String.init)
+        XCTAssertEqual(there.first, "600", "the token is its owner's alone")
+        XCTAssertNotEqual(there.last?.trimmingCharacters(in: .whitespaces), "0", "the app-server runs there")
+        // The token there is the one this connection holds, so a TUI there can use it.
+        let token = RemotePath.run(#"cat "$HOME/.omux/codex/live-test.token""#, on: host).text
+        XCTAssertEqual(token, connection.token)
+
+        connection.close()
+        var left = "?"
+        for _ in 0..<30 {
+            left = RemotePath.run("pgrep -f '[c]odex app-server' | wc -l", on: host).text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if left == "0" { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        XCTAssertEqual(left, "0", "closing the connection stops the app-server there")
+    }
+
     /// Opt-in: starts the installed CLI with a temporary CODEX_HOME and no real
     /// credentials. No model turn is sent and no user conversations are read.
     @MainActor

@@ -74,9 +74,11 @@ final class CodexManager: ObservableObject {
 
     func register(tabID: UUID, threadID: String) { threads[tabID] = threadID }
 
-    func connection(for tabID: UUID) -> CodexConnection {
+    /// `host` names the machine Codex runs on for a session of a project elsewhere; it counts
+    /// when the connection is first made.
+    func connection(for tabID: UUID, host: String? = nil) -> CodexConnection {
         if let connection = connections[tabID] { return connection }
-        let connection = CodexConnection()
+        let connection = CodexConnection(remote: host.map { ($0, tabID.uuidString.lowercased()) })
         connections[tabID] = connection
         connection.onMessage = { [weak self] in self?.receive($0, owner: tabID) }
         connection.onDisconnect = { [weak self] in
@@ -89,8 +91,8 @@ final class CodexManager: ObservableObject {
 
     /// `model` and `effort` are set on the thread here: the TUI attached over `--remote` runs
     /// turns with the thread's model, and its own `-c model=` flag doesn't reach it.
-    func prepare(tabID: UUID, threadID: String?, cwd: String, name: String, model: String? = nil, effort: String? = nil) async throws -> (threadID: String, command: String) {
-        let connection = connection(for: tabID)
+    func prepare(tabID: UUID, threadID: String?, cwd: String, name: String, model: String? = nil, effort: String? = nil, host: String? = nil) async throws -> (threadID: String, command: String) {
+        let connection = connection(for: tabID, host: host)
         if let previous = retiring[tabID] {
             try await previous.value
             try Task.checkCancellation()
@@ -103,7 +105,7 @@ final class CodexManager: ObservableObject {
         if let effort { params["config"] = ["model_reasoning_effort": effort] }
         let response = try await connection.request(threadID == nil ? "thread/start" : "thread/resume", params: params)
         guard let thread = response["thread"] as? [String: Any], let id = thread["id"] as? String,
-              let endpoint = connection.endpoint else { throw CodexError.server("Codex didn't return a conversation ID") }
+              let endpoint = connection.tuiEndpoint else { throw CodexError.server("Codex didn't return a conversation ID") }
         // Naming materializes a new conversation before a second client (the TUI)
         // resumes it, including conversations with no user turn yet.
         if threadID == nil {
@@ -115,7 +117,12 @@ final class CodexManager: ObservableObject {
             publish(id, decoded)
         }
         Task { await refreshUsage() }
-        let command = "codex resume --remote \(Git.quote(endpoint)) --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen \(Git.quote(id))"
+        var command = "codex resume --remote \(Git.quote(endpoint)) --remote-auth-token-env OMUX_CODEX_TOKEN --no-alt-screen \(Git.quote(id))"
+        // On another machine the session's shell wasn't started with the token in its
+        // environment: the command takes it from the file kept there, so it is never typed.
+        if let remote = connection.remote {
+            command = "OMUX_CODEX_TOKEN=\"$(cat \"\(CodexConnection.remoteTokenPath(name: remote.name))\")\" " + command
+        }
         return (id, command)
     }
 
