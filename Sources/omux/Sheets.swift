@@ -212,15 +212,27 @@ struct GroupEditSheet: View {
     var body: some View {
         Form {
             TextField("Name", text: $name)
-            TextField("Machine", text: $host, prompt: Text("This Mac"))
-                .font(.system(.body, design: .monospaced))
+            MachineField(host: $host)
             Text(remote ? "Sessions run on \(host.trimmingCharacters(in: .whitespaces)) over SSH and keep running there when omux is closed. omux sets itself up on the machine the first time. The folder below is a folder there."
-                        : "To run this project on another machine, enter how you reach it with ssh: a name from ~/.ssh/config, or user@address.")
+                        : "Leave empty for this Mac. To run this project on another machine, enter how you reach it with ssh: a name from ~/.ssh/config, or user@address.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                TextField("Folder", text: $directory, prompt: Text("~"))
-                if !remote { Button("Choose…") { if let dir = chooseDirectory(current: directory) { directory = dir } } }
+            if remote {
+                RemoteFolderField(host: host.trimmingCharacters(in: .whitespaces), folder: $directory)
+                HStack {
+                    Button("Test") {
+                        let machine = host.trimmingCharacters(in: .whitespaces)
+                        Task { await RemoteMachines.shared.check(machine, folder: directory.isEmpty ? nil : directory) }
+                    }
+                    .disabled(!RemoteMachines.isValid(host.trimmingCharacters(in: .whitespaces)))
+                    Spacer()
+                }
+                MachineCheck(host: host.trimmingCharacters(in: .whitespaces), folder: directory.isEmpty ? nil : directory, provider: provider)
+            } else {
+                HStack {
+                    TextField("Folder", text: $directory, prompt: Text("~"))
+                    Button("Choose…") { if let dir = chooseDirectory(current: directory) { directory = dir } }
+                }
             }
             if !remote, !provider.startsAutomatically(in: directory.isEmpty ? "~" : directory) {
                 HomeFolderHint(provider: provider)
@@ -278,7 +290,8 @@ struct GroupEditSheet: View {
     private func save() {
         store.updateGroup(groupID) { group in
             let machine = host.trimmingCharacters(in: .whitespaces)
-            group.host = machine.isEmpty ? nil : machine
+            // Only what ssh takes as a destination: never something it would read as an option.
+            if machine.isEmpty { group.host = nil } else if RemoteMachines.isValid(machine) { group.host = machine; RemoteMachines.shared.remember(machine) }
             group.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? group.name : name
             group.directory = directory.isEmpty ? nil : directory
             group.command = provider == .custom ? command : provider.command

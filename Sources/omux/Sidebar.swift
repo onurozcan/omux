@@ -174,6 +174,7 @@ struct Sidebar: View {
         .contextMenu {
             // Empty-space menu; rows and project headers override it with their own.
             Button("New Project") { store.newGroup() }
+            Button("New Remote Project…") { store.showRemoteProject = true }
             Button("Open Folder as Project…") { store.openFolderPanel() }
             Button("Open Recent Conversation…") { store.showRecentSessions = true }
             Button("New Codex Session") { store.newTab(command: "codex") }
@@ -382,14 +383,7 @@ struct GroupHeader: View {
             if group.pinned {
                 Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.tertiary).help("Pinned to the top")
             }
-            if let host = group.host, group.isRemote {
-                HStack(spacing: 3) {
-                    Image(systemName: "network").font(.system(size: 8))
-                    Text(host).font(.system(size: 9.5, design: .monospaced)).lineLimit(1)
-                }
-                .foregroundStyle(.tertiary)
-                .help("Sessions of this project run on \(host)")
-            }
+            if let host = group.host, group.isRemote { MachineBadge(host: host) }
             Spacer()
             // Show/hide chevron on hover, then the + at the trailing edge.
             Button { store.updateGroup(group.id) { $0.isCollapsed.toggle() } } label: {

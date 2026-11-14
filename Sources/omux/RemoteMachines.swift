@@ -212,7 +212,7 @@ final class RemoteMachines: ObservableObject {
         \(resolve)
         cd "$D" 2>/dev/null || exit 3
         pwd
-        ls -1Ap 2>/dev/null | grep '/$' | head -400
+        ls -1p 2>/dev/null | grep '/$' | head -400
         """
         let answer = await run(script, on: host)
         if answer.status == 3 { return .failure(MachineProblem(text: "No folder \(path) on \(host).")) }
@@ -233,7 +233,18 @@ final class RemoteMachines: ObservableObject {
     /// Takes omux off the machine: hangs up on everything it runs there, stops it, and removes
     /// its folder. Returns what went wrong, if anything did.
     func removeOmux(from host: String) async -> String? {
-        let script = #"[ -x "$HOME/.omux/bin/omux-host" ] && "$HOME/.omux/bin/omux-host" shutdown; rm -rf "$HOME/.omux""#
+        // Asked nicely first; then by signal, which every build of the host takes as "hang up
+        // on your sessions and go", including one too old to know the request. Its socket
+        // lives outside ~/.omux when the system gives users a runtime folder.
+        let script = #"""
+        [ -x "$HOME/.omux/bin/omux-host" ] && "$HOME/.omux/bin/omux-host" shutdown
+        pkill -TERM -u "$(id -u)" -x omux-host 2>/dev/null
+        i=0; while pgrep -u "$(id -u)" -x omux-host >/dev/null 2>&1 && [ $i -lt 30 ]; do sleep 0.1; i=$((i+1)); done
+        pkill -KILL -u "$(id -u)" -x omux-host 2>/dev/null
+        rm -rf "$HOME/.omux"
+        [ -n "$XDG_RUNTIME_DIR" ] && rm -rf "$XDG_RUNTIME_DIR/omux"
+        exit 0
+        """#
         let answer = await Self.run(script, on: host, timeout: 15)
         await check(host, quietly: true)
         return answer.status == 0 ? nil : Self.explain(answer.error, host: host)

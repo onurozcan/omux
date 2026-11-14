@@ -87,20 +87,38 @@ enum Prefs {
     }
 }
 
-struct SettingsView: View {
+/// File › Machines…: Settings, on its Machines page.
+private struct MachinesMenuItem: View {
+    @Environment(\.openSettings) private var openSettings
     var body: some View {
-        TabView {
+        Button("Machines…") {
+            UserDefaults.standard.set(SettingsView.Pane.machines.rawValue, forKey: SettingsView.paneKey)
+            openSettings()
+        }
+    }
+}
+
+struct SettingsView: View {
+    enum Pane: String { case general, appearance, sessions, machines, notifications, updates }
+    static let paneKey = "settingsPane"
+    @AppStorage(SettingsView.paneKey) private var pane = Pane.general.rawValue
+
+    var body: some View {
+        TabView(selection: $pane) {
             GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label("General", systemImage: "gearshape") }.tag(Pane.general.rawValue)
             AppearanceSettings()
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }.tag(Pane.appearance.rawValue)
             SessionSettings()
-                .tabItem { Label("Sessions", systemImage: "terminal") }
+                .tabItem { Label("Sessions", systemImage: "terminal") }.tag(Pane.sessions.rawValue)
+            MachinesSettings()
+                .environmentObject(Store.shared)
+                .tabItem { Label("Machines", systemImage: "network") }.tag(Pane.machines.rawValue)
             NotificationSettings()
-                .tabItem { Label("Notifications", systemImage: "bell") }
+                .tabItem { Label("Notifications", systemImage: "bell") }.tag(Pane.notifications.rawValue)
             Form { UpdateSettings() }
                 .formStyle(.grouped)
-                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }.tag(Pane.updates.rawValue)
         }
         // A fixed height: the grouped forms scroll inside it, so the tallest tab never pushes
         // the window off the screen.
@@ -480,6 +498,7 @@ struct ContentView: View {
         .sheet(item: $store.newWorktreeGroupID) { WorktreeSheet(groupID: $0).environmentObject(store) }
         .sheet(isPresented: $store.showQuickSwitcher) { QuickSwitcher().environmentObject(store) }
         .sheet(isPresented: $store.showRecentSessions) { RecentSessionsSheet().environmentObject(store) }
+        .sheet(isPresented: $store.showRemoteProject) { RemoteProjectSheet().environmentObject(store) }
         .sheet(isPresented: $store.showWelcome) { WelcomeSheet().environmentObject(store) }
         .sheet(item: $store.editingTabID) { TabEditSheet(tabID: $0).environmentObject(store) }
         .sheet(item: $store.editingGroupID) { GroupEditSheet(groupID: $0).environmentObject(store) }
@@ -854,6 +873,8 @@ struct AppCommands: Commands {
             }
             .keyboardShortcut("t", modifiers: [.command, .option])
             Button("New Project") { store.newGroup() }.keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("New Remote Project…") { store.showRemoteProject = true }.keyboardShortcut("n", modifiers: [.command, .control])
+            MachinesMenuItem()
             Divider()
             Button("Open Folder…") { store.openFolderPanel() }.keyboardShortcut("o")
             Button("Open Recent Conversation…") { store.showRecentSessions = true }
@@ -946,6 +967,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ShellPath.warmUp()
         Timing.logToSystem()
         SessionTranscript.playAgentName = { UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? "Codex" : "Claude Code" }
+        // The sidebar says when a project's machine can't be reached.
+        RemoteMachines.shared.watch { Set(Store.shared.groups.compactMap { $0.isRemote ? $0.host : nil }) }
         ClaudeModels.shared.refresh()
         NSApp.servicesProvider = services
         NSUpdateDynamicServices()

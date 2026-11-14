@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import OmuxHostKit
 import SwiftUI
 
 extension UUID: Identifiable {
@@ -73,6 +74,7 @@ final class Store: ObservableObject {
     @Published var editingGroupID: UUID?
     @Published var showQuickSwitcher = false
     @Published var showRecentSessions = false
+    @Published var showRemoteProject = false
     @Published var showWelcome = false
     /// A file the user ⌘-clicked in a terminal; the files panel shows it.
     @Published var previewRequest: String?
@@ -1517,6 +1519,43 @@ final class Store: ObservableObject {
     }
 
     // MARK: Groups
+
+    /// A project on another machine, with its first session, which sets the machine up if
+    /// it isn't and starts the agent there.
+    func newRemoteGroup(name: String, host: String, directory: String?, provider: SessionProvider) {
+        guard RemoteMachines.isValid(host) else { return }
+        var group = TabGroup(name: name.isEmpty ? host : name, directory: directory, tabs: [TabItem(name: "Session 1")])
+        group.host = host
+        group.provider = provider
+        group.command = provider.command
+        groups.append(group)
+        RemoteMachines.shared.remember(host)
+        makeTerminal(tab: group.tabs[0], group: group)
+        selectedTabID = group.tabs[0].id
+    }
+
+    /// Shows here a session that runs on a machine but isn't open in this omux: one started
+    /// by omux on another Mac, say. It goes into a project of that machine and folder, made
+    /// if there is none, as a plain terminal on the session as it is.
+    func adoptRemoteSession(_ session: SessionInfo, on host: String) {
+        guard let id = UUID(uuidString: session.id), tab(id) == nil, RemoteMachines.isValid(host) else { return }
+        var item = TabItem(name: session.name, command: "")
+        item.id = id
+        item.provider = .shell
+        item.autoName = false
+        if let index = groups.firstIndex(where: { $0.host == host && $0.directory == session.directory }) ?? groups.firstIndex(where: { $0.host == host }) {
+            groups[index].tabs.append(item)
+            makeTerminal(tab: item, group: groups[index])
+        } else {
+            var group = TabGroup(name: (session.directory as NSString).lastPathComponent, directory: session.directory, tabs: [item])
+            group.host = host
+            group.provider = .shell
+            group.command = ""
+            groups.append(group)
+            makeTerminal(tab: item, group: group)
+        }
+        selectedTabID = id
+    }
 
     func newGroup() {
         // A project is a folder first; cancelling still makes one, named by hand, with no agent yet.
