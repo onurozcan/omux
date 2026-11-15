@@ -16,11 +16,16 @@ commit=$(git rev-parse "${1:-HEAD}")
 built=$(git log -1 --format=%H "$commit" -- Sources/OmuxCore Sources/OmuxHostKit Sources/omux-host Package.swift .github/workflows/host.yml)
 [[ -n "$built" ]] || { echo "No commit here touches the host's sources." >&2; exit 1; }
 
+# A push of several commits builds only its last one, so the run may sit on any commit from
+# that one up to this: each of them holds the same host sources.
+candidates=($(git rev-list --reverse "$built^..$commit"))
 run=""
 for attempt in {1..30}; do
-  run=$(gh run list --workflow "Host builds" --commit "$built" --json databaseId,status,conclusion --jq '.[0] | "\(.databaseId) \(.status) \(.conclusion)"' 2>/dev/null || true)
-  [[ -n "$run" && "$run" != "null null null" ]] && break
-  run=""
+  for candidate in $candidates; do
+    run=$(gh run list --workflow "Host builds" --commit "$candidate" --json databaseId,status,conclusion --jq '.[0] | "\(.databaseId) \(.status) \(.conclusion)"' 2>/dev/null || true)
+    [[ -n "$run" && "$run" != "null null null" ]] && break 2
+    run=""
+  done
   sleep 4
 done
 [[ -n "$run" ]] || { echo "GitHub has no host build for ${built[1,7]}. Is it pushed? (gh workflow run 'Host builds' starts one.)" >&2; exit 1; }
