@@ -46,17 +46,18 @@ struct TranscriptPanel: View {
     /// Prompts waiting for the agent to come up, sent in order once it has: the hand-off
     /// written on a switch, then what the user typed meanwhile.
     @State private var starting: [(text: String, echoed: Bool)] = []
-    @AppStorage(Prefs.accent) private var accentChoice = "system"
+    @AppStorage(Prefs.accent) private var accentChoice = "neutral"
     @AppStorage(Prefs.transcriptFont) private var transcriptFont = ""
-    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 13.0
+    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 12.0
     @AppStorage(Prefs.transcriptWidth) private var transcriptWidth = "full"
     @AppStorage(Prefs.transcriptDensity) private var transcriptDensity = "comfortable"
     @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
     private var style: TranscriptStyle {
         TranscriptStyle(accent: accentChoice, font: transcriptFont, size: transcriptSize, width: transcriptWidth,
-                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps)
+                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps, layout: transcriptLayout)
     }
+    @AppStorage(Prefs.transcriptLayout) private var transcriptLayout = "cards"
     /// Whether the project is a git repository, checked once per folder rather than on every redraw.
     @State private var hasGit = false
 
@@ -169,8 +170,17 @@ struct TranscriptPanel: View {
                     }
                 }
             cards(runtime)
-            ComposeBox(tabID: tabID, name: name, provider: provider, theme: theme, model: model, notice: $sendNotice, send: send, onFocus: select)
-                .onTapGesture(perform: select)
+            if inPane {
+                // The panes share one box under them all; this pane tells it how to write here.
+                Color.clear.frame(height: 0)
+                    .onAppear { routeCompose() }
+                    .onChange(of: provider) { _, _ in routeCompose() }
+                    .onDisappear { PaneCompose.shared.remove(tabID) }
+            } else {
+                ComposeBox(tabID: tabID, name: name, provider: provider, theme: theme, model: model, notice: $sendNotice, send: send, onFocus: select,
+                           onQueue: { requeue(action: $0, id: $1) })
+                    .onTapGesture(perform: select)
+            }
         }
         .background(Color(nsColor: theme.background))
         .onAppear {
@@ -190,42 +200,27 @@ struct TranscriptPanel: View {
 
     @ViewBuilder
     private func header(_ runtime: TabRuntime) -> some View {
-        if compact {
+        if compact, slot == "single" {
+            // The window's own header carries the readout for the one session it shows.
+        } else if compact {
             HStack(spacing: 10) {
                 Spacer()
-                if let model = model.lastModel { Text(Self.shortModel(model)) }
-                if let context = model.lastContext { Text("ctx \(Self.tokens(context))").monospacedDigit() }
-                if model.totalOut > 0 { Text("out \(Self.tokens(model.totalOut))").monospacedDigit() }
-                Button { TerminalPeek.shared.show(tabID, store: store) } label: {
-                    HStack(spacing: 4) { Image(systemName: "terminal").imageScale(.small); Text("Terminal") }
-                }
-                .buttonStyle(.plain)
-                .help("Show the terminal underneath (⌥⌘P): for dialogs like /config, or to see the raw screen")
+                SessionReadout(tabID: tabID, model: model)
             }
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .frame(height: 20)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
         } else {
             HStack(spacing: 8) {
                 if let color = runtime.statusColor { Circle().fill(color).frame(width: 7, height: 7) }
                 Text(name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
                 Text(provider.label).foregroundStyle(.secondary)
                 Spacer()
-                if let model = model.lastModel { Text(Self.shortModel(model)).foregroundStyle(.secondary) }
-                if let context = model.lastContext {
-                    Text("ctx \(Self.tokens(context))").foregroundStyle(.secondary).monospacedDigit()
-                        .help("Tokens the latest reply was produced from: input plus cache")
-                }
-                if model.totalOut > 0 {
-                    Text("out \(Self.tokens(model.totalOut))").foregroundStyle(.secondary).monospacedDigit()
-                        .help("Tokens written over the session")
-                }
+                SessionReadout(tabID: tabID, model: model, terminal: false)
             }
             .font(.system(size: 11))
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .overlay(alignment: .bottom) { Hairline() }
         }
     }
 
@@ -239,7 +234,17 @@ struct TranscriptPanel: View {
     }
 
     static func tokens(_ n: Int) -> String {
-        n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)"
+        n >= 1_000_000 ? String(format: "%.1fM", Double(n) / 1_000_000).replacingOccurrences(of: ".0M", with: "M")
+            : n >= 1000 ? String(format: n >= 100_000 ? "%.0fk" : "%.1fk", Double(n) / 1000) : "\(n)"
+    }
+
+    /// The context window a Claude model works in, as far as its name tells: a million tokens
+    /// for the models that have it, 200k otherwise. A session already past 200k has the larger
+    /// one. Nil for other agents, whose windows omux doesn't know.
+    static func contextWindow(model: String?, provider: SessionProvider, used: Int) -> Int? {
+        guard provider == .claude, let id = model?.lowercased() else { return nil }
+        let large = id.contains("[1m]") || id.contains("fable") || id.contains("mythos") || used > 200_000
+        return large ? 1_000_000 : 200_000
     }
 
     // MARK: Cards
@@ -315,6 +320,13 @@ struct TranscriptPanel: View {
     /// A click or focus in this pane makes it the selected session, so its border lights up.
     private func select() {
         if store.selectedTabID != tabID { store.selectedTabID = tabID }
+    }
+
+    /// One of several panes on screen, as opposed to the one session the window shows.
+    private var inPane: Bool { slot != "single" && compact }
+
+    private func routeCompose() {
+        PaneCompose.shared.set(.init(provider: provider, model: model, notice: $sendNotice, send: send, queue: { requeue(action: $0, id: $1) }), for: tabID)
     }
 
     // MARK: Streaming from the screen
@@ -786,6 +798,8 @@ struct TranscriptPanel: View {
                 ComposeDrafts.version += 1
             }
             var sawAgent = false
+            // How long Claude Code's own prompt box has been on screen without a status report.
+            var promptShown = 0
             for _ in 0..<240 {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let rt = store.runtime[tabID], !rt.exited else { continue }
@@ -795,7 +809,10 @@ struct TranscriptPanel: View {
                 // on the screen is the sure sign it's up. Claude Code reports its status as
                 // soon as it's ready; typed at before that, it has been seen to stop reporting.
                 let composer = rt.provider == .codex && !store.isStarting(tabID) && store.composerVisible(tabID)
-                if composer || (Self.takesInput(rt) && (rt.provider != .codex || rt.tuiReady)) {
+                // A resumed Claude Code sometimes never reports: its prompt box, steady on the
+                // screen for five seconds, is then taken as the sign it is up.
+                if rt.provider != .codex, store.shellRunsAgent(tabID), ClaudeScreen.showsPrompt(store.screenLines(tabID, count: 14)) { promptShown += 1 } else { promptShown = 0 }
+                if composer || promptShown >= 10 || (Self.takesInput(rt) && (rt.provider != .codex || rt.tuiReady)) {
                     // A beat for the prompt to be ready for input.
                     try? await Task.sleep(for: .seconds(1))
                     for (index, queued) in starting.enumerated() {
@@ -960,5 +977,63 @@ struct TranscriptStandIn: View {
 
     private static func clip(_ text: String, _ limit: Int) -> String {
         text.count > limit ? String(text.prefix(limit)) + "…" : text
+    }
+}
+
+/// What a session runs on and how full its context is, in one line: the model, a meter of the
+/// context against its window, and the way to the terminal underneath.
+struct SessionReadout: View {
+    @EnvironmentObject var store: Store
+    @ObservedObject private var peek = TerminalPeek.shared
+    let tabID: UUID
+    @ObservedObject var model: SessionTranscript
+    var terminal = true
+
+    var body: some View {
+        HStack(spacing: 9) {
+            if let name = model.lastModel {
+                Text(TranscriptPanel.shortModel(name)).foregroundStyle(.secondary)
+            }
+            if let used = model.lastContext {
+                let window = TranscriptPanel.contextWindow(model: model.lastModel, provider: model.provider, used: used)
+                HStack(spacing: 5) {
+                    if let window {
+                        let share = min(1, Double(used) / Double(window))
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.primary.opacity(0.1))
+                            Capsule().fill(share >= 0.9 ? Palette.error : share >= 0.75 ? Palette.needs : Palette.quiet)
+                                .frame(width: max(3, 34 * share))
+                        }
+                        .frame(width: 34, height: 3)
+                    }
+                    Text(window.map { "\(TranscriptPanel.tokens(used)) of \(TranscriptPanel.tokens($0))" } ?? "\(TranscriptPanel.tokens(used)) context")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .help(help(used: used, window: window))
+            }
+            if terminal {
+                // An eye, not a terminal: this looks behind the session, it doesn't open a shell.
+                // One button both ways: filled and lit while the terminal is what shows.
+                let peeking = peek.tabs.contains(tabID)
+                Button { if peeking { peek.hide(tabID) } else { peek.show(tabID, store: store) } } label: {
+                    Image(systemName: peeking ? "eye.fill" : "eye")
+                }
+                .buttonStyle(IconButtonStyle())
+                .foregroundStyle(peeking ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .background(.primary.opacity(peeking ? 0.14 : 0), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .help(peeking ? "Back to the conversation (⌥⌘P)" : "Show this session's terminal (⌥⌘P): for dialogs like /config, or to see the raw screen")
+            }
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+    }
+
+    private func help(used: Int, window: Int?) -> String {
+        var text = "\(used.formatted()) tokens in the context of the latest reply"
+        if let window { text += ", of the \(TranscriptPanel.tokens(window)) this model is assumed to hold (\(Int((Double(used) / Double(window) * 100).rounded()))%)" }
+        text += "."
+        if model.totalOut > 0 { text += " \(model.totalOut.formatted()) tokens written this session." }
+        return text
     }
 }

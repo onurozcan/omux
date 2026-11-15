@@ -191,13 +191,11 @@ struct RemoteFilePanel: View {
                 if let preview {
                     FilePreview(url: preview).id(preview)
                 } else {
-                    VStack(spacing: 6) {
-                        if fetching { ProgressView().controlSize(.small) }
-                        Text(problem ?? (fetching ? "Getting the file from \(host)…" : "Select a file to look at"))
-                            .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    EmptyState(icon: problem != nil ? "exclamationmark.triangle" : fetching ? nil : "doc.text.magnifyingglass",
+                               title: problem != nil ? "Couldn't get the file" : fetching ? "Getting the file from \(host)…" : "No file open",
+                               detail: problem ?? (fetching ? nil : "Pick a file below; it is copied here to be shown.")) {
+                        if fetching { ProgressView().controlSize(.small).padding(.top, 4) }
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .frame(minHeight: 120)
@@ -210,10 +208,9 @@ struct RemoteFilePanel: View {
                     Spacer()
                     if tree.loading { ProgressView().controlSize(.mini) }
                     Button { tree.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary).help("List the folders again")
+                        .help("List the folders again")
                 }
-                .padding(.horizontal, 10)
-                .frame(height: 28)
+                .panelHeader()
                 if let problem = tree.problem, tree.root == nil {
                     Text(problem).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                         .padding(16).frame(maxWidth: .infinity, maxHeight: .infinity)

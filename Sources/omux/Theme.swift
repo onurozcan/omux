@@ -43,7 +43,7 @@ enum Theme: String, CaseIterable, Identifiable {
     static var lightThemes: [Theme] { allCases.filter(\.isLight) }
 
     static var current: Theme {
-        Theme(rawValue: UserDefaults.standard.string(forKey: Prefs.theme) ?? "") ?? .dark
+        Theme(rawValue: UserDefaults.standard.string(forKey: Prefs.theme) ?? "") ?? .black
     }
 
     var isLight: Bool { [.light, .solarizedLight, .catppuccinLatte, .githubLight].contains(self) }
@@ -174,7 +174,7 @@ enum Appearance {
         }
     }
 
-    static var accent: NSColor { accent(UserDefaults.standard.string(forKey: Prefs.accent) ?? "system", theme: Theme.current) }
+    static var accent: NSColor { accent(UserDefaults.standard.string(forKey: Prefs.accent) ?? "neutral", theme: Theme.current) }
 
     static let transcriptSizes = 11.0 ... 18.0
     static let transcriptFonts: [(id: String, label: String)] = [("", "System"), ("serif", "Serif"), ("rounded", "Rounded"), ("mono", "Terminal font")]
@@ -185,21 +185,24 @@ enum Appearance {
 
 /// What the transcript page is told about how to look, beyond the theme's colours.
 struct TranscriptStyle: Equatable {
-    var accent = "system"
+    var accent = "neutral"
     var font = ""
-    var size = 13.0
+    var size = 12.0
     var width = "full"
     var density = "comfortable"
     var bubbles = "tinted"
     var timestamps = true
+    /// "cards": each request with its work and answer is one card. "plain": a stream of bubbles and rows.
+    var layout = "cards"
 
     static var current: TranscriptStyle {
         let d = UserDefaults.standard
-        return TranscriptStyle(accent: d.string(forKey: Prefs.accent) ?? "system", font: d.string(forKey: Prefs.transcriptFont) ?? "",
-                               size: d.double(forKey: Prefs.transcriptSize) > 0 ? d.double(forKey: Prefs.transcriptSize) : 13,
+        return TranscriptStyle(accent: d.string(forKey: Prefs.accent) ?? "neutral", font: d.string(forKey: Prefs.transcriptFont) ?? "",
+                               size: d.double(forKey: Prefs.transcriptSize) > 0 ? d.double(forKey: Prefs.transcriptSize) : 12,
                                width: d.string(forKey: Prefs.transcriptWidth) ?? "full", density: d.string(forKey: Prefs.transcriptDensity) ?? "comfortable",
                                bubbles: d.string(forKey: Prefs.transcriptBubbles) ?? "tinted",
-                               timestamps: d.object(forKey: Prefs.transcriptTimestamps) as? Bool ?? true)
+                               timestamps: d.object(forKey: Prefs.transcriptTimestamps) as? Bool ?? true,
+                               layout: d.string(forKey: Prefs.transcriptLayout) ?? "cards")
     }
 
     /// The CSS font stack for the body text.

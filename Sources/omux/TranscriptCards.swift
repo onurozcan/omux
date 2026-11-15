@@ -14,6 +14,13 @@ enum ClaudeScreen {
     static let allowForSession = ["don't ask again", "allow all"]
     static let modes: [(String, String)] = [("plan mode", "plan"), ("auto mode", "auto"), ("accept edits", "accept edits"), ("bypass permissions", "bypass")]
     static let modeHint = "shift+tab"
+    /// Whether the screen shows Claude Code's own prompt box, a `❯` between two rules: it is up
+    /// and waiting, with nothing to answer first.
+    static func showsPrompt(_ lines: [String]) -> Bool {
+        let trimmed = lines.map { $0.trimmingCharacters(in: .whitespaces) }
+        let rule = trimmed.contains { $0.count > 10 && $0.allSatisfy { $0 == "─" } }
+        return rule && trimmed.contains { $0.hasPrefix("❯") || $0 == ">" || $0.hasPrefix("> ") }
+    }
     /// A reply line in the TUI starts with this marker.
     static let reply = "● "
     /// Lines that end a reply: tool results, the prompt box, spinners.
@@ -37,18 +44,21 @@ struct PermissionCard: View {
         let detail = approval?.detail
             ?? runtime?.statusDetail.map { $0.replacingOccurrences(of: #"^approve "#, with: "", options: .regularExpression) }
             ?? "The agent is waiting for permission"
-        Card(color: Palette.needs, title: "Permission") {
+        Card(color: Palette.needs, title: "Allow this?", icon: "hand.raised", subtitle: "\(provider == .codex ? "Codex" : "Claude Code") is waiting for your permission") {
             Text(detail).font(.system(size: 11.5, design: .monospaced)).lineLimit(3).textSelection(.enabled)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             if let pending, pending.old != nil || pending.new != nil, provider == .claude {
                 DiffPreview(old: pending.old, new: pending.new)
             }
             HStack(spacing: 8) {
-                Button("Allow") { store.answerPermission(tabID, allow: true, codexApproval: approval) }.buttonStyle(.borderedProminent)
+                Button("Allow") { store.answerPermission(tabID, allow: true, codexApproval: approval) }.buttonStyle(PromptButtonStyle(.primary))
                 if provider == .claude, secondOptionAllows {
-                    Button("Allow for session") { store.sendKeys("2", to: tabID) }.buttonStyle(.bordered)
+                    Button("Allow for session") { store.sendKeys("2", to: tabID) }.buttonStyle(PromptButtonStyle())
                         .help("Claude Code's second option: yes, and don't ask again for this during the session")
                 }
-                Button("Deny") { store.answerPermission(tabID, allow: false, codexApproval: approval) }.buttonStyle(.bordered)
+                Button("Deny") { store.answerPermission(tabID, allow: false, codexApproval: approval) }.buttonStyle(PromptButtonStyle(.ghost))
                 Text("or tell it what to do instead below").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             .controlSize(.small)
@@ -100,16 +110,16 @@ struct PlanCard: View {
     let plan: String
 
     var body: some View {
-        Card(color: Palette.agent, title: "Plan ready") {
+        Card(color: Palette.agent, title: "Plan ready", icon: "list.bullet.clipboard", subtitle: "Approve it to start the work, or keep planning") {
             ScrollView {
                 MarkdownText(plan).frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .frame(maxHeight: 260)
             .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
             HStack(spacing: 8) {
-                Button("Approve, auto-accept edits") { store.sendKeys("1", to: tabID) }.buttonStyle(.borderedProminent)
-                Button("Approve, ask for each edit") { store.sendKeys("2", to: tabID) }.buttonStyle(.bordered)
-                Button("Keep planning") { store.sendKeys("3", to: tabID) }.buttonStyle(.bordered)
+                Button("Approve, auto-accept edits") { store.sendKeys("1", to: tabID) }.buttonStyle(PromptButtonStyle(.primary))
+                Button("Approve, ask for each edit") { store.sendKeys("2", to: tabID) }.buttonStyle(PromptButtonStyle())
+                Button("Keep planning") { store.sendKeys("3", to: tabID) }.buttonStyle(PromptButtonStyle(.ghost))
             }
             .controlSize(.small)
         }
@@ -154,7 +164,7 @@ struct QuestionCard: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.3)) { _ in
             let dialog = dialogNow
-            Card(color: Palette.needs, title: title(dialog)) {
+            Card(color: Palette.needs, title: title(dialog), icon: "questionmark.circle") {
                 if questions.count > 1 { tabs(dialog) }
                 switch dialog?.page {
                 case .review: review(dialog!)
@@ -197,26 +207,23 @@ struct QuestionCard: View {
     private func question(_ index: Int, _ dialog: QuestionDialog) -> some View {
         let question = questions[index]
         Text(question.text).font(.system(size: 12.5, weight: .medium)).textSelection(.enabled)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(question.options.indices, id: \.self) { i in
                 optionRow(i, of: question, at: index, dialog)
             }
         }
-        HStack(spacing: 8) {
+        .padding(.top, -3)
+        HStack(spacing: 6) {
             if question.multi, let submit = dialog.row(.submit) {
                 let any = dialog.rows.contains { $0.checked == true } || (toggled[index]?.values.contains(true) ?? false)
                 let label = dialog.rows[submit].label.isEmpty ? "Next" : dialog.rows[submit].label
                 if any {
-                    Button(label) { choose(submit, dialog) }.buttonStyle(.borderedProminent).help("Confirms the ticked options")
+                    Button(label) { choose(submit, dialog) }.buttonStyle(PromptButtonStyle(.primary)).help("Confirms the ticked options")
                 } else {
-                    Button(label) { choose(submit, dialog) }.buttonStyle(.bordered).help("Confirms the ticked options")
+                    Button(label) { choose(submit, dialog) }.buttonStyle(PromptButtonStyle()).help("Confirms the ticked options")
                 }
             }
-            TextField("Type your own answer…", text: $typed)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 300)
-                .onSubmit { type(dialog) }
-            Button("Send") { type(dialog) }.disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty || dialog.row(.type) == nil)
+            answerField(enabled: dialog.row(.type) != nil) { type(dialog) }
             Spacer(minLength: 0)
             if let chat = dialog.row(.chat) {
                 Button("Chat about this") { choose(chat, dialog) }
@@ -245,21 +252,21 @@ struct QuestionCard: View {
             }
             choose(row, dialog)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // One flowing line an option: its name, then what it means, wrapping only when it must.
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
                 Image(systemName: mark)
-                    .font(.system(size: 13))
-                    .foregroundStyle(checked ? Color.accent : Color.secondary)
-                    .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(question.options[i]).font(.system(size: 12, weight: checked ? .semibold : .regular))
-                    if !description.isEmpty {
-                        Text(description).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                    .font(.system(size: 12))
+                    .foregroundStyle(checked ? Color.primary : Color.secondary)
+                    .frame(width: 14)
+                (Text(question.options[i]).font(.system(size: 12, weight: checked ? .semibold : .medium))
+                    + Text(description.isEmpty ? "" : "   " + description).font(.system(size: 11)).foregroundStyle(.secondary))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 5).padding(.horizontal, 7)
-            .background(highlighted ? Color.accent.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+            .padding(.vertical, 4).padding(.horizontal, 7)
+            .background(.primary.opacity(highlighted ? 0.07 : 0), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -287,10 +294,10 @@ struct QuestionCard: View {
         .textSelection(.enabled)
         HStack(spacing: 8) {
             if let submit = dialog.row(.submitAnswers) {
-                Button("Submit answers") { choose(submit, dialog) }.buttonStyle(.borderedProminent)
+                Button("Submit answers") { choose(submit, dialog) }.buttonStyle(PromptButtonStyle(.primary))
             }
             if let cancel = dialog.row(.cancel) {
-                Button("Cancel") { choose(cancel, dialog) }.buttonStyle(.bordered)
+                Button("Cancel") { choose(cancel, dialog) }.buttonStyle(PromptButtonStyle(.ghost))
             }
             Button("Back") { send("\u{1b}[D") }
                 .buttonStyle(.plain).foregroundStyle(.secondary).font(.system(size: 11))
@@ -304,13 +311,37 @@ struct QuestionCard: View {
     private var fallback: some View {
         if let first = questions.first { Text(first.text).font(.system(size: 12.5, weight: .medium)).textSelection(.enabled) }
         HStack(spacing: 8) {
-            TextField("Type your own answer…", text: $typed)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 300)
-                .onSubmit { sendTyped() }
-            Button("Send") { sendTyped() }.disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
-            Text("Answer in the terminal, or type here").font(.system(size: 11)).foregroundStyle(.secondary)
+            answerField(enabled: true) { sendTyped() }
+            Text("or answer in the terminal").font(.system(size: 11)).foregroundStyle(.secondary)
         }
+    }
+
+    /// The field for an answer in your own words: the message box's look at a smaller size,
+    /// with its send button inside it.
+    private func answerField(enabled: Bool, send: @escaping () -> Void) -> some View {
+        let empty = typed.trimmingCharacters(in: .whitespaces).isEmpty
+        return HStack(spacing: 6) {
+            TextField("Or type your own answer…", text: $typed)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .onSubmit(send)
+            Button(action: send) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(empty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color(nsColor: .windowBackgroundColor)))
+                    .frame(width: 18, height: 18)
+                    .background(.primary.opacity(empty ? 0.08 : 0.9), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(empty || !enabled)
+            .help("Send this answer")
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 4)
+        .frame(height: 26)
+        .frame(maxWidth: 360)
+        .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.primary.opacity(0.1)))
     }
 
     /// Moves the highlight to the row and presses Return: picks an option, ticks a box, or
@@ -365,32 +396,30 @@ struct ScreenPromptCard: View {
             let lines = store.screenLines(tabID, count: 14)
             let text = lines.joined(separator: "\n")
             if text.contains(ClaudeScreen.switchModel) || text.contains(ClaudeScreen.changeEffort) {
-                Card(color: Color.accent, title: text.contains(ClaudeScreen.switchModel) ? ClaudeScreen.switchModel : ClaudeScreen.changeEffort) {
-                    HStack(spacing: 8) {
-                        Button("Yes, switch") { store.sendKeys("\r", to: tabID) }.buttonStyle(.borderedProminent)
-                        Button("No, go back") { store.sendKeys("\u{1b}", to: tabID) }.buttonStyle(.bordered)
-                        Text("The conversation is cached for the current setting; switching re-reads the history.").foregroundStyle(.secondary)
+                Card(color: .secondary, title: text.contains(ClaudeScreen.switchModel) ? ClaudeScreen.switchModel : ClaudeScreen.changeEffort,
+                     icon: "arrow.triangle.2.circlepath", subtitle: "The conversation is cached for the current setting; switching re-reads the history.") {
+                    HStack(spacing: 6) {
+                        Button("Yes, switch") { store.sendKeys("\r", to: tabID) }.buttonStyle(PromptButtonStyle(.primary))
+                        Button("No, go back") { store.sendKeys("\u{1b}", to: tabID) }.buttonStyle(PromptButtonStyle(.ghost))
                     }
-                    .controlSize(.small)
-                    .font(.system(size: 11))
                 }
             } else if text.localizedCaseInsensitiveContains(ClaudeScreen.trustFolder) {
-                Card(color: Color.accent, title: "Claude Code asks whether to trust this folder") {
-                    HStack(spacing: 8) {
+                Card(color: .secondary, title: "Trust this folder?", icon: "folder",
+                     subtitle: (store.runtime[tabID]?.cwd ?? store.tab(tabID)?.directory).map { $0.tildeAbbreviated }) {
+                    Text("Claude Code will be able to read, edit and run files in it.").font(.system(size: 11.5)).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
                         Button("Trust folder") {
                             // Its menu starts on "No, exit": move down one row, then confirm.
                             store.sendKeys("\u{1b}[B", to: tabID)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { store.sendKeys("\r", to: tabID) }
                         }
-                        .buttonStyle(.borderedProminent)
-                        Button("Exit") { store.sendKeys("\u{1b}", to: tabID) }.buttonStyle(.bordered)
-                        Text("Claude Code will be able to read, edit and run files there.").foregroundStyle(.secondary)
+                        .buttonStyle(PromptButtonStyle(.primary))
+                        Button("Exit") { store.sendKeys("\u{1b}", to: tabID) }.buttonStyle(PromptButtonStyle(.ghost))
                     }
-                    .controlSize(.small)
-                    .font(.system(size: 11))
                 }
-            } else if starting, !lines.isEmpty {
-                Card(color: Color.accent, title: "Starting · answer in the terminal if it asks something") {
+            } else if starting, !lines.isEmpty, !ClaudeScreen.showsPrompt(lines) {
+                // Only until its prompt box is up: after that there is nothing left to answer.
+                Card(color: .secondary, title: "Starting Claude Code", icon: "hourglass", subtitle: "Answer in the terminal if it asks something") {
                     Text(lines.suffix(6).joined(separator: "\n"))
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -401,25 +430,39 @@ struct ScreenPromptCard: View {
     }
 }
 
-/// The tinted box the cards share.
+/// The sheet the cards share: a tile that says what kind of prompt it is, the question as its
+/// title, what it means under it, and then whatever the card needs to show and its buttons.
 struct Card<Content: View>: View {
     let color: Color
     let title: String
+    var icon = "questionmark.circle"
+    var subtitle: String?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                PulsingDot(color: color)
-                Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(color)
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: subtitle == nil ? 26 : 30, height: subtitle == nil ? 26 : 30)
+                .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.primary)
+                    if let subtitle {
+                        Text(subtitle).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                    }
+                }
+                .frame(minHeight: subtitle == nil ? 26 : 30, alignment: .center)
+                content()
             }
-            content()
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.08))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(color.opacity(0.55)))
-        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .background(.primary.opacity(0.055))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.primary.opacity(0.12)))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }

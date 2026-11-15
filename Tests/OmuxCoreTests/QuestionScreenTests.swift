@@ -25,6 +25,27 @@ final class QuestionScreenTests: XCTestCase {
     Enter to select · Tab/Arrow keys to navigate · Esc to cancel
     """
 
+    /// One question, as Claude Code draws it now: a chip in place of the tabs, no Submit.
+    private let oneQuestion = """
+      1. Page title. src/app/settings/page.tsx exports metadata with the title "Settings".
+      2. h1 heading. The settings page renders an h1 "Settings" above the two h2 sections.
+    ✻ Churned for 25s
+    ❯ Use the AskUserQuestion tool now to ask me one question titled Colour with two options.
+    ─────────────────────────────────────────────────
+    □ Colour
+
+    Which colour do you want?
+
+    ❯ 1. Red
+         Choose red
+      2. Blue
+         Choose blue
+      3. Type something.
+    ─────────────────────────────────────────────────
+      4. Chat about this
+    Enter to select · ↑/↓ to navigate · Esc to cancel
+    """
+
     private let multiSelect = """
     ─────────────────────────────────────────────────
     ←  ☒ Layout  ☐ Features  ✔ Submit  →
@@ -128,5 +149,14 @@ final class QuestionScreenTests: XCTestCase {
 
     func testNoDialogWhenTheScreenShowsNone() {
         XCTAssertNil(QuestionScreen.parse(["❯ ", "  ~/omux  main"], questions: questions))
+    }
+
+    func testOneQuestionWithoutTabs() {
+        let question = Question(text: "Which colour do you want?", header: "Colour", options: ["Red", "Blue"], descriptions: ["Choose red", "Choose blue"], multi: false)
+        let dialog = QuestionScreen.parse(oneQuestion.components(separatedBy: "\n"), questions: [question])
+        XCTAssertEqual(dialog?.page, .question(0))
+        XCTAssertEqual(dialog?.rows.map(\.kind), [.option(0), .option(1), .type, .chat])
+        XCTAssertEqual(dialog?.cursor, 0)
+        XCTAssertEqual(dialog?.answered, [false])
     }
 }

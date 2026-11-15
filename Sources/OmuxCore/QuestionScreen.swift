@@ -52,8 +52,18 @@ public enum QuestionScreen {
     /// The dialog on screen, or nil when the screen doesn't show one (the agent moved on, or the
     /// typed-answer field is open). `questions` tells which question the page shows.
     public static func parse(_ lines: [String], questions: [Question]) -> QuestionDialog? {
-        guard let header = lines.lastIndex(where: { $0.contains("✔ Submit") && ($0.contains("☐") || $0.contains("☒")) }) else { return nil }
-        let answered = lines[header].compactMap { $0 == "☒" ? true : $0 == "☐" ? false : nil }
+        let header: Int
+        let answered: [Bool]
+        if let tabs = lines.lastIndex(where: { $0.contains("✔ Submit") && ($0.contains("☐") || $0.contains("☒")) }) {
+            header = tabs
+            answered = lines[tabs].compactMap { $0 == "☒" ? true : $0 == "☐" ? false : nil }
+        } else if let single = singleHeader(lines) {
+            // One question has no tabs and no Submit: a single chip with its title heads the dialog.
+            header = single
+            answered = [lines[single].contains("☒")]
+        } else {
+            return nil
+        }
         let body = Array(lines[(header + 1)...])
         let hint = body.firstIndex { $0.contains("Esc to cancel") || $0.contains("Enter to select") } ?? body.count
         let page = Array(body[..<hint])
@@ -112,6 +122,24 @@ public enum QuestionScreen {
         }
         guard !rows.isEmpty else { return nil }
         return QuestionDialog(page: .question(current), rows: rows, cursor: cursor, answered: answered)
+    }
+
+    /// A box and a title on a line of their own: the head of a dialog that asks one question.
+    private static let chipPattern = try! NSRegularExpression(pattern: #"^\s*[□☐☒▢◻]\s+\S.{0,40}$"#)
+
+    /// Where a one-question dialog starts: its chip, the last one above the dialog's key hints.
+    /// Without a chip to go by, the line before the options' first row, with room for the question.
+    private static func singleHeader(_ lines: [String]) -> Int? {
+        guard let hint = lines.lastIndex(where: { $0.contains("Esc to cancel") || $0.contains("Enter to select") }) else { return nil }
+        let above = lines[..<hint]
+        if let chip = above.lastIndex(where: { chipPattern.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil }) { return chip }
+        guard let first = above.lastIndex(where: { line in
+            guard let m = rowPattern.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else { return false }
+            return line[Range(m.range(at: 2), in: line)!] == "1"
+        }) else { return nil }
+        // The question sits in the few lines over its options, under a rule.
+        let rule = lines[..<first].lastIndex(where: { $0.contains("────") })
+        return max(rule ?? first - 4, first - 8, 0)
     }
 
     /// The arrow keys that move the highlight from `cursor` to `row`.

@@ -490,11 +490,7 @@ struct AgentTranscriptView: View {
                 Button { store.openAgent = nil } label: { Image(systemName: "xmark") }
                     .help("Back to the agents")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .panelHeader()
 
             ScrollViewReader { proxy in
                 ScrollView {

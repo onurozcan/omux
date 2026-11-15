@@ -1,22 +1,22 @@
 # omux
 
-**The native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions.**
+**The native agentic development platform for the Mac: a small Swift terminal that runs fleets of Claude Code and Codex sessions.**
 
 Written in Swift on SwiftTerm, no Electron, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
 
-![omux with eight projects in the sidebar, a Claude Code conversation in the transcript view, a Codex session waiting on Allow or Deny, and the Changes panel showing a diff](docs/hero.png)
+![omux with the project rail, one project's sessions, a Claude Code conversation in turn cards, and the Changes panel showing a diff](docs/hero.png)
 
 <table>
 <tr>
-<td width="50%"><img src="docs/approval.png" alt="A Codex session asking to run npm outdated, with Allow and Deny in the transcript and in the sidebar"><br><sub>Every approval is a card. Allow or Deny from the transcript or the sidebar, or tell the agent what to do instead.</sub></td>
-<td width="50%"><img src="docs/codex.png" alt="A Codex session's reply with a code block, next to the file it changes"><br><sub>Codex replies stream in as they're written, with code blocks you can copy and files you can open.</sub></td>
+<td width="50%"><img src="docs/prompt.png" alt="Claude Code asking a question with two choices, shown as a card above the message box, with the session and its project marked amber"><br><sub>Whatever an agent asks is a card above the message box: a question with its choices, a command to allow, a folder to trust. Answer there, or type your own reply.</sub></td>
+<td width="50%"><img src="docs/tabs.png" alt="The session list closed: a project's sessions as tabs along the top, the open one wide, and the conversation in turn cards across the window"><br><sub>Close the session list and a project's sessions become tabs along the top, agents on the left and shells apart on the right. A tab that waits for you blinks.</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/panes.png" alt="A Claude Code session and a Codex session side by side in one project, with the diff on the right"><br><sub>Sessions side by side: drop one onto another to split the pane.</sub></td>
-<td width="50%"><img src="docs/editor.png" alt="The Files panel editing server.ts next to the conversation, with ⌘S to save"><br><sub>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</sub></td>
+<td width="50%"><img src="docs/panes.png" alt="Two Claude Code sessions side by side in one project, with one message box under both that names the pane it writes to"><br><sub>Sessions side by side, with one message box under them all that writes to the active pane.</sub></td>
+<td width="50%"><img src="docs/editor.png" alt="The Files panel showing a test file next to the conversation, with ⌘S to save"><br><sub>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/picker.png" alt="The agent and model picker: Claude Code models and Codex models in one menu"><br><sub>Switch a session between Claude Code and Codex, or change the model, from the compose box. The conversation is handed over.</sub></td>
+<td width="50%"><img src="docs/rail.png" alt="The project rail opened under the pointer, naming each project and what its sessions are doing, with the usage limits at its foot"><br><sub>Every project is a tile on a rail, coloured by what needs you. Rest the pointer on it and it opens with each project's name and what its sessions are doing.</sub></td>
 <td width="50%"></td>
 </tr>
 </table>
@@ -31,12 +31,13 @@ Running one agent is easy. Running eight is a tab-switching job: you poll each t
 
 omux turns that into a dashboard.
 
-- **One sidebar for every agent.** Projects hold sessions. Each session shows whether its agent is working, needs you, or is done. The Dock badge counts the ones waiting.
-- **Answer without switching.** Claude Code permissions and Codex approvals have Allow and Deny buttons right on the session. A notification takes you to the session that needs you.
+- **One rail for every project.** Each project is a tile, coloured by what needs you: amber when a session waits, red when one failed, blue while one works. Its sessions sit beside it, or as tabs along the top. The Dock badge counts the ones waiting.
+- **Answer without switching.** Claude Code permissions and Codex approvals have Allow and Deny buttons right on the session, and questions show their choices as a card above the message box. A notification takes you to the session that needs you.
 - **Nothing gets lost.** Every session keeps its exact conversation across restarts and relaunches.
+- **On your Mac or on another machine.** A project can run on a machine you reach with ssh; its sessions keep going when the Mac sleeps or omux quits.
 - **Parallel work that stays apart.** A worktree session gets its own branch and folder. The pull request's checks and reviews appear next to it, and failing checks go to the agent in one click.
 - **Review before you merge.** Read the diff, leave notes on lines, send them to the agent as one message.
-- **Native and small.** SwiftUI and SwiftTerm, a 5 MB download, no telemetry.
+- **Native and small.** SwiftUI and SwiftTerm, a small download, no telemetry.
 
 ---
 
@@ -44,11 +45,12 @@ omux turns that into a dashboard.
 
 | Feature | What it does |
 | --- | --- |
-| **Projects and sessions** | A project is a folder plus a default agent. Sessions live under it in the sidebar: drag to reorder, rename, color, move between projects. |
+| **Projects and sessions** | A project is a folder plus a default agent, shown as a tile on a rail; resting the pointer on the rail opens it with every project's name and what its sessions are doing. Sessions sit beside it: drag to reorder, rename, color, move between projects. Closing the list (⌃⌘S) turns them into tabs along the top, agents on the left and shells apart on the right. |
+| **Remote machines** | Edit Project › Machine, or File › New Remote Project… (⌃⌘N): sessions run on a machine you reach with ssh and survive the Mac sleeping or omux quitting. omux installs itself there over the same connection. Files, Changes, the transcript and Codex work as they do locally. Linux on Intel and ARM. |
 | **Conversations that resume** | Each Claude Code session keeps its session ID and each Codex session its thread, so Restart and relaunch reopen the exact conversation. |
 | **Live status** | Working, needs you or done, per session. The Dock badge counts sessions waiting on you, and a notification brings you to the right one. |
 | **Allow or deny from the sidebar** | Claude Code tool permissions and Codex approvals answered without switching sessions. Deny lets you tell the agent what to do instead. |
-| **Panes** | Sessions of a project arranged in the window: split right or down, drag from the sidebar onto an edge, resize, move, maximize. One arrangement per project, saved. |
+| **Panes** | Sessions of a project arranged in the window: a shell beside or below from a session's menu, or drag from the sidebar onto an edge; resize, move, maximize. One message box under them all writes to the active pane. One arrangement per project, saved. |
 | **The `omux` command** | Programs in a session can list the project's sessions, read their screens, and start sessions of their own to send text to. Scoped to the project, children only, every action shown as a banner. [docs/cli.md](docs/cli.md) |
 | **Subagents** | Every subagent of Claude Code or Codex listed with its current tool. Click one to read its transcript. |
 | **Project defaults** | Each project can choose Terminal or Transcript for its sessions, and the model and effort new sessions start with. |
@@ -56,7 +58,7 @@ omux turns that into a dashboard.
 | **Pull request status** | With the [GitHub CLI](https://cli.github.com): checks, reviews and merges next to the session. Failing checks' logs sent to the agent in one click. Merged pull requests offer to clean up the worktree. |
 | **Changes** (⌥⌘2) | The session's diff against its base branch. Click a line to leave a note, then send all notes to the agent in one message. |
 | **Files** (⌥⌘1) | The session's folder, with previews of code, Markdown, images, PDFs and anything Quick Look shows. Text files open in a small editor with syntax colors: make a change, ⌘S saves. ⌘-click a path in the terminal to open it. |
-| **Transcript view** (beta) | Settings › Session View shows every session as chat instead of the terminal: your prompts, the agent's replies with highlighted code, tool calls with diffs and output, Allow and Deny cards, and a box that types into the terminal and starts the agent if needed. Read from Claude Code's transcript file or Codex's thread; the terminal keeps running underneath. |
+| **Transcript view** (beta) | Settings › Sessions shows every session as chat instead of the terminal. Each request, its work and its answer are one card, with the steps, the time and the files changed at its foot; older turns fold to a line. Questions, permissions and plans are cards above the message box, and prompts sent while the agent works wait on a shelf on top of it. Read from Claude Code's transcript file or Codex's thread; the terminal keeps running underneath, and the eye in the header shows it. |
 | **Browser** (⌥⌘3) | A web view per session that opens the local server the session prints. Pick an element to send its HTML, styles and a screenshot to the prompt. |
 | **Images and files in the prompt** | Paste an image or drop files onto the terminal, and the agent gets their paths as attachments. |
 | **Recent conversations** (⇧⌘O) | Claude Code's and Codex's recent conversations, reopened as sessions. |

@@ -38,6 +38,10 @@ struct ComposeBox: View {
     let send: (String) -> Void
     /// The field took focus: the pane around it should become the selected one.
     var onFocus: () -> Void = {}
+    /// The box serves several panes: it says which one it writes to.
+    var addressed = false
+    /// Reorders, removes or sends the queue: "up", "down", "remove" or "now", and the prompt's block.
+    var onQueue: (String, Int) -> Void = { _, _ in }
 
     @State private var draft = ""
     @State private var suggestions: [Suggestion] = []
@@ -87,6 +91,7 @@ struct ComposeBox: View {
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let runtime = store.runtime[tabID] ?? TabRuntime()
         VStack(alignment: .leading, spacing: 0) {
+            queueShelf(runtime)
             if !suggestions.isEmpty { suggestionList }
             if !attachments.isEmpty { attachmentRow }
             TextField(placeholder, text: $draft, axis: .vertical)
@@ -108,11 +113,12 @@ struct ComposeBox: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 Button { attach() } label: { Image(systemName: "paperclip") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle(size: 24))
                     .foregroundStyle(.secondary)
                     .help("Attach files: their paths go into the prompt. Pasting an image attaches it too.")
+                if addressed { RecipientChip(tabID: tabID, name: name) }
                 if provider != .custom { modelChip }
                 if provider == .claude { effortChip }
                 if provider == .claude, let mode {
@@ -120,8 +126,9 @@ struct ComposeBox: View {
                         ForEach(Self.modes, id: \.self) { name in
                             Toggle(name, isOn: Binding(get: { mode == name }, set: { if $0 { cycle(to: name) } }))
                         }
-                    } label: { chip(mode) }
-                    .menuStyle(.borderlessButton)
+                    } label: { ChipLabel(text: Self.modeName(mode), icon: Self.modeIcon(mode)) }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
                     .help("Permission mode: default, accept edits, plan, or auto. Changed with shift-tab, as in the terminal.")
@@ -150,7 +157,7 @@ struct ComposeBox: View {
                     .help("Interrupt the agent (⌘.)")
                 }
                 Button { dictate() } label: { Image(systemName: "mic") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle(size: 24))
                     .foregroundStyle(.secondary)
                     .help("Dictate into the message")
                 Button(action: submit) {
@@ -165,15 +172,15 @@ struct ComposeBox: View {
                 .keyboardShortcut(.return, modifiers: .command)
                 .help("Send (⏎ or ⌘⏎)")
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 9)
+            .padding(.bottom, 9)
         }
-        .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropping ? Color.accent : focused ? Color.accent.opacity(0.7) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
+        .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(dropping ? Color.accent : focused ? Color.accent.opacity(0.55) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
         .animation(.easeOut(duration: 0.12), value: dropping)
         .padding(12)
         .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .overlay(alignment: .top) { Hairline() }
         .onPasteCommand(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff]) { providers in take(providers) }
         .onDrop(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff], isTargeted: $dropping) { providers in take(providers); return true }
         .onAppear {
@@ -287,9 +294,11 @@ struct ComposeBox: View {
             }
         } label: {
             // Plain, like the other chips; the marks live in the menu.
-            chip(isAgent ? (current.map { provider == .codex ? Self.codexName($0, in: codexModels) : TranscriptPanel.shortModel($0) } ?? (provider == .codex ? (codexModels.first { $0.isDefault }?.name ?? "Model") : "Model")) : "Agent")
+            ChipLabel(text: isAgent ? (current.map { provider == .codex ? Self.codexName($0, in: codexModels) : TranscriptPanel.shortModel($0) } ?? (provider == .codex ? (codexModels.first { $0.isDefault }?.name ?? "Model") : "Model")) : "Choose agent",
+                      icon: "sparkle", logo: isAgent ? ProviderLogo.image(for: provider) : nil)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help(isAgent ? "Agent and model for this session. A model of the other agent switches the session to it." : "Start Claude Code or Codex in this session with the model you pick.")
@@ -345,9 +354,10 @@ struct ComposeBox: View {
                 Toggle(level, isOn: Binding(get: { current == level }, set: { if $0 { pickEffort(level) } }))
             }
         } label: {
-            chip("effort " + current)
+            ChipLabel(text: Self.effortName(current), icon: "dial.medium")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Thinking effort for this session (/effort)")
@@ -364,13 +374,76 @@ struct ComposeBox: View {
         send("/effort \(level)")
     }
 
-    private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(.primary.opacity(0.08), in: Capsule())
+    /// "auto" → "Auto effort", "xhigh" → "X-high effort".
+    static func effortName(_ level: String) -> String {
+        (level == "xhigh" ? "X-high" : level.prefix(1).uppercased() + level.dropFirst()) + " effort"
+    }
+
+    static func modeName(_ mode: String) -> String {
+        switch mode {
+        case "default": "Ask first"
+        case "accept edits": "Accept edits"
+        case "plan": "Plan"
+        case "auto": "Auto mode"
+        default: mode.prefix(1).uppercased() + mode.dropFirst()
+        }
+    }
+
+    static func modeIcon(_ mode: String) -> String {
+        switch mode {
+        case "accept edits": "pencil"
+        case "plan": "list.bullet"
+        case "auto": "bolt.fill"
+        default: "hand.raised"
+        }
+    }
+
+    // MARK: The queue
+
+    /// Prompts sent while the agent works wait here, on top of the box they were typed in,
+    /// until it takes them.
+    @ViewBuilder private func queueShelf(_ runtime: TabRuntime) -> some View {
+        let items = model.blocks.filter(\.inQueue)
+        if !items.isEmpty, runtime.statusState == .working || runtime.statusState == .blocked {
+            // Claude Code's queue can be changed while it works; Codex takes its own at the turn's end.
+            let editable = provider == .claude && runtime.statusState == .working
+            VStack(spacing: 1) {
+                HStack(spacing: 8) {
+                    Text("Queued · \(items.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(provider == .claude ? "read after the running step, in order" : "sent when the turn ends")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if editable, items.contains(where: { $0.pending == .queued }) {
+                        Button("Send now") { onQueue("now", items[0].id) }
+                            .buttonStyle(PromptButtonStyle())
+                            .scaleEffect(0.88, anchor: .trailing)
+                            .help("Interrupt the turn and send the queue now (⌃X ⌃S)")
+                    }
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, 4)
+                .frame(height: 24)
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, block in
+                    QueueRow(number: index + 1, text: block.text, first: index == 0, last: index == items.count - 1,
+                             editable: editable && block.pending == .queued) { action in
+                        if action == "edit" {
+                            // Back into the box to be changed; sending it queues it again.
+                            onQueue("remove", block.id)
+                            draft = draft.isEmpty ? block.text : draft + "\n" + block.text
+                            focused = true
+                        } else {
+                            onQueue(action, block.id)
+                        }
+                    }
+                }
+            }
+            .padding(4)
+            Hairline()
+        }
     }
 
     // MARK: Suggestions
@@ -391,7 +464,7 @@ struct ComposeBox: View {
             }
         }
         .padding(.vertical, 4)
-        .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .overlay(alignment: .bottom) { Hairline() }
     }
 
     private func refreshSuggestions() {
@@ -890,5 +963,48 @@ private struct AttachmentChip: View {
                 return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
             }.value
         }
+    }
+}
+
+/// One prompt waiting in the queue: its place, its text, and on hover what can be done with it.
+private struct QueueRow: View {
+    let number: Int
+    let text: String
+    let first: Bool
+    let last: Bool
+    let editable: Bool
+    let act: (String) -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("\(number)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .frame(width: 14, alignment: .trailing)
+            Text(text.replacingOccurrences(of: "\n", with: " "))
+                .font(.system(size: 12))
+                .foregroundStyle(.primary.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            if editable, hovering {
+                HStack(spacing: 0) {
+                    Button { act("up") } label: { Image(systemName: "arrow.up") }.disabled(first).help("Earlier")
+                    Button { act("down") } label: { Image(systemName: "arrow.down") }.disabled(last).help("Later")
+                    Button { act("edit") } label: { Image(systemName: "pencil") }.help("Take it back into the box to change it")
+                    Button { act("remove") } label: { Image(systemName: "xmark") }.help("Remove from the queue")
+                }
+                .buttonStyle(IconButtonStyle(size: 20))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 4)
+        .frame(height: 26)
+        .background(.primary.opacity(hovering ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .help(text)
     }
 }

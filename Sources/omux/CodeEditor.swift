@@ -284,7 +284,7 @@ struct FileEditorPane: View {
             .font(.system(size: 11))
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .overlay(alignment: .top) { Hairline() }
         }
     }
 

@@ -34,11 +34,13 @@ struct StatusDot: View {
 struct BreathingDot: NSViewRepresentable {
     let color: Color
     let pulsing: Bool
+    /// A slow blink, down to nearly nothing and back: for a surface that waits for an answer.
+    var slow = false
 
     func makeNSView(context: Context) -> BreathingDotView { BreathingDotView() }
 
     func updateNSView(_ view: BreathingDotView, context: Context) {
-        view.apply(color: color, pulsing: pulsing)
+        view.apply(color: color, pulsing: pulsing, slow: slow)
     }
 }
 
@@ -46,6 +48,7 @@ final class BreathingDotView: NSView {
     private let dot = CALayer()
     private var color: Color = .clear
     private var pulsing = false
+    private var slow = false
     private static let animationKey = "breathe"
 
     override init(frame: NSRect) {
@@ -67,13 +70,15 @@ final class BreathingDotView: NSView {
         CATransaction.commit()
     }
 
-    func apply(color: Color, pulsing: Bool) {
+    func apply(color: Color, pulsing: Bool, slow: Bool = false) {
         if color != self.color {
             self.color = color
             fill()
         }
-        if pulsing != self.pulsing {
+        if pulsing != self.pulsing || slow != self.slow {
             self.pulsing = pulsing
+            self.slow = slow
+            dot.removeAnimation(forKey: Self.animationKey)
             breathe()
         }
     }
@@ -107,8 +112,8 @@ final class BreathingDotView: NSView {
         guard dot.animation(forKey: Self.animationKey) == nil else { return }
         let animation = CABasicAnimation(keyPath: "opacity")
         animation.fromValue = 1
-        animation.toValue = 0.35
-        animation.duration = 0.9
+        animation.toValue = slow ? 0.12 : 0.35
+        animation.duration = slow ? 1.5 : 0.9
         animation.autoreverses = true
         animation.repeatCount = .infinity
         animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -196,7 +201,9 @@ struct SessionSurface<Terminal: View>: View {
                     .allowsHitTesting(!peeking)
                     .accessibilityHidden(peeking)
             }
-            if peeking {
+            // The one session the window shows goes back with the eye in the header; a pane has
+            // no header of its own showing while its terminal is up, so it keeps this button.
+            if peeking, slot != "single" {
                 Button { peek.hide(tabID) } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "text.bubble").imageScale(.small)

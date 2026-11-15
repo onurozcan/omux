@@ -21,6 +21,9 @@ final class TranscriptModels {
         return model
     }
 
+    /// The transcript of a session that has shown one, for views outside the transcript panel.
+    func existing(_ id: UUID) -> SessionTranscript? { models[id] }
+
     /// Drops the models of sessions that no longer exist, and the content of ones nothing has
     /// shown for a while, so a workspace of many sessions doesn't hold every conversation.
     func prune(keeping ids: Set<UUID>) {

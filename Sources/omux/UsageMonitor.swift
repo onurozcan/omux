@@ -15,6 +15,14 @@ final class UsageMonitor: ObservableObject {
             percent >= 90 ? Palette.error : percent >= 70 ? Palette.needs : Palette.quiet
         }
 
+        /// "2h 14m", "3d 4h": how long until this limit starts over.
+        var resetShort: String? {
+            guard let resetsAt else { return nil }
+            let seconds = max(0, Int(resetsAt.timeIntervalSinceNow))
+            let h = seconds / 3600, m = (seconds % 3600) / 60
+            return seconds >= 86400 ? "\(seconds / 86400)d \(h % 24)h" : h > 0 ? "\(h)h \(m)m" : "\(m)m"
+        }
+
         var resetText: String {
             guard let resetsAt else { return label }
             let seconds = max(0, Int(resetsAt.timeIntervalSinceNow))

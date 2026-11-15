@@ -195,6 +195,7 @@ struct ChangesPanel: View {
     let theme: Theme
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
     @State private var selected: String?
+    @FocusState private var listFocused: Bool
     @State private var lines: [DiffLine] = []
     @State private var editing: Int?
     @State private var draft = ""
@@ -241,12 +242,7 @@ struct ChangesPanel: View {
     }
 
     private func placeholder(_ title: String, _ detail: String) -> some View {
-        VStack(spacing: 6) {
-            Text(title).font(.headline)
-            Text(detail).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        EmptyState(icon: "plusminus", title: title, detail: detail)
     }
 
     private func pickFile() {
@@ -279,11 +275,7 @@ struct ChangesPanel: View {
                     Spacer()
                 }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .panelHeader()
 
             ScrollView(wrapLines ? .vertical : [.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -301,12 +293,15 @@ struct ChangesPanel: View {
         }
     }
 
+    private var wholeFileNew: Bool { file?.status == .added || file?.status == .untracked }
+
     private func row(_ line: DiffLine) -> some View {
         let (sign, signColor, background): (String, Color, Color) = {
             switch line.kind {
-            case .added: return ("+", Palette.done, Palette.done.opacity(0.13))
-            case .removed: return ("−", Palette.error, Palette.error.opacity(0.13))
-            case .hunk: return ("", .secondary, Palette.working.opacity(0.08))
+            // A file that is new from top to bottom needs no tint on every line: the gutter says it.
+            case .added: return ("+", Palette.done, wholeFileNew ? .clear : Palette.done.opacity(0.09))
+            case .removed: return ("−", Palette.error, Palette.error.opacity(0.09))
+            case .hunk: return ("", .secondary, Color.primary.opacity(0.045))
             case .info: return ("", .secondary, .clear)
             case .context: return ("", .secondary, .clear)
             }
@@ -327,6 +322,9 @@ struct ChangesPanel: View {
         .font(.system(size: 11, design: .monospaced))
         .padding(.vertical, 1)
         .background(background)
+        .overlay(alignment: .leading) {
+            if line.kind == .added || line.kind == .removed { Rectangle().fill(signColor.opacity(0.8)).frame(width: 2) }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             guard line.kind != .hunk, line.kind != .info else { return }
@@ -382,16 +380,14 @@ struct ChangesPanel: View {
                     .help("Open folder in Finder")
             }
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .frame(height: 28)
-        .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .panelHeader()
     }
 
     private var fileList: some View {
-        List(selection: $selected) {
+        ScrollViewReader { proxy in
+        List {
             ForEach(changes.files) { file in
+                SoftRow(selected: selected == file.path) { selected = file.path; listFocused = true } content: {
                 HStack(spacing: 6) {
                     Text(file.statusLetter)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -407,8 +403,10 @@ struct ChangesPanel: View {
                         Image(systemName: "text.bubble").foregroundStyle(.yellow).font(.caption)
                     }
                     Stat(added: file.added, removed: file.removed)
+                    ChangeBar(added: file.added ?? 0, removed: file.removed ?? 0)
                 }
-                .tag(file.path)
+                }
+                .id(file.path)
                 .contextMenu {
                     Button("Open") { open(file) }
                     Button("Reveal in Finder") { reveal(file) }
@@ -418,6 +416,23 @@ struct ChangesPanel: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Color(nsColor: theme.chrome))
+        // The arrow keys walk the files, as they did with the system's selection.
+        .focusable()
+        .focusEffectDisabled()
+        .focused($listFocused)
+        .onKeyPress(.upArrow) { step(-1, proxy) }
+        .onKeyPress(.downArrow) { step(1, proxy) }
+        }
+    }
+
+    private func step(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        let paths = changes.files.map(\.path)
+        guard !paths.isEmpty else { return .ignored }
+        let at = selected.flatMap { paths.firstIndex(of: $0) } ?? (by > 0 ? -1 : paths.count)
+        let next = paths[min(max(at + by, 0), paths.count - 1)]
+        selected = next
+        proxy.scrollTo(next)
+        return .handled
     }
 
     private var footer: some View {
@@ -452,7 +467,7 @@ struct ChangesPanel: View {
         .padding(.horizontal, 10)
         .frame(height: 40)
         .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .overlay(alignment: .top) { Hairline() }
     }
 
     private func url(_ file: ChangedFile) -> URL? {
@@ -493,6 +508,27 @@ private struct NoteEditor: View {
 }
 
 /// "+12 −3" in green and red.
+/// Five small squares split between added and removed, so a file's balance shows at a glance.
+struct ChangeBar: View {
+    let added: Int
+    let removed: Int
+
+    var body: some View {
+        let total = added + removed
+        // Whichever side has anything gets at least one square.
+        let green = added == 0 ? 0 : removed == 0 ? 5 : min(4, max(1, Int((Double(added) / Double(total) * 5).rounded())))
+        let red = removed == 0 ? 0 : 5 - green
+        HStack(spacing: 1.5) {
+            ForEach(0..<5, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(index < green ? Palette.done : index < green + red ? Palette.error : Color.primary.opacity(0.12))
+                    .frame(width: 4, height: 7)
+            }
+        }
+        .help("\(added) added, \(removed) removed")
+    }
+}
+
 struct Stat: View {
     let added: Int?
     let removed: Int?

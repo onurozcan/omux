@@ -8,8 +8,8 @@ import UniformTypeIdentifiers
 struct OmuxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = Store.shared
-    @AppStorage(Prefs.accent) private var accent = "system"
-    @AppStorage(Prefs.theme) private var themeName = Theme.dark.rawValue
+    @AppStorage(Prefs.accent) private var accent = "neutral"
+    @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
 
     init() { Prefs.importReleaseSettingsIfBeta() }
 
@@ -17,7 +17,7 @@ struct OmuxApp: App {
         Window(Persistence.isBeta ? "omux Beta" : "omux", id: "main") {
             ContentView()
                 .environmentObject(store)
-                .tint(Color(nsColor: Appearance.accent(accent, theme: Theme(rawValue: themeName) ?? .dark)))
+                .tint(Color(nsColor: Appearance.accent(accent, theme: Theme(rawValue: themeName) ?? .black)))
                 .frame(minWidth: 720, minHeight: 420)
         }
         .defaultSize(width: 1240, height: 780)
@@ -34,6 +34,8 @@ struct OmuxApp: App {
 enum Prefs {
     static let confirmQuit = "confirmQuit"
     static let showFolderPath = "showFolderPath"
+    static let sidebarDensity = "sidebarDensity"
+    static let sidebarLayout = "sidebarLayout"
     static let usageInterval = "usageInterval"
     static let theme = "theme"
     static let autoResume = "autoResume"
@@ -65,6 +67,7 @@ enum Prefs {
     static let transcriptFont = "transcriptFont"
     static let transcriptSize = "transcriptSize"
     static let transcriptWidth = "transcriptWidth"
+    static let transcriptLayout = "transcriptLayout"
     static let transcriptDensity = "transcriptDensity"
     static let transcriptBubbles = "transcriptBubbles"
     static let transcriptTimestamps = "transcriptTimestamps"
@@ -137,6 +140,8 @@ private struct SettingNote: View {
 
 private struct GeneralSettings: View {
     @AppStorage(Prefs.showFolderPath) private var showFolderPath = true
+    @AppStorage(Prefs.sidebarDensity) private var sidebarDensity = "comfortable"
+    @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
     @AppStorage(Prefs.confirmQuit) private var confirmQuit = true
@@ -144,8 +149,18 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section("Sidebar") {
+                Picker("Projects", selection: $sidebarLayout) {
+                    Text("On a rail").tag("rail")
+                    Text("In one list").tag("list")
+                }
+                SettingNote("On a rail, each project is a mark on a narrow strip and the list shows the sessions of the one picked. Closing the list (⌃⌘S) keeps the rail and turns the sessions into tabs along the top. In one list, every project and its sessions are listed together.")
+                Picker("Sessions", selection: $sidebarDensity) {
+                    Text("Comfortable").tag("comfortable")
+                    Text("Compact").tag("compact")
+                }
+                SettingNote("Compact shows one line a session: its name, with what it is doing in the tooltip.")
                 Toggle("Show the folder path under each session", isOn: $showFolderPath)
-                Picker("Check Claude usage limits every", selection: $usageInterval) {
+                Picker("Check usage limits every", selection: $usageInterval) {
                     Text("Minute").tag(60.0)
                     Text("5 minutes").tag(300.0)
                     Text("30 minutes").tag(1800.0)
@@ -164,22 +179,92 @@ private struct GeneralSettings: View {
     }
 }
 
+/// A small picture of the window in the theme and accent being chosen, so a choice shows
+/// before the window behind the settings is looked at.
+private struct AppearancePreview: View {
+    let theme: Theme
+    let accent: Color
+    let bubbles: String
+
+    var body: some View {
+        let fg = Color(nsColor: theme.foreground)
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("project").font(.system(size: 8, weight: .semibold)).foregroundStyle(fg.opacity(0.55))
+                row("Session one", Palette.working, selected: true)
+                row("Session two", Palette.done, selected: false)
+                row("Shell", fg.opacity(0.3), selected: false)
+                Spacer(minLength: 0)
+            }
+            .padding(8)
+            .frame(width: 110, alignment: .leading)
+            .background(Color(nsColor: theme.chrome))
+            Rectangle().fill(fg.opacity(0.08)).frame(width: 1)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Spacer()
+                    Text("Add a dark mode toggle")
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(bubbles == "tinted" ? fg.opacity(0.09) : .clear, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(fg.opacity(bubbles == "plain" ? 0 : 0.12)))
+                }
+                Text("Done. The toggle is in ") + Text("settings/page.tsx").foregroundColor(accent) + Text(".")
+                Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    Text("Message…").foregroundStyle(fg.opacity(0.4))
+                    Spacer()
+                    Image(systemName: "arrow.up").font(.system(size: 7, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 14, height: 14).background(accent, in: Circle())
+                }
+                .padding(.horizontal, 7)
+                .frame(height: 22)
+                .background(fg.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(fg.opacity(0.12)))
+            }
+            .font(.system(size: 9))
+            .foregroundStyle(fg)
+            .padding(9)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: theme.background))
+        }
+        .frame(height: 112)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.primary.opacity(0.12)))
+        .padding(10)
+    }
+
+    private func row(_ name: String, _ dot: Color, selected: Bool) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(dot).frame(width: 5, height: 5)
+            Text(name).font(.system(size: 8.5)).foregroundStyle(Color(nsColor: theme.foreground))
+        }
+        .padding(.horizontal, 5)
+        .frame(maxWidth: .infinity, minHeight: 15, alignment: .leading)
+        .background(Color(nsColor: theme.foreground).opacity(selected ? 0.11 : 0), in: RoundedRectangle(cornerRadius: 4))
+    }
+}
+
 private struct AppearanceSettings: View {
-    @AppStorage(Prefs.theme) private var theme = Theme.dark.rawValue
-    @AppStorage(Prefs.accent) private var accent = "system"
+    @AppStorage(Prefs.theme) private var theme = Theme.black.rawValue
+    @AppStorage(Prefs.accent) private var accent = "neutral"
     @AppStorage(Prefs.fontFamily) private var fontFamily = ""
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
     @AppStorage(Prefs.transcriptFont) private var transcriptFont = ""
-    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 13.0
+    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 12.0
     @AppStorage(Prefs.transcriptWidth) private var transcriptWidth = "full"
     @AppStorage(Prefs.transcriptDensity) private var transcriptDensity = "comfortable"
+    @AppStorage(Prefs.transcriptLayout) private var transcriptLayout = "cards"
     @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
 
-    private var current: Theme { Theme(rawValue: theme) ?? .dark }
+    private var current: Theme { Theme(rawValue: theme) ?? .black }
 
     var body: some View {
         Form {
+            Section {
+                AppearancePreview(theme: current, accent: Color(nsColor: Appearance.accent(accent, theme: current)), bubbles: transcriptBubbles)
+                    .listRowInsets(EdgeInsets())
+            }
             Section("Theme") {
                 swatches("Dark", Theme.darkThemes)
                 swatches("Light", Theme.lightThemes)
@@ -195,7 +280,7 @@ private struct AppearanceSettings: View {
                         .tag(choice.id)
                     }
                 }
-                SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue. Neutral is grey everywhere but the sidebar, which keeps the system's colour.")
+                SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue. Neutral is grey throughout, which leaves colour to mean one thing: a session's state.")
             }
             Section("Terminal") {
                 Picker("Font", selection: $fontFamily) {
@@ -210,6 +295,11 @@ private struct AppearanceSettings: View {
                     ForEach(Appearance.transcriptFonts, id: \.id) { Text($0.label).tag($0.id) }
                 }
                 Stepper("Size: \(Int(transcriptSize)) pt", value: $transcriptSize, in: Appearance.transcriptSizes)
+                Picker("Turns", selection: $transcriptLayout) {
+                    Text("Cards").tag("cards")
+                    Text("Plain").tag("plain")
+                }
+                SettingNote("Cards draw each request with its work and its answer as one card; older ones fold to their first line. The request at the top of a card is one point larger than the size above, which at 12 is the size of the message box.")
                 Picker("Width", selection: $transcriptWidth) {
                     ForEach(Appearance.widths, id: \.id) { Text($0.label).tag($0.id) }
                 }
@@ -222,8 +312,10 @@ private struct AppearanceSettings: View {
                     ForEach(Appearance.bubbles, id: \.id) { Text($0.label).tag($0.id) }
                 }
                 .pickerStyle(.segmented)
-                Toggle("Show the time under your messages", isOn: $transcriptTimestamps)
-                SettingNote("Applies to every open transcript at once.")
+                // A card's header has no bubble to style.
+                .disabled(transcriptLayout == "cards")
+                Toggle("Show the time on your messages", isOn: $transcriptTimestamps)
+                SettingNote(transcriptLayout == "cards" ? "Applies to every open transcript at once. The style of your messages applies to Plain turns only." : "Applies to every open transcript at once.")
             }
         }
         .formStyle(.grouped)
@@ -409,20 +501,23 @@ private struct WindowChrome: NSViewRepresentable {
 struct ContentView: View {
     @EnvironmentObject var store: Store
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(Prefs.theme) private var themeName = Theme.dark.rawValue
+    @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
     @AppStorage(Prefs.fontFamily) private var fontFamily = ""
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
     @AppStorage(Prefs.showFiles) private var showFiles = false
     @AppStorage(Prefs.showSidebar) private var showSidebar = true
-    @AppStorage(Prefs.accent) private var accentChoice = "system"
+    @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
+    @AppStorage(Prefs.accent) private var accentChoice = "neutral"
     @AppStorage("panelWidth") private var panelWidth = 250.0
+    /// The session list is closed and the projects are on a rail: the rail stays, by itself.
+    private var railAlone: Bool { !showSidebar && sidebarLayout == "rail" }
 
     /// The sidebar closes like the right panel does, and stays closed across launches.
     private var columns: Binding<NavigationSplitViewVisibility> {
         Binding(get: { showSidebar ? .all : .detailOnly }, set: { showSidebar = $0 != .detailOnly })
     }
 
-    private var theme: Theme { Theme(rawValue: themeName) ?? .dark }
+    private var theme: Theme { Theme(rawValue: themeName) ?? .black }
 
     /// Changes follow the selected session and its folder, which may be its project's.
     private var changesKey: String {
@@ -446,6 +541,8 @@ struct ContentView: View {
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             HStack(spacing: 0) {
+                // Room for the rail, which lies over this edge so it can open across the session.
+                if railAlone { Color.clear.frame(width: ProjectRail.width) }
                 VStack(spacing: 0) {
                     SessionHeader(theme: theme, showFiles: $showFiles, showSidebar: $showSidebar)
                         // Above the panes: their layout is measured with GeometryReader, which
@@ -454,8 +551,11 @@ struct ContentView: View {
                     // Over the terminal, so a notice doesn't resize the session.
                     ZStack(alignment: .top) {
                         if let shown = store.shownLayout {
-                            PaneTree(node: shown, theme: theme)
-                                .background(Color(nsColor: theme.chrome))
+                            VStack(spacing: 0) {
+                                PaneTree(node: shown, theme: theme)
+                                PaneComposeBar(theme: theme)
+                            }
+                            .background(Color(nsColor: theme.chrome))
                         } else if let id = store.selectedTabID, let term = store.terminal(for: id) {
                             DropIntoPane(target: id) { hooks in
                                 SessionSurface(tabID: id, theme: theme, hooks: hooks) {
@@ -482,6 +582,19 @@ struct ContentView: View {
             }
             // Each pane ignores the title bar inset itself, so the session header and the panel's
             // tabs sit level with the sidebar's buttons. On the split view alone it doesn't reach them.
+            .overlay(alignment: .leading) {
+                if railAlone {
+                    // The sessions are tabs in the header: a project picked on the rail shows
+                    // there, on the session it was last worked in.
+                    StandaloneRail(theme: theme) {
+                        guard let group = store.groups.first(where: { $0.id == RailState.shared.shownGroupID }), store.selectedGroup?.id != group.id else { return }
+                        let pick = group.tabs.first { store.runtime[$0.id]?.statusState == .blocked }
+                            ?? group.tabs.max { (store.runtime[$0.id]?.lastActivity ?? .distantPast) < (store.runtime[$1.id]?.lastActivity ?? .distantPast) }
+                        if let pick { store.selectedTabID = pick.id } else { withAnimation(.easeInOut(duration: 0.2)) { showSidebar = true } }
+                    }
+                        .ignoresSafeArea(.container, edges: .top)
+                }
+            }
         }
         .toolbar(.hidden, for: .windowToolbar)
         .background(WindowChrome())
@@ -518,15 +631,16 @@ struct SessionHeader: View {
     let theme: Theme
     @Binding var showFiles: Bool
     @Binding var showSidebar: Bool
+    @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
 
     var body: some View { WithRuntime(store.selectedTabID) { _ in sessionBody } }
 
     /// Drawn again whenever this session's live state changes; see `WithRuntime`.
     @ViewBuilder private var sessionBody: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             Button { withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() } } label: { Image(systemName: "sidebar.leading") }
                 .foregroundStyle(showSidebar ? .primary : .secondary)
-                .help("Sidebar (⌃⌘S)")
+                .help(sidebarLayout == "rail" ? "Session list (⌃⌘S). Closed, the sessions are tabs up here and the project rail stays." : "Sidebar (⌃⌘S)")
             if let shown = store.shownLayout {
                 // Every pane has its own header; this one names the project they belong to.
                 Image(systemName: "folder").foregroundStyle(.tertiary)
@@ -539,30 +653,36 @@ struct SessionHeader: View {
                 Spacer()
             } else if let tab = store.selectedTab {
                 let rt = store.runtime[tab.id] ?? TabRuntime()
-                StatusDot(color: rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4), pulsing: rt.statusState == .working, size: 8)
-                Text(tab.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-                if [.claude, .codex].contains(store.provider(of: tab)) {
-                    Text(store.provider(of: tab).label).font(.caption2).foregroundStyle(.tertiary)
-                }
-                if let line = rt.statusLine(showFolder: false) {
-                    Text(line)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                // With the session list closed, the project's sessions are tabs here.
+                let tabbed = !showSidebar && sidebarLayout == "rail"
+                if tabbed, let group = store.selectedGroup {
+                    SessionTabs(group: group)
+                } else {
+                    StatusDot(color: rt.statusColor ?? tab.color.color ?? Color.secondary.opacity(0.4), pulsing: rt.statusState == .working, size: 8)
+                    Text(tab.name)
+                        .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
+                    if [.claude, .codex].contains(store.provider(of: tab)) {
+                        Text(store.provider(of: tab).label).font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    if let line = rt.statusLine(showFolder: false) {
+                        Text(line)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
                 if rt.awaitsPermission {
                     PermissionButtons(tabID: tab.id).controlSize(.mini)
                 }
-                Spacer()
+                if !tabbed { Spacer() }
                 if store.provider(of: tab) == .codex {
                     CodexAgents(tabID: tab.id, compact: true)
                 } else { AgentPill(tabID: tab.id) }
                 if let worktree = tab.worktree {
                     PullRequestChip(tabID: tab.id)
                     BranchChip(tabID: tab.id, worktree: worktree)
-                } else if let cwd = rt.cwd {
+                } else if let cwd = rt.cwd, !tabbed {
                     Text((cwd as NSString).abbreviatingWithTildeInPath)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -583,29 +703,30 @@ struct SessionHeader: View {
             } else {
                 Spacer()
             }
+            if store.shownLayout == nil, let id = store.selectedTabID, SessionViewMode.showsTranscript(id, store: store),
+               let transcript = TranscriptModels.shared.existing(id) {
+                SessionReadout(tabID: id, model: transcript)
+            }
             if store.isMaximized {
                 Button { store.restoreSplit() } label: { Image(systemName: "arrow.down.right.and.arrow.up.left") }
                     .help("Back to side by side")
-            } else if let id = store.selectedTabID {
-                // The way into panes from a single session: a shell beside or below it.
-                Button { store.splitWithShell(id, axis: .horizontal) } label: { Image(systemName: "rectangle.split.2x1") }
-                    .help("New shell to the right, in this session's folder")
-                Button { store.splitWithShell(id, axis: .vertical) } label: { Image(systemName: "rectangle.split.1x2") }
-                    .help("New shell below, in this session's folder")
             }
+            // A shell beside or below a session is started from the session's own menu
+            // (right-click its tab or row), and from each pane's header once there are panes.
             Button { showFiles.toggle() } label: { Image(systemName: "sidebar.trailing") }
                 .foregroundStyle(showFiles ? .primary : .secondary)
                 .help("Files panel (⌥⌘F)")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle())
         .foregroundStyle(.secondary)
         .font(.system(size: 11))
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         // With the sidebar closed the header reaches the window's corner: room for its buttons.
-        .padding(.leading, showSidebar ? 0 : 68)
+        // The rail, when it stays behind, takes the first 46 of those points itself.
+        .padding(.leading, showSidebar ? 0 : sidebarLayout == "rail" ? 68 - ProjectRail.width : 68)
         .frame(height: 28)
         .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 

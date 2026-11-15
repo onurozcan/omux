@@ -243,15 +243,15 @@ PAGES += [
         "other": "T3 Code",
         "other_url": "https://t3.codes",
         "title": "T3 Code alternative: omux, a native Mac app for Claude Code and Codex sessions",
-        "meta": "T3 Code alternative for running coding agents: omux is a 5 MB native macOS app that keeps Claude Code and Codex sessions in a sidebar with live status, Allow/Deny buttons, subagents, split panes, worktrees and pull request status. Where T3 Code's mobile apps and branch-per-thread flow win, and where omux is better.",
+        "meta": "T3 Code alternative for running coding agents: omux is a native macOS app that keeps Claude Code and Codex sessions in a sidebar with live status, Allow/Deny buttons, subagents, split panes, worktrees and pull request status. Where T3 Code's mobile apps and branch-per-thread flow win, and where omux is better.",
         "h1": "T3 Code alternative: a native Mac terminal instead of a control plane",
         "intro": [
             "T3 Code is the open-source control plane for coding agents from T3 Tools: a desktop app, a web app and iOS and Android apps that drive Claude Code, Codex, Antigravity, OpenCode, Cursor and Grok through their SDKs. Every thread gets its own branch, and a button commits, pushes and opens a pull request with a generated title. It's free, MIT-licensed and moving fast.",
-            "omux is smaller and closer to the metal. It's one native Swift window, about 5 MB, that runs the real Claude Code and Codex terminals side by side under projects, reads their own signals for status, and puts Allow and Deny in the sidebar. No server, no Electron, no reimplemented chat view. This page is a fair look at which shape fits you.",
+            "omux is smaller and closer to the metal. It's one native Swift window that runs the real Claude Code and Codex terminals side by side under projects, reads their own signals for status, and puts Allow and Deny in the sidebar. No server, no Electron, no reimplemented chat view. This page is a fair look at which shape fits you.",
         ],
         "rows": [
             ("What it is", "A session manager with a real terminal per Claude Code or Codex session", "A control plane that drives agent harnesses through their SDKs, one chat-style thread per task"),
-            ("Runs on", "macOS, native Swift, about 5 MB", "macOS, Windows and Linux desktop (Electron), web, iOS and Android"),
+            ("Runs on", "macOS, native Swift", "macOS, Windows and Linux desktop (Electron), web, iOS and Android"),
             ("Agents", "Claude Code and Codex, plus plain shells", "Claude Code, Codex, Antigravity, OpenCode, Cursor and Grok, with more added often"),
             ("How you see the agent", "Its own terminal UI, exactly as in Terminal", "A thread view rendered by T3 Code; a terminal is available too"),
             ("Agent status", "Yes: working, needs you, done, read from the agents' own signals", "Yes: per thread, with push notifications on the phone apps"),
@@ -272,7 +272,7 @@ PAGES += [
         ],
         "better_omux": [
             "You want the real terminal UI of Claude Code and Codex, not a rendering of it, with status and permissions read from the agents themselves.",
-            "You want a 5 MB native app with no server and no Electron, and split panes so several sessions share one project view.",
+            "You want a native app with no server and no Electron, and split panes so several sessions share one project view.",
             "You prefer a worktree per session with the pull request's state and the diff right next to the agent.",
         ],
         "faq": [
@@ -286,7 +286,7 @@ PAGES += [
         "other": "VS Code",
         "other_url": "https://code.visualstudio.com",
         "title": "VS Code alternative for running Claude Code and Codex sessions: omux",
-        "meta": "VS Code alternative for agent sessions: omux is a 5 MB native macOS app that runs Claude Code and Codex in real terminals, side by side, with live status, Allow/Deny buttons, subagents, split panes and worktrees. Where VS Code's Agents window, Copilot and extensions win, and where omux is better.",
+        "meta": "VS Code alternative for agent sessions: omux is a native macOS app that runs Claude Code and Codex in real terminals, side by side, with live status, Allow/Deny buttons, subagents, split panes and worktrees. Where VS Code's Agents window, Copilot and extensions win, and where omux is better.",
         "h1": "VS Code alternative for running Claude Code and Codex sessions",
         "intro": [
             "VS Code has grown far past autocomplete. Its Agents window manages sessions across projects with Copilot, Claude and Codex as harnesses, sessions can work in their own worktree, and cloud sessions and automations are in preview. If you live in VS Code, it's a capable home for agents.",
@@ -306,7 +306,7 @@ PAGES += [
             ("Split panes", "Yes: a canvas per project, up to six sessions", "Yes: editor groups and terminal splits"),
             ("Editing code", "No: open files in your editor from the Files panel", "Its whole purpose"),
             ("Extensions", "No", "Tens of thousands"),
-            ("Size and feel", "About 5 MB, native Swift", "Electron, a few hundred MB"),
+            ("Size and feel", "Native Swift, a small download", "Electron, a few hundred MB"),
             ("Price and license", "Free, MIT", "Free, MIT for the open-source core; Copilot plans are paid"),
         ],
         "better_other": [
@@ -334,7 +334,7 @@ PAGES += [
         "h1": "Cursor alternative: run your own Claude Code and Codex, without credits",
         "intro": [
             "Cursor is an AI editor with its own agent runtime: the editor, Composer and a menu of frontier models, parallel agents that run in the cloud for hours, Bugbot for review, automations, and plans from a free tier up to Ultra. It's a platform, and a strong one if you want everything on one bill.",
-            "omux is a 5 MB window that runs the Claude Code and Codex you already have. No model menu, no credits, no account, no telemetry. The sessions sit under projects in a sidebar, show their status from the agents' own signals, and take Allow and Deny from one click. This page is for people who moved their agent work to the terminal and want to run many sessions without losing track.",
+            "omux is a native window that runs the Claude Code and Codex you already have. No model menu, no credits, no account, no telemetry. The sessions sit under projects in a sidebar, show their status from the agents' own signals, and take Allow and Deny from one click. This page is for people who moved their agent work to the terminal and want to run many sessions without losing track.",
         ],
         "rows": [
             ("What it is", "A session manager for Claude Code and Codex", "An AI code editor with its own agent, models and cloud"),
@@ -373,7 +373,7 @@ PAGES += [
         "other": "Antigravity",
         "other_url": "https://antigravity.google",
         "title": "Antigravity alternative: omux, a native Mac app for Claude Code and Codex",
-        "meta": "Google Antigravity alternative for running coding agents: omux is a 5 MB native macOS app for Claude Code and Codex sessions, with live status, Allow/Deny buttons, subagents, split panes and worktrees, and no Google account. Where Antigravity's Agent Manager, browser agents and Gemini win, and where omux is better.",
+        "meta": "Google Antigravity alternative for running coding agents: omux is a native macOS app for Claude Code and Codex sessions, with live status, Allow/Deny buttons, subagents, split panes and worktrees, and no Google account. Where Antigravity's Agent Manager, browser agents and Gemini win, and where omux is better.",
         "h1": "Antigravity alternative: your own Claude Code and Codex in one native window",
         "intro": [
             "Google Antigravity is an agent-first platform on one harness: an IDE with an Agent Manager, a desktop app that runs local agents in parallel with projects and scheduled messages, a CLI with background subagents, a Python SDK, and artifacts such as task lists, screenshots and recordings that agents hand back as evidence. It's free for individuals, built around Gemini, and signed in with a Google account.",
@@ -403,7 +403,7 @@ PAGES += [
         "better_omux": [
             "You want to keep Claude Code and Codex exactly as they are, with their own logins and plans.",
             "You don't want a Google account or another set of quotas between you and your agents.",
-            "You prefer a 5 MB native window with real terminals to a platform.",
+            "You prefer a native window with real terminals to a platform.",
         ],
         "faq": [
             ("Can omux run Antigravity?", "Not as an agent session. omux integrates with Claude Code and Codex. A plain shell session in omux can run the Antigravity CLI, but without status, permissions or subagents."),
@@ -482,7 +482,7 @@ SHAPES = {
     'devin-alternative': ['Slack, Linear, GitHub or Devin Desktop', "Devin on Cognition's cloud machines", 'Cognition account and plan'],
 }
 
-FACTS = [("5 MB", "native Swift app, no Electron"), ("0", "accounts, credits or telemetry"), ("6", "sessions side by side per project"), ("MIT", "free and open source")]
+FACTS = [("Swift", "native Mac app, no Electron"), ("0", "accounts, credits or telemetry"), ("6", "sessions side by side per project"), ("MIT", "free and open source")]
 
 def shape_html(p):
     other = SHAPES[p["slug"]]
@@ -499,7 +499,7 @@ def shape_html(p):
       </div>
       <div class="shape-col shape-omux">
         <div class="shape-title">omux</div>
-        <div class="shape-node">The native agentic development platform for the Mac, about 5 MB</div>
+        <div class="shape-node">The native agentic development platform for the Mac</div>
         <div class="shape-arrow">↓</div>
         <div class="shape-chips">{chips}</div>
         <div class="shape-arrow">↓</div>
@@ -572,7 +572,7 @@ def footer_html(current=None):
     <nav class="footer-links footer-compare" aria-label="Comparisons">
       <span class="muted">Compare:</span>{links}
     </nav>
-    <p class="fineprint">omux is the native agentic development platform for the Mac: a 5 MB terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of {TODAY} and may be out of date.</p>
+    <p class="fineprint">omux is the native agentic development platform for the Mac: a small Swift terminal that runs fleets of Claude Code and Codex sessions. omux is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. Claude and Claude Code are trademarks of Anthropic; Codex is a trademark of OpenAI. Other product names belong to their owners; comparisons reflect their public documentation as of {TODAY} and may be out of date.</p>
   </div>
 </footer>'''
 
@@ -627,8 +627,8 @@ def page_html(p):
     {facts_html()}
 
     <figure class="shot compare-shot">
-      <img src="shots/hero.png" srcset="shots/hero.png 1600w, shots/hero@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="omux with eight projects in the sidebar, a Claude Code conversation in the transcript view, a Codex session waiting on Allow or Deny, and the Changes panel showing a diff">
-      <figcaption>omux: projects and sessions on the left, the agent in the middle, its diff on the right. The session that needs you shows Allow and Deny.</figcaption>
+      <img src="shots/hero.png" srcset="shots/hero.png 1600w, shots/hero@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="omux with the project rail, one project's sessions, a Claude Code conversation in turn cards, and the Changes panel showing a diff">
+      <figcaption>omux: projects on a rail and their sessions on the left, the agent in the middle, its diff on the right.</figcaption>
     </figure>
 
     <h2>Where the agent lives</h2>
@@ -646,24 +646,24 @@ def page_html(p):
     <h2>A closer look at omux</h2>
     <div class="gallery">
         <figure class="shot">
-          <img src="shots/approval.png" srcset="shots/approval.png 1600w, shots/approval@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session asking to run npm outdated, with Allow and Deny in the transcript and in the sidebar">
-          <figcaption>Every approval is a card. Allow or Deny from the transcript or the sidebar, or tell the agent what to do instead.</figcaption>
+          <img src="shots/prompt.png" srcset="shots/prompt.png 1600w, shots/prompt@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="Claude Code asking a question with two choices, shown as a card above the message box, with the session and its project marked amber">
+          <figcaption>Whatever an agent asks is a card above the message box: a question with its choices, a command to allow, a folder to trust. Answer there, or type your own reply.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/codex.png" srcset="shots/codex.png 1600w, shots/codex@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session's reply with a code block, next to the file it changes">
-          <figcaption>Codex replies stream in as they're written, with code blocks you can copy and files you can open.</figcaption>
+          <img src="shots/tabs.png" srcset="shots/tabs.png 1600w, shots/tabs@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The session list closed: a project's sessions as tabs along the top, the open one wide, and the conversation in turn cards across the window">
+          <figcaption>Close the session list and a project's sessions become tabs along the top, agents on the left and shells apart on the right. A tab that waits for you blinks.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/panes.png" srcset="shots/panes.png 1600w, shots/panes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Claude Code session and a Codex session side by side in one project, with the diff on the right">
-          <figcaption>Sessions side by side: drop one onto another to split the pane.</figcaption>
+          <img src="shots/panes.png" srcset="shots/panes.png 1600w, shots/panes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="Two Claude Code sessions side by side in one project, with one message box under both that names the pane it writes to">
+          <figcaption>Sessions side by side, with one message box under them all that writes to the active pane.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/editor.png" srcset="shots/editor.png 1600w, shots/editor@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The Files panel editing server.ts next to the conversation, with ⌘S to save">
+          <img src="shots/editor.png" srcset="shots/editor.png 1600w, shots/editor@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The Files panel showing a test file next to the conversation, with ⌘S to save">
           <figcaption>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/picker.png" srcset="shots/picker.png 1600w, shots/picker@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The agent and model picker: Claude Code models and Codex models in one menu">
-          <figcaption>Switch a session between Claude Code and Codex, or change the model, from the compose box. The conversation is handed over.</figcaption>
+          <img src="shots/rail.png" srcset="shots/rail.png 1600w, shots/rail@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The project rail opened under the pointer, naming each project and what its sessions are doing, with the usage limits at its foot">
+          <figcaption>Every project is a tile on a rail, coloured by what needs you. Rest the pointer on it and it opens with each project's name and what its sessions are doing.</figcaption>
         </figure>
     </div>
 

@@ -4,18 +4,6 @@ enum PanelTab: String, CaseIterable {
     case files, changes, browser, agents
 }
 
-/// A count on one of the panel's tabs.
-struct PanelBadge: View {
-    let count: Int
-    var body: some View {
-        Text("\(count)")
-            .font(.system(size: 9, weight: .semibold))
-            .padding(.horizontal, 4)
-            .frame(minWidth: 15, minHeight: 14)
-            .background(.primary.opacity(0.14), in: Capsule())
-    }
-}
-
 /// The agents still at work in a session. A view of its own, so the agent monitors redraw this
 /// number and not the whole panel.
 struct RunningAgentsBadge: View {
@@ -25,7 +13,7 @@ struct RunningAgentsBadge: View {
 
     var body: some View {
         let running = (monitor.agents[tabID] ?? []).filter { !$0.finished }.count + (codex.agents[tabID] ?? []).filter { !$0.finished }.count
-        if running > 0 { PanelBadge(count: running) }
+        if running > 0 { CountBadge(count: running, strong: true) }
     }
 }
 
@@ -46,10 +34,7 @@ struct AgentsPanel: View {
         } else if !(codex.agents[tabID] ?? []).isEmpty {
             ScrollView { CodexAgents(tabID: tabID).padding(12).frame(maxWidth: .infinity, alignment: .leading) }
         } else {
-            Text("No agents in this session")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            EmptyState(icon: "person.2", title: "No agents in this session", detail: "Subagents the session starts are listed here, each with its own transcript.")
         }
     }
 }
@@ -66,20 +51,20 @@ struct RightPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 2) {
-                button(.files, "Files", "doc", shortcut: "1")
-                button(.changes, "Changes", "plusminus", shortcut: "2",
-                       badge: changes.tabID == store.selectedTabID ? changes.files.count : 0)
-                button(.browser, "Browser", "globe", shortcut: "3")
-                button(.agents, "Agents", "person.2", shortcut: "4", agentsOf: store.selectedTabID)
-                Spacer()
+            // Every tab named when there is room; in a narrow panel only the one that is open.
+            ViewThatFits(in: .horizontal) {
+                tabs(titles: true)
+                tabs(titles: false)
             }
-            .padding(.horizontal, 6)
+            .padding(2)
+            .background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .padding(.horizontal, 8)
+            // The same height as the session header beside it, so their bottom lines meet.
             .frame(height: 28)
             .background(Color(nsColor: theme.chrome))
             // A real hairline rather than an overlay: the split views below extend into any safe
             // area they touch, and the tab bar sits in the title bar's. The hairline keeps them apart.
-            Rectangle().fill(.primary.opacity(0.08)).frame(height: 1)
+            Hairline()
 
             if let group = store.selectedGroup, group.isRemote, let host = group.host, current == .files {
                 // The folder is on another machine: listed there, and files copied here to be shown.
@@ -99,14 +84,14 @@ struct RightPanel: View {
                     if let id = store.selectedTabID {
                         AgentsPanel(tabID: id).background(Color(nsColor: theme.chrome))
                     } else {
-                        Text("No session").foregroundStyle(.secondary)
+                        EmptyState(title: "No session")
                     }
                 }
                 if current == .browser {
                     if let id = store.selectedTabID {
                         BrowserPanel(session: store.browser(for: id), theme: theme).id(id)
                     } else {
-                        Text("No session").foregroundStyle(.secondary)
+                        EmptyState(title: "No session")
                     }
                 }
             }
@@ -114,20 +99,33 @@ struct RightPanel: View {
         }
     }
 
-    private func button(_ value: PanelTab, _ title: String, _ icon: String, shortcut: String, badge: Int = 0, agentsOf: UUID? = nil) -> some View {
+    private func tabs(titles: Bool) -> some View {
+        HStack(spacing: 1) {
+            button(.files, "Files", "folder", shortcut: "1", titled: titles)
+            button(.changes, "Changes", "plusminus", shortcut: "2",
+                   badge: changes.tabID == store.selectedTabID ? changes.files.count : 0, titled: titles)
+            button(.browser, "Browser", "globe", shortcut: "3", titled: titles)
+            button(.agents, "Agents", "person.2", shortcut: "4", agentsOf: store.selectedTabID, titled: titles)
+        }
+    }
+
+    private func button(_ value: PanelTab, _ title: String, _ icon: String, shortcut: String, badge: Int = 0, agentsOf: UUID? = nil, titled: Bool = true) -> some View {
         let selected = current == value
         return Button { tab = value.rawValue } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon).imageScale(.small)
-                Text(title)
-                if badge > 0 { PanelBadge(count: badge) }
+                if titled || selected { Text(title).fixedSize() }
+                if badge > 0 { CountBadge(count: badge, strong: true) }
                 if let agentsOf { RunningAgentsBadge(tabID: agentsOf) }
             }
             .font(.system(size: 11, weight: .medium))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
             .foregroundStyle(selected ? .primary : .secondary)
-            .padding(.horizontal, 8)
-            .frame(height: 22)
-            .background(selected ? Color.primary.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 5))
+            .frame(maxWidth: .infinity)
+            .frame(height: 20)
+            .background(selected ? Color.primary.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
