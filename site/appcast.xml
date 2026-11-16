@@ -3,6 +3,29 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.12.2</title>
+            <pubDate>Mon, 16 Nov 2026 13:56:45 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>20</sparkle:version>
+            <sparkle:shortVersionString>0.12.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Added</h3>
+<ul>
+<li><strong>A split button in the session header.</strong> One button opens a menu: a new shell to the right or below, or another session of the project beside this one. The same choices stay in a session's own menu, and each pane keeps its buttons.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><strong>The message box is as wide as the conversation.</strong> The cards and the box under them share their edges, and with the transcript set to Wide or Narrow the box and the cards that ask something narrow with it. The band behind the box and the line over it are gone: it stands on the panel itself.</li>
+<li><strong>No scroll bar and no dots beside the conversation.</strong> The row of dots that jumped between prompts and the scroll bar are gone, and the cards take the room. Folded turns and ⌘F find an earlier prompt.</li>
+<li><strong>The right panel is one surface.</strong> Files, Changes, Browser and Agents sit on the conversation's own background, where the file tree and the list of changes were a lighter grey. Its tabs are drawn as the session header draws its sessions, on the same strip at the same height.</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.2/omux-0.12.2.zip" length="34065998" type="application/octet-stream" sparkle:edSignature="LZZOv1uUnkDV+V9PYdwkxSw2HDRJ6uEtHGKIUOyyeplYvUnbdK+1l+S5Gn0cNBELQbS4cZKRaECvqIwWzZx2AQ=="/>
+        </item>
+        <item>
             <title>0.12.1</title>
             <pubDate>Mon, 16 Nov 2026 12:18:42 +0300</pubDate>
             <link>https://omux.app</link>
@@ -75,35 +98,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.0/omux-0.12.0.zip" length="34048756" type="application/octet-stream" sparkle:edSignature="YQx7Ypf0zKtiHcwzDLK3mR+Fegl7U2JAsjETr/grl4qkT6mZUXROvZKVmXf1r8UiBSkvgeByFw4J6M9FObE6BA=="/>
-        </item>
-        <item>
-            <title>0.11.2</title>
-            <pubDate>Fri, 13 Nov 2026 20:55:32 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>17</sparkle:version>
-            <sparkle:shortVersionString>0.11.2</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Changed</h3>
-<ul>
-<li><strong>Pages open in the Browser tab.</strong> Choosing an <code>.html</code> file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.</li>
-<li><strong>A project moves to the top of the sidebar when it is activated.</strong> That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.</li>
-<li><strong>The sidebar closes.</strong> A button at the left of the session header, Sidebar in the View menu, or ⌃⌘S hides the project list and brings it back, like the right panel; it stays as you left it across launches.</li>
-<li><strong>Agents have their own tab.</strong> The right panel gains Agents (⌥⌘4), beside Files, Changes and Browser: the session's subagents with what each is doing, a count of those still running on the tab, and the transcript of the one you pick. Clicking an agent anywhere opens it there; Files keeps the file you were looking at.</li>
-<li><strong>A Neutral accent.</strong> Settings › Appearance › Accent has a Neutral choice: the send button, the compose box's focus ring, pickers, prominent buttons, selection and links go grey, links told apart by an underline, while the sidebar keeps the system's colour.</li>
-<li><strong>Your prompts sit in a neutral bubble in dark themes.</strong> The blue-grey tint is gone; the bubble is a plain lighter shade of the background.</li>
-<li><strong>Less redrawing while agents work.</strong> A session's status line used to redraw every view of every session each time it changed, many times a turn; now it redraws that session's row, header and transcript only, and the rest of the window hears just what matters to it, such as a session starting work or asking for you. The question card parses the terminal only when its screen changes, the scan for mentioned files runs only while the Files list is in view, and the count on the Agents tab no longer redraws the whole right panel.</li>
-<li><strong>Smoother motion in the transcript.</strong> The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li><strong>Done no longer shows before the reply.</strong> Claude Code reports a turn over a moment before it writes the reply to the transcript, so Done appeared over a blank and the text landed after it. The card now stays on Working, with the last of the reply read off the screen, until the reply is in; then Done and the message arrive together.</li>
-<li><strong>The question card reads as a choice list.</strong> Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.2/omux-0.11.2.zip" length="5965584" type="application/octet-stream" sparkle:edSignature="i63c6Tj6sm0W7+23xqwUhRWzCfqm4DTp8ZVCpeQW557hWekRFwi9xY8XeC6uAQ/N5O15+kGtn/iKEo9XG+hEAA=="/>
         </item>
     </channel>
 </rss>
