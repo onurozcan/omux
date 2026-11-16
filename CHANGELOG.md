@@ -4,6 +4,16 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-16
+
+### Changed
+- **The rail has colour of its own.** Each project's tile is dark with a faint sheen, and its initials are in a colour that belongs to the project, taken from its name so it is the same on every launch. The project on show fills softly with that colour. What needs you is a dot on the tile's corner again: amber for a session that waits, red for one that failed, blue for one at work.
+- **A project click goes back to where you were in it.** Picking a project on the rail switches the window to it, on the session that was open when you last left that project; it is remembered across launches. A project not visited yet shows the session that waits for you, else the one worked in last.
+- **The rail opens after a good second.** Resting the pointer on it for 1.2 seconds shows the names, where a third of a second did; a click on a tile is still immediate.
+
+### Fixed
+- **A working card keeps its outline.** Beside a Thinking row the outline of the turn at work fell back to the fainter colour, and every block that joined the card slid in from below, opening a gap in the outline for a moment each time the Working line changed. Blocks of a card now arrive in place and share one outline.
+
 ## [0.12.0] - 2026-11-16
 
 ### Added
