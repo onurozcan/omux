@@ -129,16 +129,15 @@ struct Sidebar: View {
                         // Whatever misses the strip lands here, not on a row behind it.
                         Color.black.opacity(0.001).onTapGesture { railState.open = false }
                     }
-                    // A click shows the project. It selects none of its sessions: that would
-                    // start one that isn't running.
-                    ProjectRail(shownID: shownGroup?.id, theme: theme, open: $railState.open) { group in railState.shownGroupID = group.id }
+                    // A click goes to the project, on the session last on show in it.
+                    ProjectRail(shownID: shownGroup?.id, theme: theme, open: $railState.open) { group in railState.show(group, in: store) }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
         }
         .onChange(of: store.selectedTabID) { _, _ in
             // The list follows the selection to its project, wherever it was made.
-            if let group = store.selectedGroup { railState.shownGroupID = group.id }
+            railState.noteSelection(in: store)
         }
         .background(Color(nsColor: theme.chrome))
         .contextMenu {

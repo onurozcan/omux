@@ -584,14 +584,7 @@ struct ContentView: View {
             // tabs sit level with the sidebar's buttons. On the split view alone it doesn't reach them.
             .overlay(alignment: .leading) {
                 if railAlone {
-                    // The sessions are tabs in the header: a project picked on the rail shows
-                    // there, on the session it was last worked in.
-                    StandaloneRail(theme: theme) {
-                        guard let group = store.groups.first(where: { $0.id == RailState.shared.shownGroupID }), store.selectedGroup?.id != group.id else { return }
-                        let pick = group.tabs.first { store.runtime[$0.id]?.statusState == .blocked }
-                            ?? group.tabs.max { (store.runtime[$0.id]?.lastActivity ?? .distantPast) < (store.runtime[$1.id]?.lastActivity ?? .distantPast) }
-                        if let pick { store.selectedTabID = pick.id } else { withAnimation(.easeInOut(duration: 0.2)) { showSidebar = true } }
-                    }
+                    StandaloneRail(theme: theme) { withAnimation(.easeInOut(duration: 0.2)) { showSidebar = true } }
                         .ignoresSafeArea(.container, edges: .top)
                 }
             }
@@ -600,6 +593,7 @@ struct ContentView: View {
         .background(WindowChrome())
         .preferredColorScheme(theme.colorScheme)
         .background(Color(nsColor: theme.chrome))
+        .onChange(of: store.selectedTabID, initial: true) { _, _ in RailState.shared.noteSelection(in: store) }
         .onChange(of: themeName) { _, _ in store.applyAppearance() }
         .onChange(of: fontFamily) { _, _ in store.applyAppearance() }
         .onChange(of: fontSize) { _, _ in store.applyAppearance() }

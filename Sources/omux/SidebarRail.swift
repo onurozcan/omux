@@ -125,11 +125,12 @@ struct ProjectRail: View {
         // A click on the strip's own empty space stays here and doesn't reach the list under it.
         .onTapGesture {}
         .onHover { over in
-            // A moment's rest opens it, so crossing the strip on the way elsewhere doesn't.
+            // A good second's rest opens it: a click on a tile is the quick way, and the names
+            // are for when you stop to look.
             hover += 1
             let turn = hover
             if over {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     if hover == turn { withAnimation(.easeOut(duration: 0.16)) { open = true } }
                 }
             } else {
@@ -139,9 +140,10 @@ struct ProjectRail: View {
     }
 }
 
-/// One project on the rail: its initials on a tile in the colour of the most pressing state
-/// among its sessions (waiting, failed, working), grey when nothing is going on. A bar at the
-/// strip's edge marks the one on show.
+/// One project on the rail: a dark tile with a faint sheen, its initials in a colour that is
+/// the project's own, and a dot on the corner for the most pressing state among its sessions
+/// (waiting, failed, working). The one on show fills softly with its colour and has a bar at
+/// the strip's edge.
 private struct ProjectMark: View {
     @EnvironmentObject var store: Store
     let group: TabGroup
@@ -158,15 +160,23 @@ private struct ProjectMark: View {
         let waiting = states.filter { $0.statusState == .blocked || $0.needsAttention }.count
         let failed = states.filter { $0.statusState == .error }.count
         let working = states.filter { $0.statusState == .working }.count
-        let tint: Color? = waiting > 0 ? Palette.needs : failed > 0 ? Palette.error : working > 0 ? Palette.working : nil
+        let state: Color? = waiting > 0 ? Palette.needs : failed > 0 ? Palette.error : working > 0 ? Palette.working : nil
+        let hue = Self.hue(group.name)
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         Button(action: action) {
           HStack(spacing: 9) {
             Text(Self.initials(group.name))
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? (shown ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary)))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(hue)
                 .frame(width: 30, height: 30)
-                .background(tint.map { AnyShapeStyle($0.opacity(shown || hovering ? 0.3 : 0.2)) } ?? AnyShapeStyle(.primary.opacity(shown ? 0.18 : hovering ? 0.14 : 0.08)),
-                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background {
+                    if shown {
+                        shape.fill(hue.opacity(0.22))
+                    } else {
+                        shape.fill(LinearGradient(colors: [.white.opacity(hovering ? 0.14 : 0.09), .white.opacity(hovering ? 0.06 : 0.03)], startPoint: .top, endPoint: .bottom))
+                    }
+                }
+                .overlay(shape.strokeBorder(shown ? hue.opacity(0.55) : Color.white.opacity(0.09), lineWidth: 1))
                 .overlay(alignment: .leading) {
                     // The strip's own edge, eight points to the tile's left.
                     if shown {
@@ -174,6 +184,14 @@ private struct ProjectMark: View {
                             .fill(.primary.opacity(0.9))
                             .frame(width: 3, height: 20)
                             .offset(x: -8)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if let state {
+                        StatusDot(color: state, pulsing: waiting == 0 && failed == 0, size: 8)
+                            .padding(2)
+                            .background(Color(nsColor: .windowBackgroundColor), in: Circle())
+                            .offset(x: 4, y: -4)
                     }
                 }
                 .opacity(quiet && !shown && !hovering ? 0.55 : 1)
@@ -192,6 +210,19 @@ private struct ProjectMark: View {
         .onHover { hovering = $0 }
         // Open, the strip says all this itself.
         .help(named ? "" : Self.summary(group.name, sessions: group.tabs.count, waiting: waiting, failed: failed, working: working))
+    }
+
+    /// Six colours a project can have. Which one comes from its name, so it is the same on
+    /// every launch and on every Mac.
+    private static let hues: [Color] = [
+        Color(red: 0.48, green: 0.65, blue: 1.00), Color(red: 0.79, green: 0.55, blue: 0.98), Color(red: 0.37, green: 0.83, blue: 0.60),
+        Color(red: 0.96, green: 0.71, blue: 0.38), Color(red: 0.96, green: 0.54, blue: 0.63), Color(red: 0.37, green: 0.82, blue: 0.85),
+    ]
+
+    static func hue(_ name: String) -> Color {
+        // Not hashValue: that changes with every launch.
+        let sum = name.lowercased().unicodeScalars.reduce(UInt32(7)) { ($0 &* 31) &+ $1.value }
+        return hues[Int(sum % UInt32(hues.count))]
     }
 
     /// "acme-web" → "AW", "infra" → "IN", "My Project" → "MP".
@@ -264,6 +295,32 @@ final class RailState: ObservableObject {
     @Published var shownGroupID: UUID?
     /// Open under the pointer, lying over what is beside it.
     @Published var open = false
+
+    private static let lastKey = "railLastSession"
+    /// Per project, the session that was on show when the project was last left: kept across
+    /// launches, so coming back to a project comes back to where you were in it.
+    private var last: [String: String] = UserDefaults.standard.dictionary(forKey: RailState.lastKey) as? [String: String] ?? [:]
+
+    /// The selection moved: its project is the one on show, and it is that project's last session.
+    func noteSelection(in store: Store) {
+        guard let tab = store.selectedTabID, let group = store.selectedGroup else { return }
+        shownGroupID = group.id
+        guard last[group.id.uuidString] != tab.uuidString else { return }
+        last[group.id.uuidString] = tab.uuidString
+        UserDefaults.standard.set(last, forKey: Self.lastKey)
+    }
+
+    /// A project picked on the rail: its window, on the session last on show there. Without
+    /// one to go back to, the session that waits for you, else the one last worked in.
+    func show(_ group: TabGroup, in store: Store) {
+        shownGroupID = group.id
+        guard store.selectedGroup?.id != group.id else { return }
+        let remembered = last[group.id.uuidString].flatMap { id in group.tabs.first { $0.id.uuidString == id } }
+        let pick = remembered
+            ?? group.tabs.first { store.runtime[$0.id]?.statusState == .blocked }
+            ?? group.tabs.max { (store.runtime[$0.id]?.lastActivity ?? .distantPast) < (store.runtime[$1.id]?.lastActivity ?? .distantPast) }
+        if let pick { store.selectedTabID = pick.id }
+    }
 }
 
 /// The rail by itself, for when the session list is closed: the strip stays at the window's
@@ -281,9 +338,10 @@ struct StandaloneRail: View {
                 Color.black.opacity(0.001).onTapGesture { state.open = false }
             }
             ProjectRail(shownID: state.shownGroupID ?? store.selectedGroup?.id, theme: theme, open: $state.open) { group in
-                state.shownGroupID = group.id
+                state.show(group, in: store)
                 state.open = false
-                reveal()
+                // A project with no sessions has nothing to put in the tabs: its list opens.
+                if group.tabs.isEmpty { reveal() }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
