@@ -8,16 +8,20 @@ Written in Swift on SwiftTerm, no Electron, launches instantly. omux keeps many 
 
 <table>
 <tr>
-<td width="50%"><img src="docs/prompt.png" alt="Claude Code asking a question with two choices, shown as a card above the message box, with the session and its project marked amber"><br><sub>Whatever an agent asks is a card above the message box: a question with its choices, a command to allow, a folder to trust. Answer there, or type your own reply.</sub></td>
-<td width="50%"><img src="docs/tabs.png" alt="The session list closed: a project's sessions as tabs along the top, the open one wide, and the conversation in turn cards across the window"><br><sub>Close the session list and a project's sessions become tabs along the top, agents on the left and shells apart on the right. A tab that waits for you blinks.</sub></td>
+<td width="50%"><img src="docs/rail.png" alt="The project rail opened under the pointer, each project a tile with its initials in its own colour, its name and its session count"><br><sub>Every project is a tile on a rail, its initials in its own colour. Rest the pointer on it and it opens with each project's name and what its sessions are doing.</sub></td>
+<td width="50%"><img src="docs/cards.png" alt="A conversation as turn cards: an earlier turn folded to one line, then two turns with the command the agent ran and its answer"><br><sub>Each turn is a card: what you asked on top, what the agent ran and said under it, the steps and the time at the foot. Earlier turns fold to one line.</sub></td>
 </tr>
 <tr>
+<td width="50%"><img src="docs/prompt.png" alt="Claude Code asking a question with two choices, shown as a card above the message box"><br><sub>Whatever an agent asks is a card above the message box: a question with its choices, a command to allow, a folder to trust. Answer there, or type your own reply.</sub></td>
 <td width="50%"><img src="docs/panes.png" alt="Two Claude Code sessions side by side in one project, with one message box under both that names the pane it writes to"><br><sub>Sessions side by side, with one message box under them all that writes to the active pane.</sub></td>
-<td width="50%"><img src="docs/editor.png" alt="The Files panel showing a test file next to the conversation, with ⌘S to save"><br><sub>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="docs/rail.png" alt="The project rail opened under the pointer, naming each project and what its sessions are doing, with the usage limits at its foot"><br><sub>Every project is a tile on a rail, coloured by what needs you. Rest the pointer on it and it opens with each project's name and what its sessions are doing.</sub></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/tabs.png" alt="The session list closed: a project's sessions as tabs along the top, the open one wide, and the conversation in turn cards across the window"><br><sub>Close the session list and a project's sessions become tabs along the top, agents on the left and shells apart on the right. A tab that waits for you blinks.</sub></td>
+<td width="50%"><img src="docs/changes.png" alt="The Changes panel beside the conversation, showing the diff of a layout file with added and removed lines"><br><sub>The Changes panel lists what the session changed and shows each diff. Click a line to leave a note for the agent.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/editor.png" alt="The Files panel showing a test file next to the conversation, with ⌘S to save"><br><sub>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</sub></td>
+<td width="50%"><img src="docs/browser.png" alt="The Browser panel showing a web page beside the conversation"><br><sub>A browser beside the conversation. Local servers a session prints, like localhost:3000, open there by themselves.</sub></td>
 </tr>
 </table>
 
