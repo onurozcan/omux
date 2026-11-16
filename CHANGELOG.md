@@ -4,6 +4,16 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-16
+
+### Added
+- **A split button in the session header.** One button opens a menu: a new shell to the right or below, or another session of the project beside this one. The same choices stay in a session's own menu, and each pane keeps its buttons.
+
+### Changed
+- **The message box is as wide as the conversation.** The cards and the box under them share their edges, and with the transcript set to Wide or Narrow the box and the cards that ask something narrow with it. The band behind the box and the line over it are gone: it stands on the panel itself.
+- **No scroll bar and no dots beside the conversation.** The row of dots that jumped between prompts and the scroll bar are gone, and the cards take the room. Folded turns and ⌘F find an earlier prompt.
+- **The right panel is one surface.** Files, Changes, Browser and Agents sit on the conversation's own background, where the file tree and the list of changes were a lighter grey. Its tabs are drawn as the session header draws its sessions, on the same strip at the same height.
+
 ## [0.12.1] - 2026-11-16
 
 ### Changed
