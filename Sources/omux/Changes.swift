@@ -415,7 +415,7 @@ struct ChangesPanel: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(Color(nsColor: theme.chrome))
+        .background(Color(nsColor: theme.background))
         // The arrow keys walk the files, as they did with the system's selection.
         .focusable()
         .focusEffectDisabled()
@@ -466,7 +466,7 @@ struct ChangesPanel: View {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .frame(height: 40)
-        .background(Color(nsColor: theme.chrome))
+        .background(Color(nsColor: theme.background))
         .overlay(alignment: .top) { Hairline() }
     }
 

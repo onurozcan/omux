@@ -319,3 +319,10 @@ body.cards .turn-foot::before { content: ''; flex: 0 0 100%; height: 1px; backgr
 /* A block that joins a card doesn't slide in: its edges are the card's own outline, and a
    block easing up from 8px below opens a gap in it for a moment. Rows inside still ease in. */
 body.cards .turn-mid.enter, body.cards .turn-head.enter { animation: none; }
+
+/* The conversation and the message box under it share their edges: 12px each side, the box's
+   own inset. No scroll bar and no row of dots down the right edge to make room for. */
+main { padding-left: 12px; padding-right: 12px; }
+.outline { display: none !important; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+.jump { right: 22px; }

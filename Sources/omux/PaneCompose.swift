@@ -98,9 +98,9 @@ private struct TerminalComposeBar: View {
         .frame(height: 44)
         .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(focused ? Color.accent.opacity(0.55) : .primary.opacity(0.12)))
-        .padding(12)
-        .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .top) { Hairline() }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
     }
 
     private func submit() {

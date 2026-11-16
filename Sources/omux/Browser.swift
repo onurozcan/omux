@@ -331,7 +331,7 @@ struct BrowserPanel: View {
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(Color(nsColor: theme.chrome))
+                .background(Color(nsColor: theme.background))
             }
         }
         .background(Color(nsColor: theme.background))

@@ -126,7 +126,7 @@ struct FilePanel: View {
                 }
             }
         }
-        .background(Color(nsColor: theme.chrome))
+        .background(Color(nsColor: theme.background))
         .onAppear { load(); showRequested(); store.scanMentionedPaths() }
         .onChange(of: root) { _, _ in load() }
         .onChange(of: store.previewRequest) { _, _ in showRequested() }

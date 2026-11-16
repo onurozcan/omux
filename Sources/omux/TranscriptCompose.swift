@@ -178,9 +178,10 @@ struct ComposeBox: View {
         .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(dropping ? Color.accent : focused ? Color.accent.opacity(0.55) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
         .animation(.easeOut(duration: 0.12), value: dropping)
-        .padding(12)
-        .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .top) { Hairline() }
+        // No band of its own behind it: the box stands on the panel it belongs to.
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
         .onPasteCommand(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff]) { providers in take(providers) }
         .onDrop(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff], isTargeted: $dropping) { providers in take(providers); return true }
         .onAppear {

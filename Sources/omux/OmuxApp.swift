@@ -705,8 +705,32 @@ struct SessionHeader: View {
                 Button { store.restoreSplit() } label: { Image(systemName: "arrow.down.right.and.arrow.up.left") }
                     .help("Back to side by side")
             }
-            // A shell beside or below a session is started from the session's own menu
-            // (right-click its tab or row), and from each pane's header once there are panes.
+            // One button for splitting, in plain sight: a shell beside or below this session,
+            // or another session of the project next to it. Each pane has its own once there are panes.
+            if store.shownLayout == nil, let id = store.selectedTabID {
+                Menu {
+                    Button("New Shell to the Right") { store.splitWithShell(id, axis: .horizontal) }
+                    Button("New Shell Below") { store.splitWithShell(id, axis: .vertical) }
+                    let others = (store.selectedGroup?.tabs ?? []).filter { $0.id != id }
+                    if !others.isEmpty {
+                        Section("Show beside this session") {
+                            ForEach(others) { other in
+                                Button(other.name) { store.splitPane(id, with: other.id, axis: .horizontal) }
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "rectangle.split.2x1")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Split: a shell or another session beside this one")
+            }
             Button { showFiles.toggle() } label: { Image(systemName: "sidebar.trailing") }
                 .foregroundStyle(showFiles ? .primary : .secondary)
                 .help("Files panel (⌥⌘F)")

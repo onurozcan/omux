@@ -169,7 +169,10 @@ struct TranscriptPanel: View {
                         try? await Task.sleep(for: .milliseconds(700))
                     }
                 }
+            // The cards and the box are as wide as the conversation above them.
             cards(runtime)
+                .frame(maxWidth: columnWidth)
+                .frame(maxWidth: .infinity)
             if inPane {
                 // The panes share one box under them all; this pane tells it how to write here.
                 Color.clear.frame(height: 0)
@@ -179,6 +182,8 @@ struct TranscriptPanel: View {
             } else {
                 ComposeBox(tabID: tabID, name: name, provider: provider, theme: theme, model: model, notice: $sendNotice, send: send, onFocus: select,
                            onQueue: { requeue(action: $0, id: $1) })
+                    .frame(maxWidth: columnWidth)
+                    .frame(maxWidth: .infinity)
                     .onTapGesture(perform: select)
             }
         }
@@ -320,6 +325,11 @@ struct TranscriptPanel: View {
     /// A click or focus in this pane makes it the selected session, so its border lights up.
     private func select() {
         if store.selectedTabID != tabID { store.selectedTabID = tabID }
+    }
+
+    /// The page's own column: Settings › Appearance › Transcript › Width.
+    private var columnWidth: CGFloat {
+        switch transcriptWidth { case "wide": 900; case "narrow": 700; default: .infinity }
     }
 
     /// One of several panes on screen, as opposed to the one session the window shows.

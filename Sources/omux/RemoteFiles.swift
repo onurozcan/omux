@@ -239,7 +239,7 @@ struct RemoteFilePanel: View {
             }
             .frame(minHeight: 80, idealHeight: 200)
         }
-        .background(Color(nsColor: theme.chrome))
+        .background(Color(nsColor: theme.background))
         .onAppear { tree.open(folder); showRequested() }
         .onChange(of: selected) { _, path in
             guard let path, let row = tree.rows.first(where: { $0.entry.path == path }) else { return }

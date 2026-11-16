@@ -56,10 +56,10 @@ struct RightPanel: View {
                 tabs(titles: true)
                 tabs(titles: false)
             }
-            .padding(2)
-            .background(.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            // The session header carried on across the panel: the same height, the same surface,
+            // and tabs drawn as the header draws its sessions.
             .padding(.horizontal, 8)
-            // The same height as the session header beside it, so their bottom lines meet.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 28)
             .background(Color(nsColor: theme.chrome))
             // A real hairline rather than an overlay: the split views below extend into any safe
@@ -82,7 +82,7 @@ struct RightPanel: View {
                 }
                 if current == .agents {
                     if let id = store.selectedTabID {
-                        AgentsPanel(tabID: id).background(Color(nsColor: theme.chrome))
+                        AgentsPanel(tabID: id).background(Color(nsColor: theme.background))
                     } else {
                         EmptyState(title: "No session")
                     }
@@ -97,10 +97,13 @@ struct RightPanel: View {
             }
             }
         }
+        // One surface for every tab, the session's own.
+        .background(Color(nsColor: theme.background))
+
     }
 
     private func tabs(titles: Bool) -> some View {
-        HStack(spacing: 1) {
+        HStack(spacing: 2) {
             button(.files, "Files", "folder", shortcut: "1", titled: titles)
             button(.changes, "Changes", "plusminus", shortcut: "2",
                    badge: changes.tabID == store.selectedTabID ? changes.files.count : 0, titled: titles)
@@ -118,15 +121,14 @@ struct RightPanel: View {
                 if badge > 0 { CountBadge(count: badge, strong: true) }
                 if let agentsOf { RunningAgentsBadge(tabID: agentsOf) }
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 11, weight: selected ? .semibold : .medium))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 9)
             .foregroundStyle(selected ? .primary : .secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 20)
-            .background(selected ? Color.primary.opacity(0.13) : .clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .contentShape(Rectangle())
+            .frame(height: 22)
+            .background(selected ? Color.primary.opacity(0.13) : .clear, in: Capsule())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help("\(title) (⌥⌘\(shortcut))")
