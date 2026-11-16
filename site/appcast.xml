@@ -3,6 +3,29 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.12.1</title>
+            <pubDate>Mon, 16 Nov 2026 12:18:42 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>19</sparkle:version>
+            <sparkle:shortVersionString>0.12.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Changed</h3>
+<ul>
+<li><strong>The rail has colour of its own.</strong> Each project's tile is dark with a faint sheen, and its initials are in a colour that belongs to the project, taken from its name so it is the same on every launch. The project on show fills softly with that colour. What needs you is a dot on the tile's corner again: amber for a session that waits, red for one that failed, blue for one at work.</li>
+<li><strong>A project click goes back to where you were in it.</strong> Picking a project on the rail switches the window to it, on the session that was open when you last left that project; it is remembered across launches. A project not visited yet shows the session that waits for you, else the one worked in last.</li>
+<li><strong>The rail opens after a good second.</strong> Resting the pointer on it for 1.2 seconds shows the names, where a third of a second did; a click on a tile is still immediate.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>A working card keeps its outline.</strong> Beside a Thinking row the outline of the turn at work fell back to the fainter colour, and every block that joined the card slid in from below, opening a gap in the outline for a moment each time the Working line changed. Blocks of a card now arrive in place and share one outline.</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.1/omux-0.12.1.zip" length="34054639" type="application/octet-stream" sparkle:edSignature="jew8w+Ohydd/CYU3rX/7wgeghrxNr94Whxgn0/Ch76uGx+aSqbqx3pkqfJmsBbYaiOkt8TjoovSRWHaX/3PSBw=="/>
+        </item>
+        <item>
             <title>0.12.0</title>
             <pubDate>Mon, 16 Nov 2026 00:35:55 +0300</pubDate>
             <link>https://omux.app</link>
@@ -81,32 +104,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.2/omux-0.11.2.zip" length="5965584" type="application/octet-stream" sparkle:edSignature="i63c6Tj6sm0W7+23xqwUhRWzCfqm4DTp8ZVCpeQW557hWekRFwi9xY8XeC6uAQ/N5O15+kGtn/iKEo9XG+hEAA=="/>
-        </item>
-        <item>
-            <title>0.11.1</title>
-            <pubDate>Wed, 11 Nov 2026 11:35:35 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>16</sparkle:version>
-            <sparkle:shortVersionString>0.11.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Added</h3>
-<ul>
-<li><strong>The model chip lists what Claude Code knows.</strong> The Claude Code models in the compose box come from the installed Claude Code itself, which carries every model id it knows: the newest Fable, Opus, Sonnet and Haiku are offered, so a new model is listed the day Claude Code learns of it, with no omux update. Read again whenever Claude Code updates itself. A model not in the list can still be set with <code>/model &lt;id&gt;</code> and shows in the chip once the session reports it.</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li><strong>Building from source no longer re-asks permissions.</strong> <code>./build.sh</code> signs the app with the Developer ID certificate when the keychain has one, the same identity releases carry, so a dev build and a release can replace each other in /Applications without macOS starting the Accessibility, Screen Recording and folder grants over. Without that certificate it falls back to Apple Development, then an ad-hoc signature, as before.</li>
-<li><strong>A prompt just sent looks like any other prompt.</strong> The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li><strong>Done no longer shows over a blank before the reply.</strong> The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.11.1/omux-0.11.1.zip" length="5917221" type="application/octet-stream" sparkle:edSignature="ebZqa699iagYXEwtB4QNKa9tIp82xIv9xSghyJfAKFHp3XW2+yaGBAfCQqmTaj1zmVDd/gkFOrlssDqbq3lIAg=="/>
         </item>
     </channel>
 </rss>
