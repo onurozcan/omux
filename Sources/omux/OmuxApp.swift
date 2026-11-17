@@ -63,6 +63,8 @@ enum Prefs {
     static let startWithoutHistory = "startWithoutHistory"
     /// How agent sessions show in the main panel: "terminal" (default) or "transcript" (beta).
     static let sessionView = "sessionView"
+    /// In the terminal view, a stopped agent session shows its conversation until it runs. On by default.
+    static let previewStopped = "previewStopped"
     static let accent = "accent"
     static let transcriptFont = "transcriptFont"
     static let transcriptSize = "transcriptSize"
@@ -75,7 +77,7 @@ enum Prefs {
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
-                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
+                      sessionView, previewStopped, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -362,6 +364,7 @@ private struct AppearanceSettings: View {
 
 private struct SessionSettings: View {
     @AppStorage(Prefs.sessionView) private var sessionView = "terminal"
+    @AppStorage(Prefs.previewStopped) private var previewStopped = true
     @AppStorage(Prefs.playAgent) private var playAgent = "claude"
     @AppStorage(Prefs.startWithoutHistory) private var startWithoutHistory = "fresh"
     @AppStorage(Prefs.autoResume) private var autoResume = false
@@ -378,6 +381,10 @@ private struct SessionSettings: View {
                 SettingNote(sessionView == "transcript"
                     ? "Every session is a chat, read from Claude Code's transcript or Codex's thread, with a box that types into the terminal. The terminal keeps running underneath; ⌥⌘P peeks at it. A project can choose its own view in its settings."
                     : "Every session is its terminal. Transcript shows the same sessions as chat, with a compose box; a project can choose its own view in its settings.")
+                if sessionView != "transcript" {
+                    Toggle("Show a stopped session's conversation", isOn: $previewStopped)
+                    SettingNote("A Claude Code or Codex session that isn't running shows its conversation instead of an empty shell, so you can read it without starting it. Sending a message starts it; then the terminal is back. ⌥⌘P shows the shell.")
+                }
             }
             Section("Starting") {
                 Picker("▶ in a shell starts", selection: $playAgent) {
