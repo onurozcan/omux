@@ -149,14 +149,47 @@ final class TerminalPeek: ObservableObject {
     }
 }
 
+/// Sessions a stopped-session preview is starting from its compose box. The preview stays up
+/// until the prompt is typed into the agent: the transcript's compose box is what waits for the
+/// agent to be ready, so it can't go away the moment the agent starts.
+@MainActor
+final class StoppedPreview: ObservableObject {
+    static let shared = StoppedPreview()
+    @Published private(set) var holding: Set<UUID> = []
+
+    func hold(_ id: UUID) { holding.insert(id) }
+    func release(_ id: UUID) { holding.remove(id) }
+}
+
 @MainActor
 enum SessionViewMode {
-    /// Whether the transcript view applies to a session: the project's own choice, else Settings'.
+    /// Whether the transcript view applies to a session: the project's own choice, else Settings',
+    /// else the preview of a stopped agent session.
     /// Every session, shells included; the compose box turns a shell into an agent session on the first message.
     static func showsTranscript(_ tabID: UUID, store: Store) -> Bool {
         guard store.tab(tabID) != nil else { return false }
+        if chosen(tabID, store: store, setting: UserDefaults.standard.string(forKey: Prefs.sessionView)) { return true }
+        let enabled = UserDefaults.standard.object(forKey: Prefs.previewStopped) as? Bool ?? true
+        return previewsStopped(tabID, store: store, runtime: store.runtime[tabID], enabled: enabled)
+    }
+
+    /// The transcript view as chosen: the project's own choice, else Settings'.
+    static func chosen(_ tabID: UUID, store: Store, setting: String?) -> Bool {
         if let own = store.group(containing: tabID)?.sessionView, !own.isEmpty { return own == "transcript" }
-        return UserDefaults.standard.string(forKey: Prefs.sessionView) == "transcript"
+        return setting == "transcript"
+    }
+
+    /// In the terminal view, a Claude Code or Codex session that isn't running shows its
+    /// conversation instead of an empty shell: you can read where it left off without starting
+    /// it, and a message sent from the box below starts it the way ▶ does. Once the agent runs,
+    /// the terminal is back.
+    static func previewsStopped(_ tabID: UUID, store: Store, runtime: TabRuntime?, enabled: Bool) -> Bool {
+        guard enabled, let tab = store.tab(tabID), store.group(containing: tabID)?.isRemote != true else { return false }
+        let provider = store.transcriptProvider(of: tab)
+        guard provider == .claude || provider == .codex else { return false }
+        if StoppedPreview.shared.holding.contains(tabID) { return true }
+        guard let rt = runtime, !rt.exited else { return true }
+        return !rt.busy && !TranscriptPanel.takesInput(rt)
     }
 }
 
@@ -166,7 +199,9 @@ enum SessionViewMode {
 struct SessionSurface<Terminal: View>: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var peek = TerminalPeek.shared
+    @ObservedObject private var stoppedPreview = StoppedPreview.shared
     @AppStorage(Prefs.sessionView) private var sessionView = "terminal"
+    @AppStorage(Prefs.previewStopped) private var previewStopped = true
     let tabID: UUID
     let theme: Theme
     /// Which page this surface draws into: "single" for the one-session view, the pane's own for a pane.
@@ -174,15 +209,20 @@ struct SessionSurface<Terminal: View>: View {
     var hooks: DropHooks? = nil
     @ViewBuilder let terminal: () -> Terminal
 
-    /// The same decision as SessionViewMode, read through the view's own setting so it follows changes.
-    private var mode: Bool {
+    /// The same decision as SessionViewMode, read through the view's own settings and the
+    /// session's runtime so it follows changes: a stopped session's preview gives way to the
+    /// terminal as soon as its agent runs.
+    private func mode(_ runtime: TabRuntime) -> Bool {
         guard store.tab(tabID) != nil else { return false }
-        if let own = store.group(containing: tabID)?.sessionView, !own.isEmpty { return own == "transcript" }
-        return sessionView == "transcript"
+        if SessionViewMode.chosen(tabID, store: store, setting: sessionView) { return true }
+        return SessionViewMode.previewsStopped(tabID, store: store, runtime: runtime, enabled: previewStopped)
     }
 
     var body: some View {
-        let mode = mode
+        WithRuntime(tabID) { runtime in surface(mode: mode(runtime)) }
+    }
+
+    @ViewBuilder private func surface(mode: Bool) -> some View {
         let peeking = mode && peek.tabs.contains(tabID)
         let transcript = mode && !peeking
         ZStack(alignment: .topTrailing) {

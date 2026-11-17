@@ -798,9 +798,11 @@ struct TranscriptPanel: View {
         starting.append((text, echoed))
         // A wait is already on; it sends this too, after what came before it.
         guard starting.count == 1 else { return }
+        // A stopped session's preview stays until the prompt is in: it is this box that waits.
+        StoppedPreview.shared.hold(tabID)
         store.start(tabID)
         Task { @MainActor in
-            defer { starting = [] }
+            defer { starting = []; StoppedPreview.shared.release(tabID) }
             // The agent never took the prompts: their echoes go, and the text comes back to the box.
             @MainActor func giveBack() {
                 _ = model.takeUnsent()

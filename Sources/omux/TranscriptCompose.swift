@@ -686,7 +686,7 @@ struct ComposeBox: View {
     /// Presses shift-tab until the status line shows the mode asked for, a few tries at most:
     /// Claude Code has no command that sets the mode directly.
     private func cycle(to target: String) {
-        guard target != mode else { return }
+        guard target != mode, let rt = store.runtime[tabID], TranscriptPanel.takesInput(rt) else { return }
         Task { @MainActor in
             for _ in 0..<Self.modes.count {
                 store.sendKeys("\u{1b}[Z", to: tabID)
@@ -699,7 +699,11 @@ struct ComposeBox: View {
 
     /// Claude Code's permission mode, from its status line on screen.
     private func readMode(force: Bool = false) {
-        guard provider == .claude, !(store.runtime[tabID]?.exited ?? true) else { modeRead.key = nil; if mode != nil { mode = nil }; return }
+        // Only while Claude Code itself runs: a stopped session sits in a plain shell, whose screen
+        // shows no mode, and which answers shift-tab with a bell.
+        guard provider == .claude, let rt = store.runtime[tabID], !rt.exited, TranscriptPanel.takesInput(rt) else {
+            modeRead.key = nil; if mode != nil { mode = nil }; return
+        }
         // The status line only changes with new output: none since the last read, same mode.
         let output = store.outputGeneration(tabID)
         if !force, mode != nil, let output, output == modeRead.key { return }
