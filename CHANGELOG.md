@@ -4,6 +4,23 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-18
+
+### Added
+- **Home.** The first tile on the project rail opens a screen with the sessions that need you and the ones at work, a to-do list whose items can be sent to a session or a new one, this week's prompts and tokens per day, per project and per model across Claude Code and Codex, both agents' plan limits and pull requests. The share button on the week's figures makes a picture of today or the week, sized for X at 1600×900 with omux.app in its corner, to copy or save; project names stay off it unless you tick them. Settings › General › Home turns it off.
+- **Links can open in your default browser.** Settings › General › Links chooses where a web link clicked in a conversation or a terminal opens: omux's browser beside the session, as before, or the browser macOS opens links with.
+
+### Changed
+- **The request stays at the top of a long turn.** While you scroll through a turn card, its request is held at the top of the conversation, so the card's sides end in its own rounded top instead of running off the page like a window border. It slides away as the card ends; a request longer than a few lines isn't held.
+- **The panels are cards.** The session list, the conversation and the right panel are each a rounded card with a faint edge on a darker backdrop, like the tiles of the project rail; their header rows sit on the backdrop above them.
+- **The rail's spacing is even.** Tiles have the same margin on both sides, and the limits ring, history and settings at the foot are the same width.
+- **Idle projects fold back when the pointer leaves the rail.** Listed from their "+N" tile, they stay only while the pointer is on the rail; an idle project that is on show keeps the list open.
+- **Starting Claude Code is one line.** The card with the terminal's last lines is a single quiet line above the message box, and it shows only after a message was sent to a session that has to start. A stopped session no longer shows it.
+
+### Fixed
+- **A message sent to a stopped session arrives.** A session whose agent had ended could show "Starting Claude Code" and hold the message; omux now checks whether the agent is still there before it waits, and starts it again when it isn't.
+- **Allow answers the prompt it is shown for.** The Allow and Deny buttons checked a stale reading of whether the agent was running and could do nothing.
+
 ## [0.12.2] - 2026-11-16
 
 ### Added
