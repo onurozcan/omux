@@ -12,7 +12,12 @@ struct StatsSessionSlice: Identifiable {
     /// Its stretches of work, cut to the month.
     let spans: [WorkSpan]
     let time: TimeInterval
+    /// Its tokens in the month.
+    let tokens: WorkTokens
     var id: String { session.id }
+
+    /// Its tokens on one day.
+    func tokens(on day: Date) -> WorkTokens { session.tokenDays.first { $0.day == day }?.tokens ?? WorkTokens() }
 }
 
 /// One project's month: its sessions and time.
@@ -26,6 +31,8 @@ struct StatsProject: Identifiable {
     let total: TimeInterval
     let perDay: [Date: TimeInterval]
     let spans: [WorkSpan]
+    let tokens: WorkTokens
+    let tokensPerDay: [Date: Int]
 }
 
 /// The month in view, added up once whenever the sessions or the month change.
@@ -33,6 +40,7 @@ struct StatsSnapshot {
     var projects: [StatsProject] = []
     var perDay: [Date: TimeInterval] = [:]
     var total: TimeInterval = 0
+    var tokens = WorkTokens()
     var days: [Date] = []
 
     func project(_ id: String) -> StatsProject? { projects.first { $0.id == id } }
@@ -108,7 +116,8 @@ final class StatsModel: ObservableObject {
             guard session.end > from, session.start < to else { continue }
             let spans = WorkStats.clip(session.spans, from: from, to: to)
             guard !spans.isEmpty else { continue }
-            let slice = StatsSessionSlice(session: session, spans: spans, time: spans.reduce(0) { $0 + $1.duration })
+            let slice = StatsSessionSlice(session: session, spans: spans, time: spans.reduce(0) { $0 + $1.duration },
+                                          tokens: session.tokens(from: from, to: to))
             byFolder[session.cwd, default: []].append(slice)
         }
         let groups = Store.shared.groups
@@ -124,10 +133,15 @@ final class StatsModel: ObservableObject {
             let spans = WorkStats.union(slices.flatMap(\.spans))
             let name = groups.first { Store.samePath($0.directory, folder) }?.name
                 ?? (folder == NSHomeDirectory() ? "Home" : (folder as NSString).lastPathComponent)
+            var tokensPerDay: [Date: Int] = [:]
+            for slice in slices {
+                for day in slice.session.tokenDays where day.day >= from && day.day < to { tokensPerDay[day.day, default: 0] += day.tokens.total }
+            }
             return StatsProject(id: folder, name: name, color: colors[folder] ?? StatsStyle.color(for: folder),
                                 sessions: slices.sorted { $0.session.end > $1.session.end },
                                 total: spans.reduce(0) { $0 + $1.duration },
-                                perDay: WorkStats.perDay(spans), spans: spans)
+                                perDay: WorkStats.perDay(spans), spans: spans,
+                                tokens: slices.reduce(WorkTokens()) { $0 + $1.tokens }, tokensPerDay: tokensPerDay)
         }.sorted { $0.total > $1.total }
         let all = WorkStats.union(projects.flatMap(\.spans))
         var days: [Date] = []
@@ -138,7 +152,8 @@ final class StatsModel: ObservableObject {
             day = next
         }
         snapshot = StatsSnapshot(projects: projects, perDay: WorkStats.perDay(all),
-                                 total: all.reduce(0) { $0 + $1.duration }, days: days)
+                                 total: all.reduce(0) { $0 + $1.duration },
+                                 tokens: projects.reduce(WorkTokens()) { $0 + $1.tokens }, days: days)
         if let selection {
             switch selection {
             case .project(let id) where snapshot.project(id) == nil: self.selection = nil
@@ -238,6 +253,16 @@ enum StatsStyle {
     /// hour after: committing is often the last thing, after the agent went quiet.
     static func during(_ commit: WorkCommit, _ spans: [WorkSpan]) -> Bool {
         spans.contains { commit.date >= $0.start.addingTimeInterval(-300) && commit.date <= $0.end.addingTimeInterval(900) }
+    }
+
+    /// "1.24B", "312M", "48.2K".
+    static func tokens(_ count: Int) -> String {
+        let value = Double(count)
+        func short(_ v: Double, _ unit: String) -> String { (v >= 100 ? String(format: "%.0f", v) : v >= 10 ? String(format: "%.1f", v) : String(format: "%.2f", v)) + unit }
+        if value >= 1e9 { return short(value / 1e9, "B") }
+        if value >= 1e6 { return short(value / 1e6, "M") }
+        if value >= 1e3 { return short(value / 1e3, "K") }
+        return "\(count)"
     }
 
     static func time(_ date: Date) -> String { date.formatted(date: .omitted, time: .shortened) }

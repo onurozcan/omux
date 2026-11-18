@@ -56,3 +56,24 @@ final class WorkStatsTests: XCTestCase {
         XCTAssertEqual(WorkStats.promptText(["content": "see <pasted_content id=\"2\"> cut off"]), "see [pasted text]")
     }
 }
+
+final class WorkTokensTests: XCTestCase {
+    func testTokensCountOncePerMessageAndIncludeSubagents() throws {
+        func line(_ id: String, _ out: Int, side: Bool = false) -> String {
+            #"{"type":"assistant","isSidechain":\#(side),"timestamp":"2026-11-10T10:00:00.000Z","cwd":"/tmp/p","message":{"id":"\#(id)","role":"assistant","content":[],"usage":{"input_tokens":2,"output_tokens":\#(out),"cache_creation_input_tokens":10,"cache_read_input_tokens":100}}}"#
+        }
+        let main = [line("msg_a", 5), line("msg_a", 5), line("msg_b", 7)].joined(separator: "\n")
+        let sub = line("msg_c", 3, side: true)
+        let session = try XCTUnwrap(WorkStats.parse(Data(main.utf8), id: "x", subagents: [Data(sub.utf8)]))
+        XCTAssertEqual(session.tokens.output, 15)
+        XCTAssertEqual(session.tokens.cacheRead, 300)
+        XCTAssertEqual(session.tokens.total, 3 * (2 + 10 + 100) + 15)
+    }
+
+    func testBigLineUsage() throws {
+        let filler = String(repeating: "x", count: 70_000)
+        let big = #"{"type":"assistant","timestamp":"2026-11-10T10:00:00.000Z","cwd":"/tmp/p","message":{"id":"msg_big","content":[{"type":"text","text":"\#(filler)"}],"usage":{"input_tokens":1,"output_tokens":2,"cache_creation_input_tokens":3,"cache_read_input_tokens":4}},"timestamp":"2026-11-10T10:00:00.000Z"}"#
+        let session = try XCTUnwrap(WorkStats.parse(Data((#"{"type":"user","timestamp":"2026-11-10T09:59:00.000Z","cwd":"/tmp/p","message":{"content":"hi"}}"# + "\n" + big).utf8), id: "y"))
+        XCTAssertEqual(session.tokens, WorkTokens(input: 1, output: 2, cacheWrite: 3, cacheRead: 4))
+    }
+}

@@ -30,6 +30,9 @@ struct StatsView: View {
                     DailyChart(model: model)
                         .statsCard()
                         .frame(height: 250)
+                    TokenMap(model: model)
+                        .statsCard()
+                        .frame(height: 380)
                     WorkLog(model: model)
                 }
                 .padding(18)
@@ -89,7 +92,7 @@ struct StatsView: View {
         }
     }
 
-    /// The month in five numbers, one strip.
+    /// The month in six numbers, one strip.
     private var summary: some View {
         let snapshot = model.snapshot
         let activeDays = snapshot.perDay.values.filter { $0 >= 60 }.count
@@ -100,6 +103,7 @@ struct StatsView: View {
             ("Active days", "\(activeDays)", activeDays > 0 ? "\(StatsStyle.duration(snapshot.total / Double(activeDays))) a day" : "—"),
             ("Projects", "\(snapshot.projects.count)", snapshot.projects.first.map { "most on \($0.name)" } ?? "—"),
             ("Sessions", "\(sessions)", "\(requests) requests"),
+            ("Tokens", StatsStyle.tokens(snapshot.tokens.total), "\(StatsStyle.tokens(snapshot.tokens.output)) written by Claude"),
             ("Commits", "\(model.commits.count)", "in their repositories"),
         ]
         return HStack(spacing: 0) {
@@ -265,10 +269,10 @@ private struct ProjectDetail: View {
                     .foregroundStyle(StatsStyle.muted)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text("\(StatsStyle.duration(project.total)) · \(project.sessions.count) sessions · \(commits.count) commits")
-                    .font(.system(size: 11.5).monospacedDigit())
-                    .foregroundStyle(StatsStyle.muted)
             }
+            StatTiles(items: [("Time", StatsStyle.duration(project.total)), ("Tokens", StatsStyle.tokens(project.tokens.total)),
+                              ("Sessions", "\(project.sessions.count)"), ("Commits", "\(commits.count)")])
+            TokenBreakdown(tokens: project.tokens)
             SectionTitle(text: "Sessions")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(project.sessions) { slice in
@@ -281,9 +285,14 @@ private struct ProjectDetail: View {
                                     .foregroundStyle(StatsStyle.faint)
                             }
                             Spacer(minLength: 4)
-                            Text(StatsStyle.duration(slice.time))
-                                .font(.system(size: 11.5).monospacedDigit())
-                                .foregroundStyle(StatsStyle.muted)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(StatsStyle.duration(slice.time))
+                                    .font(.system(size: 11.5).monospacedDigit())
+                                    .foregroundStyle(StatsStyle.muted)
+                                Text(StatsStyle.tokens(slice.tokens.total))
+                                    .font(.system(size: 10.5).monospacedDigit())
+                                    .foregroundStyle(StatsStyle.faint)
+                            }
                         }
                         .padding(.vertical, 6)
                         .contentShape(Rectangle())
@@ -322,10 +331,13 @@ private struct SessionDetail: View {
                 }
                 .font(.system(size: 11))
                 .foregroundStyle(StatsStyle.muted)
-                Text("\(session.start.formatted(.dateTime.day().month(.abbreviated).hour().minute())) – \(StatsStyle.time(session.end)) · \(StatsStyle.duration(slice.time)) active")
+                Text("\(session.start.formatted(.dateTime.day().month(.abbreviated).hour().minute())) – \(session.end.formatted(.dateTime.day().month(.abbreviated).hour().minute()))")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(StatsStyle.muted)
             }
+            StatTiles(items: [("Active", StatsStyle.duration(slice.time)), ("Tokens", StatsStyle.tokens(slice.tokens.total)),
+                              ("Requests", "\(session.prompts.count)"), ("Commits", "\(commits.count)")])
+            TokenBreakdown(tokens: slice.tokens)
             Button { model.open(session) } label: { Label("Open conversation", systemImage: "arrow.up.forward.app") }
                 .buttonStyle(OutlineButtonStyle())
             if !session.prompts.isEmpty {
@@ -336,6 +348,65 @@ private struct SessionDetail: View {
                 SectionTitle(text: "Commits")
                 CommitList(commits: commits)
             }
+        }
+    }
+}
+
+/// A few numbers side by side, big.
+private struct StatTiles: View {
+    let items: [(String, String)]
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items, id: \.0) { item in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.0.uppercased())
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .tracking(0.5)
+                        .foregroundStyle(StatsStyle.faint)
+                    Text(item.1).font(.system(size: 14, weight: .bold).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.7)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(StatsStyle.wash, in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+}
+
+/// What the tokens were: one bar in four parts, and their counts.
+private struct TokenBreakdown: View {
+    let tokens: WorkTokens
+    var body: some View {
+        let parts: [(String, Int, Color)] = [
+            ("cache read", tokens.cacheRead, StatsStyle.palette[0]),
+            ("cache write", tokens.cacheWrite, StatsStyle.palette[5]),
+            ("input", tokens.input, StatsStyle.palette[2]),
+            ("output", tokens.output, StatsStyle.palette[1]),
+        ]
+        let total = max(tokens.total, 1)
+        VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { geo in
+                HStack(spacing: 1) {
+                    ForEach(parts, id: \.0) { part in
+                        Rectangle().fill(part.2).frame(width: max(0, geo.size.width * CGFloat(part.1) / CGFloat(total) - 1))
+                    }
+                }
+            }
+            .frame(height: 6)
+            .clipShape(Capsule())
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 3) {
+                ForEach(parts, id: \.0) { part in
+                    HStack(spacing: 4) {
+                        Circle().fill(part.2).frame(width: 6, height: 6)
+                        Text(part.0)
+                        Text(StatsStyle.tokens(part.1)).foregroundStyle(StatsStyle.ink)
+                    }
+                }
+            }
+            .font(.system(size: 10.5).monospacedDigit())
+            .foregroundStyle(StatsStyle.muted)
+            .lineLimit(1)
         }
     }
 }
@@ -491,6 +562,7 @@ private struct WorkLog: View {
         let time: TimeInterval
         let prompts: [WorkPrompt]
         let day: Date
+        var tokens: Int { slice.tokens(on: day).total }
         var id: String { "\(day.timeIntervalSince1970)|\(slice.id)" }
 
         /// How far the commit is from this session's work; nil when it can't be this session's.
@@ -766,6 +838,10 @@ private struct EntryRow: View {
                     Label("\(commits.count)", systemImage: "arrow.triangle.branch")
                         .frame(width: 44, alignment: .leading)
                         .opacity(commits.isEmpty ? 0.3 : 1)
+                    Text(StatsStyle.tokens(entry.tokens))
+                        .foregroundStyle(StatsStyle.muted)
+                        .frame(width: 56, alignment: .trailing)
+                        .help("Tokens this day")
                     Text(StatsStyle.duration(entry.time))
                         .font(.system(size: 12, weight: .medium).monospacedDigit())
                         .frame(width: 56, alignment: .trailing)

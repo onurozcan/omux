@@ -1,12 +1,27 @@
 import SwiftUI
 
-/// The month as a grid: a row for each project, a column for each day, and each cell as deep
-/// in the project's color as the hours worked there that day. Clicking a project picks it;
-/// clicking a cell picks that project and that day for the whole page.
+/// The month as a grid, as GitHub draws contributions: a row for each project, a square for each
+/// day, in four shades of the project's color by the hours worked (or tokens used) there that
+/// day. Clicking a project picks it; clicking a square picks that project and that day for the
+/// whole page.
 struct ProjectMap: View {
     @ObservedObject var model: StatsModel
     /// The cell under the pointer: only this view redraws while it moves.
     @State private var hover: Cell?
+    @AppStorage("statsMapMetric") private var metric = Metric.time
+
+    enum Metric: String, CaseIterable {
+        case time = "Time", tokens = "Tokens"
+    }
+
+    /// The shades, from a little to the month's most.
+    static let shades: [Double] = [0.28, 0.5, 0.74, 1]
+
+    /// Which shade a value gets: none for nothing, then by its share of the busiest square.
+    static func level(_ value: Double, peak: Double) -> Int? {
+        guard value > 0, peak > 0 else { return nil }
+        return min(3, Int((value / peak).squareRoot() * 4))
+    }
 
     struct Cell: Equatable {
         let project: String
@@ -43,6 +58,13 @@ struct ProjectMap: View {
     private var caption: some View {
         HStack(spacing: 8) {
             Text("Where the month went").font(.system(size: 12, weight: .semibold))
+            Picker("", selection: $metric) {
+                ForEach(Metric.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .frame(width: 130)
             Spacer()
             if let hover, let project = model.snapshot.project(hover.project) {
                 let time = project.perDay[hover.day] ?? 0
@@ -50,8 +72,8 @@ struct ProjectMap: View {
                     Circle().fill(project.color).frame(width: 7, height: 7)
                     Text(project.name).fontWeight(.medium)
                     Text("· \(hover.day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))")
-                    if time > 0 {
-                        Text("· \(StatsStyle.duration(time)) · \(sessions(of: project, on: hover.day)) sessions")
+                    if time > 0 || (project.tokensPerDay[hover.day] ?? 0) > 0 {
+                        Text("· \(StatsStyle.duration(time)) · \(StatsStyle.tokens(project.tokensPerDay[hover.day] ?? 0)) tokens · \(sessions(of: project, on: hover.day)) sessions")
                     } else {
                         Text("· nothing")
                     }
@@ -59,12 +81,28 @@ struct ProjectMap: View {
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(StatsStyle.muted)
             } else {
-                Text("click a project or a day")
-                    .font(.system(size: 11))
-                    .foregroundStyle(StatsStyle.faint)
+                legend
             }
         }
         .frame(height: 16)
+    }
+
+    /// Less ▢▢▢▢ More.
+    private var legend: some View {
+        HStack(spacing: 3) {
+            Text("Less").padding(.trailing, 2)
+            RoundedRectangle(cornerRadius: 2).fill(StatsStyle.wash).frame(width: 10, height: 10)
+            ForEach(Self.shades, id: \.self) { shade in
+                RoundedRectangle(cornerRadius: 2).fill(StatsStyle.bar.opacity(shade)).frame(width: 10, height: 10)
+            }
+            Text("More").padding(.leading, 2)
+        }
+        .font(.system(size: 10.5))
+        .foregroundStyle(StatsStyle.faint)
+    }
+
+    private func value(_ project: StatsProject, _ day: Date) -> Double {
+        metric == .time ? project.perDay[day] ?? 0 : Double(project.tokensPerDay[day] ?? 0)
     }
 
     private func label(_ project: StatsProject, picked: Bool, faded: Bool) -> some View {
@@ -77,7 +115,7 @@ struct ProjectMap: View {
                     .font(.system(size: 12, weight: picked ? .semibold : .regular))
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                Text(StatsStyle.duration(project.total))
+                Text(metric == .time ? StatsStyle.duration(project.total) : StatsStyle.tokens(project.tokens.total))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(StatsStyle.muted)
             }
@@ -96,7 +134,8 @@ struct ProjectMap: View {
         let days = model.snapshot.days
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let peak = max(projects.flatMap { $0.perDay.values }.max() ?? 1, 1)
+        let values = projects.map { project in days.map { value(project, $0) } }
+        let peak = values.flatMap { $0 }.max() ?? 0
         let sessionDays = pickedSessionDays()
         let selectedDay = model.day
         let hover = hover
@@ -125,13 +164,12 @@ struct ProjectMap: View {
                 let y = headerHeight + CGFloat(row) * rowHeight
                 let faded = picked != nil && picked != project.id
                 for (i, day) in days.enumerated() {
-                    let rect = CGRect(x: CGFloat(i) * width, y: y, width: width, height: rowHeight).insetBy(dx: 1.5, dy: 2.5)
-                    let seconds = project.perDay[day] ?? 0
+                    // Square, as GitHub draws them, in the middle of the day's column.
+                    let side = min(width, rowHeight) - 5
+                    let rect = CGRect(x: CGFloat(i) * width + (width - side) / 2, y: y + (rowHeight - side) / 2, width: side, height: side)
                     let shape = Path(roundedRect: rect, cornerRadius: 3)
-                    if seconds > 0 {
-                        // Square root, so an hour still shows next to a ten-hour day.
-                        let depth = 0.22 + 0.78 * (seconds / peak).squareRoot()
-                        context.fill(shape, with: .color(project.color.opacity(depth * (faded ? 0.3 : 1))))
+                    if let level = Self.level(values[row][i], peak: peak) {
+                        context.fill(shape, with: .color(project.color.opacity(Self.shades[level] * (faded ? 0.3 : 1))))
                     } else {
                         context.fill(shape, with: .color(StatsStyle.wash.opacity(faded ? 0.4 : 0.8)))
                     }
@@ -174,7 +212,7 @@ struct ProjectMap: View {
 
     /// A worked cell picks its project and its day; clicking it again lets go of the day.
     private func pick(_ cell: Cell) {
-        guard let project = model.snapshot.project(cell.project), (project.perDay[cell.day] ?? 0) > 0 else { return }
+        guard let project = model.snapshot.project(cell.project), value(project, cell.day) > 0 else { return }
         withAnimation(.easeOut(duration: 0.15)) {
             let same = model.day == cell.day && model.selectedProjectID == cell.project
             if case .session(let id) = model.selection, model.snapshot.slice(id)?.0.id == cell.project {

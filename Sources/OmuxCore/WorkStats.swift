@@ -18,6 +18,40 @@ public struct WorkPrompt: Codable, Hashable {
     public var text: String
 }
 
+/// Tokens the model read and wrote: what a conversation cost.
+public struct WorkTokens: Codable, Hashable {
+    public var input = 0
+    public var output = 0
+    /// Context written to the prompt cache.
+    public var cacheWrite = 0
+    /// Context read back from the prompt cache: most of a long conversation's tokens.
+    public var cacheRead = 0
+    public init(input: Int = 0, output: Int = 0, cacheWrite: Int = 0, cacheRead: Int = 0) {
+        self.input = input; self.output = output; self.cacheWrite = cacheWrite; self.cacheRead = cacheRead
+    }
+    public var total: Int { input + output + cacheWrite + cacheRead }
+    public static func + (a: WorkTokens, b: WorkTokens) -> WorkTokens {
+        WorkTokens(input: a.input + b.input, output: a.output + b.output,
+                   cacheWrite: a.cacheWrite + b.cacheWrite, cacheRead: a.cacheRead + b.cacheRead)
+    }
+    public static func += (a: inout WorkTokens, b: WorkTokens) { a = a + b }
+
+    /// From a message's `usage`.
+    init?(usage: Any?) {
+        guard let usage = usage as? [String: Any] else { return nil }
+        func int(_ key: String) -> Int { (usage[key] as? NSNumber)?.intValue ?? 0 }
+        self.init(input: int("input_tokens"), output: int("output_tokens"),
+                  cacheWrite: int("cache_creation_input_tokens"), cacheRead: int("cache_read_input_tokens"))
+    }
+}
+
+/// A conversation's tokens on one day.
+public struct WorkTokenDay: Codable, Hashable {
+    /// Local midnight.
+    public var day: Date
+    public var tokens: WorkTokens
+}
+
 /// One Claude Code conversation, as much of it as the statistics show.
 public struct WorkSession: Codable, Hashable, Identifiable {
     public var id: String
@@ -28,6 +62,14 @@ public struct WorkSession: Codable, Hashable, Identifiable {
     public var branch: String?
     public var prompts: [WorkPrompt]
     public var spans: [WorkSpan]
+    /// Its tokens day by day, its subagents' included.
+    public var tokenDays: [WorkTokenDay] = []
+
+    public var tokens: WorkTokens { tokenDays.reduce(WorkTokens()) { $0 + $1.tokens } }
+    /// Its tokens on the days in [from, to).
+    public func tokens(from: Date, to: Date) -> WorkTokens {
+        tokenDays.reduce(WorkTokens()) { $1.day >= from && $1.day < to ? $0 + $1.tokens : $0 }
+    }
 
     public var start: Date { spans.first?.start ?? .distantPast }
     public var end: Date { spans.last?.end ?? .distantPast }
@@ -42,7 +84,7 @@ public enum WorkStats {
     /// A stretch with a single event still took some time.
     public static let minimumSpan: TimeInterval = 60
     /// Bumped when what is read from a transcript changes, so cached readings are redone.
-    public static let cacheVersion = 2
+    public static let cacheVersion = 3
     static let maxPrompts = 40
     static let maxPromptLength = 240
 
@@ -51,10 +93,15 @@ public enum WorkStats {
     /// Reads one transcript. nil when it has no conversation in it (only bookkeeping records).
     public static func read(_ url: URL) -> WorkSession? {
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
-        return parse(data, id: url.deletingPathExtension().lastPathComponent)
+        // Subagents keep their own transcripts beside it; their tokens are this conversation's.
+        let folder = url.deletingPathExtension().appendingPathComponent("subagents")
+        let subagents = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "jsonl" }
+            .compactMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }
+        return parse(data, id: url.deletingPathExtension().lastPathComponent, subagents: subagents)
     }
 
-    public static func parse(_ data: Data, id: String) -> WorkSession? {
+    public static func parse(_ data: Data, id: String, subagents: [Data] = []) -> WorkSession? {
         var times: [Date] = []
         var prompts: [WorkPrompt] = []
         var cwd: String?
@@ -65,7 +112,10 @@ public enum WorkStats {
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let plain = ISO8601DateFormatter()
         func date(_ text: String) -> Date? { iso.date(from: text) ?? plain.date(from: text) }
+        // A reply streamed in parts repeats its usage on every part: one count per message.
+        var usage: [String: (Date, WorkTokens)] = [:]
 
+        func scan(_ data: Data, main: Bool) {
         data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
             let bytes = buffer.bindMemory(to: UInt8.self)
             var lineStart = 0
@@ -79,11 +129,20 @@ public enum WorkStats {
                 // Most of the bytes are tool output in a few huge lines; parsing those fully
                 // costs a lot and gives nothing but their time.
                 if line.count > 64 * 1024 {
-                    if let text = lastTimestamp(in: line), let when = date(text) { times.append(when) }
+                    guard let text = lastTimestamp(in: line), let when = date(text) else { continue }
+                    if main { times.append(when) }
+                    if let (id, tokens) = bigLineUsage(line) { usage[id] = (when, tokens) }
                     continue
                 }
                 guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
                 let type = object["type"] as? String
+                if type == "assistant", let message = object["message"] as? [String: Any],
+                   let tokens = WorkTokens(usage: message["usage"]),
+                   let stamp = object["timestamp"] as? String, let when = date(stamp) {
+                    let key = (message["id"] as? String) ?? (object["uuid"] as? String) ?? UUID().uuidString
+                    usage[key] = (when, tokens)
+                }
+                guard main else { continue }
                 switch type {
                 case "ai-title": aiTitle = (object["aiTitle"] as? String) ?? aiTitle
                 case "custom-title": customTitle = (object["customTitle"] as? String) ?? (object["title"] as? String) ?? customTitle
@@ -103,11 +162,57 @@ public enum WorkStats {
                 }
             }
         }
+        }
+        scan(data, main: true)
+        for subagent in subagents { scan(subagent, main: false) }
         guard let cwd, !times.isEmpty else { return nil }
+        let calendar = Calendar.current
+        var byDay: [Date: WorkTokens] = [:]
+        for (when, tokens) in usage.values { byDay[calendar.startOfDay(for: when), default: WorkTokens()] += tokens }
         times.sort()
         let title = customTitle ?? aiTitle ?? prompts.first?.text ?? "Untitled session"
         return WorkSession(id: id, cwd: cwd, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-                           branch: branch, prompts: prompts, spans: spans(times))
+                           branch: branch, prompts: prompts, spans: spans(times),
+                           tokenDays: byDay.map { WorkTokenDay(day: $0.key, tokens: $0.value) }.sorted { $0.day < $1.day })
+    }
+
+    /// The message id and usage of a line too big to parse whole: the id comes before the
+    /// content and the usage after it.
+    static func bigLineUsage(_ line: UnsafeBufferPointer<UInt8>) -> (String, WorkTokens)? {
+        guard let usageAt = find("\"usage\":{", in: line, backward: true) else { return nil }
+        let open = usageAt + 8
+        var depth = 0, end = open
+        while end < line.count {
+            if line[end] == 0x7B { depth += 1 } else if line[end] == 0x7D { depth -= 1; if depth == 0 { break } }
+            end += 1
+        }
+        guard end < line.count,
+              let object = try? JSONSerialization.jsonObject(with: Data(UnsafeBufferPointer(rebasing: line[open...end]))),
+              let tokens = WorkTokens(usage: object) else { return nil }
+        var id = "line-\(line.count)-\(usageAt)"
+        if let at = find("\"id\":\"msg_", in: line, backward: false) {
+            var close = at + 6
+            while close < line.count, line[close] != 0x22 { close += 1 }
+            id = String(decoding: UnsafeBufferPointer(rebasing: line[(at + 6)..<close]), as: UTF8.self)
+        }
+        return (id, tokens)
+    }
+
+    /// Where `text` first (or last) starts in the line.
+    static func find(_ text: String, in line: UnsafeBufferPointer<UInt8>, backward: Bool) -> Int? {
+        let key = Array(text.utf8)
+        guard line.count >= key.count else { return nil }
+        let last = line.count - key.count
+        var i = backward ? last : 0
+        while i >= 0, i <= last {
+            if line[i] == key[0] {
+                var match = true
+                for k in 1..<key.count where line[i + k] != key[k] { match = false; break }
+                if match { return i }
+            }
+            i += backward ? -1 : 1
+        }
+        return nil
     }
 
     /// What the user typed, from a user record's message: text, not tool results, slash
