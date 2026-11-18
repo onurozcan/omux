@@ -71,11 +71,14 @@ enum Prefs {
     static let transcriptDensity = "transcriptDensity"
     static let transcriptBubbles = "transcriptBubbles"
     static let transcriptTimestamps = "transcriptTimestamps"
+    /// Web links clicked in a session open in its browser in the right panel instead of the
+    /// default browser. Off by default.
+    static let linksInPanel = "linksInPanel"
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
-                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
+                      sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps, linksInPanel]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
     /// the theme and font, instead of the defaults. Only on its first launch.
@@ -145,6 +148,7 @@ private struct GeneralSettings: View {
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
     @AppStorage(Prefs.confirmQuit) private var confirmQuit = true
+    @AppStorage(Prefs.linksInPanel) private var linksInPanel = false
 
     var body: some View {
         Form {
@@ -169,6 +173,10 @@ private struct GeneralSettings: View {
             }
             Section("Files") {
                 Toggle("Wrap long lines in the file preview", isOn: $wrapLines)
+            }
+            Section("Links") {
+                Toggle("Open web links in the right panel", isOn: $linksInPanel)
+                SettingNote("Links clicked in a terminal or a transcript open beside the session they came from, in its browser. Off, they open in the default browser.")
             }
             Section("Quitting") {
                 Toggle("Ask before quitting while sessions are running", isOn: $confirmQuit)
