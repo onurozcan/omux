@@ -12,32 +12,42 @@ struct StatsView: View {
     @Binding var showSidebar: Bool
     @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
 
+    private var bubbles: some View { TokenBubbles(model: model) }
+    private var detail: some View { StatsDetail(model: model) }
+
     var body: some View {
         VStack(spacing: 0) {
             header.zIndex(1)
+            GeometryReader { outer in
+            let pageWidth = min(1400, outer.size.width) - 36
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     summary
-                    HStack(alignment: .top, spacing: 14) {
-                        ProjectMap(model: model)
-                            .overlay { if model.snapshot.projects.isEmpty { empty } }
-                            .statsCard()
-                            .frame(height: 400)
-                        StatsDetail(model: model)
-                            .statsCard()
-                            .frame(width: 320, height: 400)
+                    ContributionCalendar(model: model, width: pageWidth - 32)
+                        .statsCard()
+                    // Below a laptop's width the bubbles and the details stack.
+                    if pageWidth >= 940 {
+                        HStack(alignment: .top, spacing: 14) {
+                            bubbles.frame(height: 480).statsCard()
+                            detail.frame(width: 340, height: 480).background(StatsStyle.card).clipShape(RoundedRectangle(cornerRadius: 10))
+                                .overlay(RoundedRectangle(cornerRadius: 10).stroke(StatsStyle.border))
+                        }
+                    } else {
+                        bubbles.frame(height: 420).statsCard()
+                        detail.frame(height: 420).statsCard()
                     }
-                    DailyChart(model: model)
-                        .statsCard()
+                    DailyChart(model: model, bars: model.bars, days: model.snapshot.days, perDay: model.snapshot.perDay,
+                               total: model.snapshot.total, picked: model.selectedProjectID, day: model.day,
+                               month: model.month, monthEnd: model.monthEnd)
+                        .equatable()
                         .frame(height: 250)
-                    TokenMap(model: model)
                         .statsCard()
-                        .frame(height: 380)
                     WorkLog(model: model)
                 }
-                .padding(18)
-                .frame(maxWidth: 1400)
+                .frame(width: pageWidth)
+                .padding(.vertical, 18)
                 .frame(maxWidth: .infinity)
+            }
             }
             .clipped()
         }
@@ -103,32 +113,32 @@ struct StatsView: View {
             ("Active days", "\(activeDays)", activeDays > 0 ? "\(StatsStyle.duration(snapshot.total / Double(activeDays))) a day" : "—"),
             ("Projects", "\(snapshot.projects.count)", snapshot.projects.first.map { "most on \($0.name)" } ?? "—"),
             ("Sessions", "\(sessions)", "\(requests) requests"),
-            ("Tokens", StatsStyle.tokens(snapshot.tokens.total), "\(StatsStyle.tokens(snapshot.tokens.output)) written by Claude"),
+            ("Tokens", StatsStyle.tokens(snapshot.tokens.total), "\(StatsStyle.tokens(snapshot.tokens.output)) written"),
             ("Commits", "\(model.commits.count)", "in their repositories"),
         ]
-        return HStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                if i > 0 { Rectangle().fill(StatsStyle.border).frame(width: 1).padding(.vertical, 12) }
+        // As many in a row as fit; the rest wrap.
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10, alignment: .leading)], alignment: .leading, spacing: 10) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.0.uppercased())
                         .font(.system(size: 9.5, weight: .semibold))
                         .tracking(0.6)
                         .foregroundStyle(StatsStyle.faint)
-                    Text(item.1).font(.system(size: 20, weight: .bold).monospacedDigit())
-                    Text(item.2).font(.system(size: 11)).foregroundStyle(StatsStyle.muted).lineLimit(1)
+                    Text(item.1).font(.system(size: 20, weight: .bold).monospacedDigit()).lineLimit(1)
+                    Text(item.2).font(.system(size: 11)).foregroundStyle(StatsStyle.muted).lineLimit(1).truncationMode(.middle)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .statsCard()
             }
         }
-        .statsCard()
     }
 }
 
 extension View {
     func statsCard() -> some View {
-        frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        frame(maxWidth: .infinity, alignment: .topLeading)
             .background(StatsStyle.card)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(StatsStyle.border))
@@ -450,17 +460,28 @@ private struct CommitList: View {
 
 // MARK: - Hours a day, in each project's color
 
-private struct DailyChart: View {
-    @ObservedObject var model: StatsModel
+private struct DailyChart: View, Equatable {
+    /// For picking a day; not watched: the chart redraws only when what it shows changes.
+    let model: StatsModel
+    let bars: [StatsBar]
+    let days: [Date]
+    let perDay: [Date: TimeInterval]
+    let total: TimeInterval
+    let picked: String?
+    let day: Date?
+    let month: Date
+    let monthEnd: Date
+
+    static func == (a: DailyChart, b: DailyChart) -> Bool {
+        a.bars == b.bars && a.days == b.days && a.perDay == b.perDay && a.total == b.total
+            && a.picked == b.picked && a.day == b.day && a.month == b.month
+    }
     /// A working day, as a time sheet expects.
     private let target: Double = 8
 
     var body: some View {
         let calendar = Calendar.current
-        let days = model.snapshot.days
-        let stacked = model.stacked()
-        let picked = model.selectedProjectID
-        let maxHours = (model.snapshot.perDay.values.max() ?? 0) / 3600
+        let maxHours = (perDay.values.max() ?? 0) / 3600
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("Hours a day").font(.system(size: 12, weight: .semibold))
@@ -472,7 +493,7 @@ private struct DailyChart: View {
                     Capsule().fill(StatsStyle.target).frame(width: 12, height: 2)
                     Text("8h a weekday").font(.system(size: 11)).foregroundStyle(StatsStyle.muted)
                 }
-                Text("Total \(StatsStyle.hours(model.snapshot.total)) h")
+                Text("Total \(StatsStyle.hours(total)) h")
                     .font(.system(size: 11.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(StatsStyle.muted)
             }
@@ -481,17 +502,17 @@ private struct DailyChart: View {
                     RectangleMark(xStart: .value("Day", day), xEnd: .value("Day", day.addingTimeInterval(86400)))
                         .foregroundStyle(StatsStyle.wash)
                 }
-                if let day = model.day {
+                if let day {
                     RectangleMark(xStart: .value("Day", day), xEnd: .value("Day", day.addingTimeInterval(86400)))
                         .foregroundStyle(StatsStyle.accent.opacity(0.13))
                 }
-                ForEach(Array(stacked.enumerated()), id: \.offset) { _, item in
-                    let faded = (picked != nil && item.project.id != picked) || (model.day != nil && model.day != item.day)
+                ForEach(Array(bars.enumerated()), id: \.offset) { _, item in
+                    let faded = (picked != nil && item.project != picked) || (day != nil && day != item.day)
                     BarMark(x: .value("Day", item.day, unit: .day), y: .value("Hours", item.seconds / 3600), width: .ratio(0.6))
-                        .foregroundStyle(item.project.color.opacity(faded ? 0.25 : 0.9))
+                        .foregroundStyle(item.color.opacity(faded ? 0.25 : 0.9))
                 }
                 ForEach(days, id: \.self) { day in
-                    if let total = model.snapshot.perDay[day], total >= 180 {
+                    if let total = perDay[day], total >= 180 {
                         PointMark(x: .value("Day", day, unit: .day), y: .value("Hours", total / 3600))
                             .opacity(0)
                             .annotation(position: .top, spacing: 2) {
@@ -509,7 +530,7 @@ private struct DailyChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
                 }
             }
-            .chartXScale(domain: (days.first ?? model.month)...(model.monthEnd))
+            .chartXScale(domain: (days.first ?? month)...monthEnd)
             .chartYScale(domain: 0...max(9, maxHours.rounded(.up) + 1))
             .chartXAxis {
                 AxisMarks(values: days.map { $0.addingTimeInterval(43200) }) { value in
@@ -538,7 +559,7 @@ private struct DailyChart: View {
                             guard let date: Date = proxy.value(atX: location.x - geo[frame].origin.x) else { return }
                             let day = calendar.startOfDay(for: date)
                             withAnimation(.easeOut(duration: 0.15)) {
-                                model.day = model.day == day || (model.snapshot.perDay[day] ?? 0) == 0 ? nil : day
+                                model.day = model.day == day || (perDay[day] ?? 0) == 0 ? nil : day
                             }
                         }
                 }
@@ -639,6 +660,8 @@ private struct WorkLog: View {
         }
     }
 
+    private var pickedSession: String? { if case .session(let id) = model.selection { return id } else { return nil } }
+
     var body: some View {
         let all = candidates()
         let days = build(Array(all.prefix(limit)))
@@ -677,7 +700,7 @@ private struct WorkLog: View {
             }
             LazyVStack(alignment: .leading, spacing: 10) {
                 ForEach(days) { day in
-                    DaySection(model: model, day: day, open: $open)
+                    DaySection(model: model, day: day, picked: model.day == day.date, session: pickedSession, open: $open)
                 }
             }
             if all.count > limit {
@@ -697,8 +720,12 @@ private struct WorkLog: View {
 }
 
 private struct DaySection: View {
-    @ObservedObject var model: StatsModel
+    let model: StatsModel
     let day: WorkLog.Day
+    /// The day is the one picked.
+    let picked: Bool
+    /// The picked session, if any.
+    let session: String?
     @Binding var open: Set<String>
 
     var body: some View {
@@ -729,10 +756,10 @@ private struct DaySection: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(model.day == day.date ? "Show every day" : "Show only this day, everywhere")
+            .help(picked ? "Show every day" : "Show only this day, everywhere")
             Rectangle().fill(StatsStyle.border).frame(height: 1)
             ForEach(day.entries) { entry in
-                EntryRow(model: model, entry: entry, commits: day.byEntry[entry.id] ?? [],
+                EntryRow(model: model, entry: entry, commits: day.byEntry[entry.id] ?? [], picked: session == entry.slice.id,
                          open: open.contains(entry.id)) {
                     withAnimation(.easeOut(duration: 0.15)) {
                         if open.contains(entry.id) { open.remove(entry.id) } else { open.insert(entry.id) }
@@ -797,17 +824,14 @@ private struct DayTimeline: View {
 }
 
 private struct EntryRow: View {
-    @ObservedObject var model: StatsModel
+    let model: StatsModel
     let entry: WorkLog.Entry
     let commits: [WorkCommit]
+    let picked: Bool
     let open: Bool
     let toggle: () -> Void
     @State private var hovering = false
 
-    private var picked: Bool {
-        if case .session(let id) = model.selection { return id == entry.slice.id }
-        return false
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

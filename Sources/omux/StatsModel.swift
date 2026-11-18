@@ -35,6 +35,20 @@ struct StatsProject: Identifiable {
     let tokensPerDay: [Date: Int]
 }
 
+/// One day's work, for the year calendar.
+struct StatsDayTotal: Equatable {
+    var time: TimeInterval = 0
+    var tokens = 0
+}
+
+/// One project's share of one day in the hours chart.
+struct StatsBar: Equatable {
+    let day: Date
+    let project: String
+    let color: Color
+    let seconds: TimeInterval
+}
+
 /// The month in view, added up once whenever the sessions or the month change.
 struct StatsSnapshot {
     var projects: [StatsProject] = []
@@ -58,7 +72,13 @@ final class StatsModel: ObservableObject {
     @Published private(set) var loading = false
     @Published private(set) var loaded = false
     @Published var month: Date = StatsModel.startOfMonth(Date()) { didSet { if month != oldValue { day = nil; rebuild(); loadCommits() } } }
-    @Published var selection: StatsSelection?
+    @Published var selection: StatsSelection? { didSet { if selection != oldValue { updateYear() } } }
+    /// The last 53 weeks day by day, for the picked project or for all: the year calendar.
+    @Published private(set) var year: [Date: StatsDayTotal] = [:]
+    private var yearAll: [Date: StatsDayTotal] = [:]
+    private var yearByProject: [String: [Date: StatsDayTotal]] = [:]
+    /// Each project's share of each day of the month, for the hours chart.
+    @Published private(set) var bars: [StatsBar] = []
     /// A day picked on the map, the chart or in the log: everything narrows to what was worked on that day
     /// and the log shows only it.
     @Published var day: Date?
@@ -99,6 +119,7 @@ final class StatsModel: ObservableObject {
                 self.loaded = true
                 self.lastLoad = Date()
                 self.rebuild()
+                self.computeYear()
                 self.loadCommits()
             }
         }
@@ -151,6 +172,7 @@ final class StatsModel: ObservableObject {
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
             day = next
         }
+        defer { bars = stacked().map { StatsBar(day: $0.day, project: $0.project.id, color: $0.project.color, seconds: $0.seconds) } }
         snapshot = StatsSnapshot(projects: projects, perDay: WorkStats.perDay(all),
                                  total: all.reduce(0) { $0 + $1.duration },
                                  tokens: projects.reduce(WorkTokens()) { $0 + $1.tokens }, days: days)
@@ -161,6 +183,40 @@ final class StatsModel: ObservableObject {
             default: break
             }
         }
+    }
+
+    /// The first day the year calendar shows: the start of the week a year ago.
+    static var yearStart: Date {
+        let calendar = Calendar.current
+        let week = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? calendar.startOfDay(for: Date())
+        return calendar.date(byAdding: .weekOfYear, value: -52, to: week) ?? week
+    }
+
+    /// Every day of the last year, for all projects and for each.
+    private func computeYear() {
+        let from = Self.yearStart
+        var spans: [String: [WorkSpan]] = [:]
+        var tokens: [String: [Date: Int]] = [:]
+        for session in sessions where session.end > from {
+            spans[session.cwd, default: []] += WorkStats.clip(session.spans, from: from, to: .distantFuture)
+            for day in session.tokenDays where day.day >= from { tokens[session.cwd, default: [:]][day.day, default: 0] += day.tokens.total }
+        }
+        func totals(_ spans: [WorkSpan], _ tokens: [Date: Int]) -> [Date: StatsDayTotal] {
+            var result: [Date: StatsDayTotal] = [:]
+            for (day, time) in WorkStats.perDay(WorkStats.union(spans)) { result[day, default: StatsDayTotal()].time = time }
+            for (day, count) in tokens { result[day, default: StatsDayTotal()].tokens += count }
+            return result
+        }
+        var byProject: [String: [Date: StatsDayTotal]] = [:]
+        for folder in Set(spans.keys).union(tokens.keys) { byProject[folder] = totals(spans[folder] ?? [], tokens[folder] ?? [:]) }
+        yearByProject = byProject
+        yearAll = totals(spans.values.flatMap { $0 }, tokens.values.reduce(into: [:]) { all, days in all.merge(days, uniquingKeysWith: +) })
+        updateYear()
+    }
+
+    private func updateYear() {
+        let next = selectedProjectID.map { yearByProject[$0] ?? [:] } ?? yearAll
+        if next != year { year = next }
     }
 
     /// The month's commits in every project's repository, read off the main thread.
