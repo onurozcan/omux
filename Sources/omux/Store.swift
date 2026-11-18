@@ -772,12 +772,14 @@ final class Store: ObservableObject {
         showPanel(.browser)
     }
 
-    /// Opens a link from a session, clicked in its terminal or its transcript. A web address
-    /// shows in that session's own browser, beside the conversation it came from; the Browser
-    /// tab has a button to take the page to the default browser. Anything else, such as a
-    /// mail address, is the system's to open.
+    /// Opens a link from a session, clicked in its terminal or its transcript. With the
+    /// "Open web links in the right panel" setting on, a web address shows in that session's
+    /// own browser, beside the conversation it came from; the Browser tab has a button to take
+    /// the page to the default browser. Otherwise, and for anything else such as a mail
+    /// address, the system opens it.
     func openLink(_ url: URL, in id: UUID?) {
-        guard let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
+        guard UserDefaults.standard.bool(forKey: Prefs.linksInPanel),
+              let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
             NSWorkspace.shared.open(url)
             return
         }
