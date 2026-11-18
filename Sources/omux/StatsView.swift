@@ -3,12 +3,11 @@ import SwiftUI
 
 /// The statistics page, in place of the session: what was worked on in a month, project by
 /// project and session by session, from Claude Code's conversations. One picked project or
-/// session and one picked day run through all of it: the graph lights them, the chart's bars
-/// are each project's share in its graph color, and the log below shows what they hold.
+/// session and one picked day run through all of it: the map marks them, the chart's bars
+/// are each project's share in its color, and the log below shows what they hold.
 struct StatsView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var model = StatsModel.shared
-    @StateObject private var layout = GraphLayout()
     let theme: Theme
     @Binding var showSidebar: Bool
     @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
@@ -20,10 +19,8 @@ struct StatsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     summary
                     HStack(alignment: .top, spacing: 14) {
-                        WorkGraph(layout: layout, selection: model.selection,
-                                  active: model.day.map { model.nodes(on: $0) }, pointed: model.pointed) { model.selection = $0 }
+                        ProjectMap(model: model)
                             .overlay { if model.snapshot.projects.isEmpty { empty } }
-                            .overlay(alignment: .topLeading) { graphCaption }
                             .statsCard()
                             .frame(height: 400)
                         StatsDetail(model: model)
@@ -42,9 +39,7 @@ struct StatsView: View {
             .clipped()
         }
         .background(Color(nsColor: theme.background))
-        .onAppear { model.reload(); layout.set(model.snapshot.projects) }
-        .onChange(of: model.snapshot.projects.map(\.id)) { _, _ in layout.set(model.snapshot.projects) }
-        .onChange(of: model.snapshot.total) { _, _ in layout.set(model.snapshot.projects) }
+        .onAppear { model.reload() }
         .onExitCommand { store.showStats = false }
     }
 
@@ -81,19 +76,6 @@ struct StatsView: View {
         .frame(height: 28)
         .background(Color(nsColor: theme.chrome))
         .overlay(alignment: .bottom) { Hairline() }
-    }
-
-    private var graphCaption: some View {
-        HStack(spacing: 6) {
-            Text("Projects and sessions").font(.system(size: 12, weight: .semibold))
-            if let day = model.day {
-                Text("· worked on \(day.formatted(.dateTime.day().month(.abbreviated)))")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(StatsStyle.muted)
-            }
-        }
-        .padding(12)
-        .allowsHitTesting(false)
     }
 
     private var empty: some View {
@@ -184,7 +166,7 @@ private struct FilterChip: View {
     }
 }
 
-// MARK: - Details beside the graph
+// MARK: - Details beside the map
 
 private struct StatsDetail: View {
     @ObservedObject var model: StatsModel
@@ -238,7 +220,6 @@ private struct StatsDetail: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .onHover { model.pointed = $0 ? "p:" + project.id : nil }
             }
         }
     }
@@ -308,7 +289,6 @@ private struct ProjectDetail: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .onHover { model.pointed = $0 ? "s:" + slice.id : nil }
                     Rectangle().fill(StatsStyle.border).frame(height: 1)
                 }
             }
@@ -462,7 +442,7 @@ private struct DailyChart: View {
             .chartYScale(domain: 0...max(9, maxHours.rounded(.up) + 1))
             .chartXAxis {
                 AxisMarks(values: days.map { $0.addingTimeInterval(43200) }) { value in
-                    AxisValueLabel(centered: true) {
+                    AxisValueLabel {
                         if let date = value.as(Date.self) {
                             VStack(spacing: 0) {
                                 Text(date.formatted(.dateTime.weekday(.narrow))).foregroundStyle(StatsStyle.muted)
@@ -531,17 +511,42 @@ private struct WorkLog: View {
         var commitCount: Int { byEntry.values.reduce(0) { $0 + $1.count } + loose.count }
     }
 
-    private var days: [Day] {
+    /// Days shown at a time: a month of rows at once is a lot to lay out.
+    private static let page = 7
+    @State private var limit = WorkLog.page
+
+    /// The days with work for the picked project or session, newest first; cheap, from the
+    /// day totals.
+    private func candidates() -> [Date] {
+        let projectID = model.selectedProjectID
+        let projects = model.snapshot.projects.filter { projectID == nil || $0.id == projectID }
+        if let day = model.day { return [day] }
+        if case .session(let id) = model.selection, let (_, slice) = model.snapshot.slice(id) {
+            return WorkStats.perDay(slice.spans).keys.sorted(by: >)
+        }
+        return model.snapshot.days.reversed().filter { day in projects.contains { ($0.perDay[day] ?? 0) > 0 } }
+    }
+
+    /// The time on a day for whatever is picked.
+    private func time(on day: Date) -> TimeInterval {
+        switch model.selection {
+        case .project(let id): return model.snapshot.project(id)?.perDay[day] ?? 0
+        case .session(let id): return model.snapshot.slice(id).flatMap { WorkStats.perDay($0.1.spans)[day] } ?? 0
+        case nil: return model.snapshot.perDay[day] ?? 0
+        }
+    }
+
+    /// The rows of the given days, with each commit placed under its session.
+    private func build(_ shown: [Date]) -> [Day] {
         let calendar = Calendar.current
         let projectID = model.selectedProjectID
         let sessionID: String? = { if case .session(let id) = model.selection { return id } else { return nil } }()
         let projects = model.snapshot.projects.filter { projectID == nil || $0.id == projectID }
         let folders = Set(projects.map(\.id))
-        let shown = model.day.map { [$0] } ?? model.snapshot.days.reversed()
         return shown.compactMap { day in
             guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { return nil }
             var entries: [Entry] = []
-            for project in projects {
+            for project in projects where (project.perDay[day] ?? 0) > 0 {
                 for slice in project.sessions where sessionID == nil || slice.id == sessionID {
                     let spans = WorkStats.clip(slice.spans, from: day, to: next)
                     guard !spans.isEmpty else { continue }
@@ -563,7 +568,9 @@ private struct WorkLog: View {
     }
 
     var body: some View {
-        let days = days
+        let all = candidates()
+        let days = build(Array(all.prefix(limit)))
+        let total = all.reduce(0) { $0 + time(on: $1) }
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text("Daily log").font(.system(size: 15, weight: .bold))
@@ -584,7 +591,7 @@ private struct WorkLog: View {
                 case nil: EmptyView()
                 }
                 Spacer()
-                Text("\(days.count) day\(days.count == 1 ? "" : "s") · \(StatsStyle.duration(days.reduce(0) { $0 + $1.time }))")
+                Text("\(all.count) day\(all.count == 1 ? "" : "s")" + (total > 0 ? " · \(StatsStyle.duration(total))" : ""))
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(StatsStyle.muted)
             }
@@ -601,7 +608,19 @@ private struct WorkLog: View {
                     DaySection(model: model, day: day, open: $open)
                 }
             }
+            if all.count > limit {
+                HStack(spacing: 8) {
+                    Button("Show \(min(WorkLog.page, all.count - limit)) more days") { limit += WorkLog.page }
+                    Button("Show all \(all.count)") { limit = all.count }
+                }
+                .buttonStyle(OutlineButtonStyle())
+                .frame(maxWidth: .infinity)
+                .padding(.top, 2)
+            }
         }
+        .onChange(of: model.selection) { _, _ in limit = WorkLog.page }
+        .onChange(of: model.day) { _, _ in limit = WorkLog.page }
+        .onChange(of: model.month) { _, _ in limit = WorkLog.page }
     }
 }
 
@@ -759,10 +778,7 @@ private struct EntryRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .onHover { inside in
-                hovering = inside
-                model.pointed = inside ? "s:" + entry.slice.id : nil
-            }
+            .onHover { hovering = $0 }
             .contextMenu {
                 Button("Show This Session") { model.selection = .session(entry.slice.id) }
                 Button("Show \(entry.project.name)") { model.selection = .project(entry.project.id) }
@@ -773,7 +789,7 @@ private struct EntryRow: View {
                     if !entry.prompts.isEmpty { PromptList(prompts: entry.prompts, lineLimit: 3) }
                     if !commits.isEmpty { CommitList(commits: commits) }
                     HStack(spacing: 8) {
-                        Button("Show in graph") { model.selection = .session(entry.slice.id) }
+                        Button("Show this session") { model.selection = .session(entry.slice.id) }
                         Button("Open conversation") { model.open(entry.slice.session) }
                     }
                     .buttonStyle(OutlineButtonStyle())

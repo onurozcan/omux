@@ -51,11 +51,9 @@ final class StatsModel: ObservableObject {
     @Published private(set) var loaded = false
     @Published var month: Date = StatsModel.startOfMonth(Date()) { didSet { if month != oldValue { day = nil; rebuild(); loadCommits() } } }
     @Published var selection: StatsSelection?
-    /// A day picked on the chart or in the log: the graph lights what was worked on that day
+    /// A day picked on the map, the chart or in the log: everything narrows to what was worked on that day
     /// and the log shows only it.
     @Published var day: Date?
-    /// A graph node pointed at elsewhere on the page (a log row, a list row): the graph lights it.
-    @Published var pointed: String?
     @Published private(set) var snapshot = StatsSnapshot()
     @Published private(set) var commits: [WorkCommit] = []
 
@@ -167,19 +165,6 @@ final class StatsModel: ObservableObject {
             let result = found.sorted { $0.date > $1.date }
             await MainActor.run { if !Task.isCancelled { self.commits = result } }
         }
-    }
-
-    /// Graph node ids of the projects and sessions worked on during `day`.
-    func nodes(on day: Date) -> Set<String> {
-        guard let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return [] }
-        var ids = Set<String>()
-        for project in snapshot.projects {
-            for slice in project.sessions where slice.spans.contains(where: { $0.end > day && $0.start < next }) {
-                ids.insert("s:" + slice.id)
-                ids.insert("p:" + project.id)
-            }
-        }
-        return ids
     }
 
     /// Each project's share of each day, scaled so a day's shares add up to its total: sessions
