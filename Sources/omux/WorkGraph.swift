@@ -135,6 +135,10 @@ final class GraphLayout: ObservableObject {
 struct WorkGraph: View {
     @ObservedObject var layout: GraphLayout
     var selection: StatsSelection?
+    /// Nodes worked on during the picked day; the rest fade.
+    var active: Set<String>? = nil
+    /// A node pointed at elsewhere on the page.
+    var pointed: String? = nil
     var select: (StatsSelection?) -> Void
 
     @State private var hovered: Int?
@@ -249,14 +253,19 @@ struct WorkGraph: View {
         let nodes = layout.nodes
         guard !nodes.isEmpty else { return }
         // What's under the pointer, or else what's picked, lights up with its neighbours.
-        let focus = hovered ?? selectedNode
+        let focus = hovered ?? pointed.flatMap { layout.node($0) } ?? selectedNode
         var lit = Set<Int>()
         if let focus, layout.neighbours.indices.contains(focus) {
             lit = layout.neighbours[focus].union([focus])
             // A project lights its sessions; a session its project and that project's sessions.
             if nodes[focus].kind == .session, let hub = layout.neighbours[focus].first { lit.formUnion(layout.neighbours[hub]) }
         }
-        let dimmed = !lit.isEmpty
+        if let active {
+            // The day's work, with what's picked or pointed at inside it.
+            let day = Set(nodes.indices.filter { active.contains(nodes[$0].id) })
+            lit = lit.isEmpty ? day : lit.intersection(day).union(focus.map { [$0] } ?? [])
+        }
+        let dimmed = !lit.isEmpty || active != nil
 
         for (a, b) in layout.links {
             var path = Path()

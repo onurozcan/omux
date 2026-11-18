@@ -76,6 +76,8 @@ final class Store: ObservableObject {
     @Published var editingGroupID: UUID?
     @Published var showQuickSwitcher = false
     @Published var showRecentSessions = false
+    /// The statistics page is in place of the session.
+    @Published var showStats = false
     @Published var showRemoteProject = false
     /// What the New Remote Project sheet starts with, when asked for with a machine and folder.
     var remoteDraft: (host: String, folder: String) = ("", "")

@@ -49,10 +49,13 @@ final class StatsModel: ObservableObject {
     @Published private(set) var sessions: [WorkSession] = []
     @Published private(set) var loading = false
     @Published private(set) var loaded = false
-    @Published var month: Date = StatsModel.startOfMonth(Date()) { didSet { if month != oldValue { rebuild(); loadCommits() } } }
+    @Published var month: Date = StatsModel.startOfMonth(Date()) { didSet { if month != oldValue { day = nil; rebuild(); loadCommits() } } }
     @Published var selection: StatsSelection?
-    /// A day picked on the chart: the log scrolls to it and opens it.
-    @Published var focusedDay: Date?
+    /// A day picked on the chart or in the log: the graph lights what was worked on that day
+    /// and the log shows only it.
+    @Published var day: Date?
+    /// A graph node pointed at elsewhere on the page (a log row, a list row): the graph lights it.
+    @Published var pointed: String?
     @Published private(set) var snapshot = StatsSnapshot()
     @Published private(set) var commits: [WorkCommit] = []
 
@@ -166,6 +169,33 @@ final class StatsModel: ObservableObject {
         }
     }
 
+    /// Graph node ids of the projects and sessions worked on during `day`.
+    func nodes(on day: Date) -> Set<String> {
+        guard let next = Calendar.current.date(byAdding: .day, value: 1, to: day) else { return [] }
+        var ids = Set<String>()
+        for project in snapshot.projects {
+            for slice in project.sessions where slice.spans.contains(where: { $0.end > day && $0.start < next }) {
+                ids.insert("s:" + slice.id)
+                ids.insert("p:" + project.id)
+            }
+        }
+        return ids
+    }
+
+    /// Each project's share of each day, scaled so a day's shares add up to its total: sessions
+    /// in two projects at once count once, as the day's total does.
+    func stacked() -> [(day: Date, project: StatsProject, seconds: TimeInterval)] {
+        var result: [(Date, StatsProject, TimeInterval)] = []
+        for day in snapshot.days {
+            let total = snapshot.perDay[day] ?? 0
+            guard total > 0 else { continue }
+            let raw = snapshot.projects.map { ($0, $0.perDay[day] ?? 0) }.filter { $0.1 > 0 }
+            let sum = raw.reduce(0) { $0 + $1.1 }
+            for (project, seconds) in raw { result.append((day, project, seconds * total / max(sum, 1))) }
+        }
+        return result
+    }
+
     func commits(in project: String) -> [WorkCommit] {
         commits.filter { $0.repository == project }
     }
@@ -174,20 +204,20 @@ final class StatsModel: ObservableObject {
     func open(_ session: WorkSession) {
         guard let id = UUID(uuidString: session.id) else { return }
         Store.shared.openClaudeSession(RecentSession(id: id, cwd: session.cwd, prompt: session.title, date: session.end))
-        AppDelegate.showMainWindow()
+        Store.shared.showStats = false
     }
 }
 
-/// The statistics window's look: white like a time sheet, whatever omux's theme.
+/// The statistics page's look.
 enum StatsStyle {
-    static let background = Color.white
-    static let card = Color.white
-    static let border = Color(white: 0.89)
-    static let wash = Color(white: 0.965)
-    static let ink = Color(white: 0.13)
-    static let muted = Color(white: 0.45)
-    static let faint = Color(white: 0.62)
-    static let accent = Color(red: 0.27, green: 0.38, blue: 0.84)
+    // Drawn on omux's own theme: everything leans on the theme's text color.
+    static let card = Color.primary.opacity(0.035)
+    static let border = Color.primary.opacity(0.09)
+    static let wash = Color.primary.opacity(0.055)
+    static let ink = Color.primary
+    static let muted = Color.primary.opacity(0.62)
+    static let faint = Color.primary.opacity(0.4)
+    static let accent = Color.accentColor
     static let bar = Color(red: 0.42, green: 0.77, blue: 0.48)
     static let target = Color(red: 0.95, green: 0.62, blue: 0.30)
 
