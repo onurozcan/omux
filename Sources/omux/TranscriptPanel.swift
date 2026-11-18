@@ -264,7 +264,9 @@ struct TranscriptPanel: View {
         } else if runtime.awaitsPermission || codex.approval(for: tabID) != nil {
             PermissionCard(tabID: tabID, provider: provider, pending: pending)
         } else if provider == .claude, !runtime.exited, runtime.busy {
-            ScreenPromptCard(tabID: tabID, starting: runtime.statusState == nil)
+            // Starting only once a prompt was sent and waits for it: a stopped session's shell
+            // is no start, whatever its screen shows.
+            ScreenPromptCard(tabID: tabID, starting: runtime.statusState == nil && !starting.isEmpty)
         }
     }
 
@@ -810,6 +812,9 @@ struct TranscriptPanel: View {
             var sawAgent = false
             // How long Claude Code's own prompt box has been on screen without a status report.
             var promptShown = 0
+            // Half-seconds with no agent in the shell and none on its way, and whether the
+            // start has been asked for a second time.
+            var idle = 0, retried = false
             for _ in 0..<240 {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let rt = store.runtime[tabID], !rt.exited else { continue }
@@ -844,6 +849,10 @@ struct TranscriptPanel: View {
                 }
                 let running = store.shellRunsAgent(tabID)
                 if running { sawAgent = true; continue }
+                // Nothing came up in the shell: the start was turned away, by a shell still
+                // busy with its own start-up. Asked once more, now that it has settled.
+                idle = sawAgent || store.isStarting(tabID) ? 0 : idle + 1
+                if idle == 6, !retried { retried = true; store.start(tabID); continue }
                 guard sawAgent, !store.isStarting(tabID) else { continue }
                 // The agent came and went. omux starts Codex again after its self-update;
                 // anything else is for the user to see in the terminal.

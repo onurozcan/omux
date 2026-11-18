@@ -39,6 +39,8 @@ final class Store: ObservableObject {
         didSet {
             // Deferred: this fires inside the List's selection update.
             guard let id = selectedTabID else { return }
+            // Going to a session leaves Home, also when it is the session that was selected already.
+            if HomeState.shared.shown { HomeState.shared.shown = false }
             if let maximized = maximizedID, maximized != id { maximizedID = nil }
             DispatchQueue.main.async { [weak self] in
                 self?.clearAttention(id)
@@ -732,7 +734,18 @@ final class Store: ObservableObject {
             return
         }
         guard let view = terminals[id], runtime[id]?.awaitsPermission == true else { return }
-        view.send(txt: allow ? "1" : "\u{1b}")
+        view.send(txt: allow ? Self.allowKeys(for: view.lastLines(24)) : "\u{1b}")
+    }
+
+    /// The keys that pick "Yes" on the permission prompt on screen. Most prompts number their
+    /// options and take "1"; one that lists a bare Yes and No (publishing an artifact) ignores
+    /// digits and takes Return on the highlighted row, or "y".
+    nonisolated static func allowKeys(for lines: [String]) -> String {
+        let numbered = lines.contains { $0.range(of: #"^[\s│]*(❯\s*)?1\.\s"#, options: .regularExpression) != nil }
+        if numbered { return "1" }
+        let highlighted = lines.last { $0.range(of: #"^[\s│]*❯\s*\S"#, options: .regularExpression) != nil }
+        if let highlighted, highlighted.range(of: #"\b(yes|allow)\b"#, options: [.regularExpression, .caseInsensitive]) != nil { return "\r" }
+        return "y"
     }
 
     /// Shows the right panel on the given tab.
@@ -775,9 +788,10 @@ final class Store: ObservableObject {
     /// Opens a link from a session, clicked in its terminal or its transcript. A web address
     /// shows in that session's own browser, beside the conversation it came from; the Browser
     /// tab has a button to take the page to the default browser. Anything else, such as a
-    /// mail address, is the system's to open.
+    /// mail address, is the system's to open, and so is every link when Settings says so.
     func openLink(_ url: URL, in id: UUID?) {
-        guard let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
+        guard UserDefaults.standard.string(forKey: Prefs.openLinksIn) != "system",
+              let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
             NSWorkspace.shared.open(url)
             return
         }
@@ -1009,6 +1023,9 @@ final class Store: ObservableObject {
         let session = tab.claudeSessionID.uuidString.lowercased()
         let command = startupCommand(tab: tab, group: groups[loc.group]) ?? "claude --session-id \(session)"
         if let view = terminals[id], !(runtime[id]?.exited ?? true) {
+            // Asked now, not remembered: the flag is last set while the login shell was still
+            // running its start-up helpers, and nothing refreshes it once the shell is idle.
+            refreshBusy(id)
             guard !(runtime[id]?.busy ?? false) else { return }
             view.send(txt: command + "\n")
         } else {

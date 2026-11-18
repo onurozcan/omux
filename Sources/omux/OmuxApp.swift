@@ -57,6 +57,10 @@ enum Prefs {
     static let welcomed = "welcomed"
     /// Sessions get the `omux` command line tool. On by default.
     static let cliEnabled = "cliEnabled"
+    /// Where a link clicked in a session opens: "omux" (its Browser panel, the default) or "system" (the default browser).
+    static let openLinksIn = "openLinksIn"
+    /// The rail starts with Home: to-dos, sessions that need you, the week's figures. On by default.
+    static let homeEnabled = "homeEnabled"
     /// Which agent ▶ starts in a plain shell session: "claude" or "codex".
     static let playAgent = "playAgent"
     /// What ▶ does for an agent with no saved conversation: "fresh" or "continue" (the folder's latest).
@@ -74,7 +78,7 @@ enum Prefs {
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, playAgent, startWithoutHistory,
+                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, openLinksIn, homeEnabled, playAgent, startWithoutHistory,
                       sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
@@ -145,6 +149,8 @@ private struct GeneralSettings: View {
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
     @AppStorage(Prefs.confirmQuit) private var confirmQuit = true
+    @AppStorage(Prefs.openLinksIn) private var openLinksIn = "omux"
+    @AppStorage(Prefs.homeEnabled) private var homeEnabled = true
 
     var body: some View {
         Form {
@@ -169,6 +175,18 @@ private struct GeneralSettings: View {
             }
             Section("Files") {
                 Toggle("Wrap long lines in the file preview", isOn: $wrapLines)
+            }
+            Section("Home") {
+                Toggle("Show Home at the top of the project rail", isOn: $homeEnabled)
+                    .onChange(of: homeEnabled) { _, on in if !on { HomeState.shared.shown = false } }
+                SettingNote("Home lists the sessions that need you, your to-dos, this week's prompts and tokens, plan limits and pull requests. Your to-dos are kept while it is off.")
+            }
+            Section("Links") {
+                Picker("Open links in", selection: $openLinksIn) {
+                    Text("omux's browser").tag("omux")
+                    Text("Default browser").tag("system")
+                }
+                SettingNote("A web link clicked in a conversation or a terminal. omux's browser shows it beside the session; the default browser is the one macOS opens links with, such as Chrome or Safari.")
             }
             Section("Quitting") {
                 Toggle("Ask before quitting while sessions are running", isOn: $confirmQuit)
@@ -509,6 +527,7 @@ struct ContentView: View {
     @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
     @AppStorage(Prefs.accent) private var accentChoice = "neutral"
     @AppStorage("panelWidth") private var panelWidth = 250.0
+    @ObservedObject private var home = HomeState.shared
     /// The session list is closed and the projects are on a rail: the rail stays, by itself.
     private var railAlone: Bool { !showSidebar && sidebarLayout == "rail" }
 
@@ -550,7 +569,9 @@ struct ContentView: View {
                         .zIndex(1)
                     // Over the terminal, so a notice doesn't resize the session.
                     ZStack(alignment: .top) {
-                        if let shown = store.shownLayout {
+                        if home.shown {
+                            HomeView(theme: theme)
+                        } else if let shown = store.shownLayout {
                             VStack(spacing: 0) {
                                 PaneTree(node: shown, theme: theme)
                                 PaneComposeBar(theme: theme)
@@ -569,17 +590,25 @@ struct ContentView: View {
                         }
                         NoticeStack(theme: theme)
                     }
+                    .glassCard()
+                    .padding(.bottom, Glass.gap)
+                    .padding(.leading, Glass.gap)
+                    .padding(.trailing, showFiles && !home.shown ? 0 : Glass.gap)
                 }
                 .frame(minWidth: 360)
                 .ignoresSafeArea(.container, edges: .top)
-                if showFiles {
-                    // As narrow as the sidebar by default; the handle on its edge resizes it.
+                if showFiles, !home.shown {
+                    // As narrow as the sidebar by default; the gutter on its edge resizes it.
                     PanelHandle(width: $panelWidth)
                     RightPanel(root: projectRoot, theme: theme)
                         .frame(width: panelWidth)
+                        .padding(.bottom, Glass.gap)
+                        .padding(.trailing, Glass.gap)
                         .ignoresSafeArea(.container, edges: .top)
                 }
             }
+            // What the cards float on: the rail's own surface, carried across the window.
+            .background(Glass.backdrop(theme).ignoresSafeArea())
             // Each pane ignores the title bar inset itself, so the session header and the panel's
             // tabs sit level with the sidebar's buttons. On the split view alone it doesn't reach them.
             .overlay(alignment: .leading) {
@@ -742,9 +771,8 @@ struct SessionHeader: View {
         // With the sidebar closed the header reaches the window's corner: room for its buttons.
         // The rail, when it stays behind, takes the first 46 of those points itself.
         .padding(.leading, showSidebar ? 0 : sidebarLayout == "rail" ? 68 - ProjectRail.width : 68)
+        // On the window's own surface, level with its buttons: the card under it is the session.
         .frame(height: 28)
-        .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 
@@ -881,15 +909,41 @@ struct SplitPane: View {
     }
 }
 
-/// The edge of the right panel: a hairline you can drag to resize it.
+/// The window's parts as cards: the session list, the session and the right panel each stand
+/// on the rail's dark surface with a gutter between them, rounded, with the faint sheen and
+/// the light edge the rail's tiles have.
+enum Glass {
+    static let gap: CGFloat = 6
+    static let radius: CGFloat = 10
+
+    @MainActor static func backdrop(_ theme: Theme) -> some View {
+        Color(nsColor: theme.chrome).overlay(Color.black.opacity(0.18))
+    }
+}
+
+extension View {
+    func glassCard() -> some View {
+        let shape = RoundedRectangle(cornerRadius: Glass.radius, style: .continuous)
+        return clipShape(shape)
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.white.opacity(0.055), .white.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 90)
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: Glass.radius, topTrailingRadius: Glass.radius, style: .continuous))
+                    .allowsHitTesting(false)
+            }
+            .overlay(shape.strokeBorder(Color.primary.opacity(0.11), lineWidth: 1).allowsHitTesting(false))
+            .shadow(color: .black.opacity(0.28), radius: 5, y: 2)
+    }
+}
+
+/// The gutter between the session and the right panel: drag it to resize the panel.
 struct PanelHandle: View {
     @Binding var width: Double
     @State private var startWidth: Double?
 
     var body: some View {
-        Rectangle()
-            .fill(.primary.opacity(0.08))
-            .frame(width: 1)
+        Color.clear
+            .frame(width: Glass.gap)
             .overlay {
                 Color.clear.frame(width: 9).contentShape(Rectangle())
                     .onHover { inside in if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() } }

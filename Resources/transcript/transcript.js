@@ -690,6 +690,7 @@
   }
   function baseName(path) { return path.split('/').pop(); }
   function decorateTurns() {
+    requestAnimationFrame(() => queuePin());
     const kids = Array.from(list.children);
     if (!cardsOn) {
       if (!turnFeet.size && !list.querySelector('.turn-head')) return;
@@ -775,6 +776,40 @@
     jump.textContent = unseen > 0 ? `↓ ${unseen} new` : '↓ Latest';
   }
   window.addEventListener('scroll', () => { if (nearBottom()) unseen = 0; updateJump(); }, { passive: true });
+
+  // The request of the turn being read stays at the top of the view, so a long card's sides end
+  // in its own rounded top instead of running off the page. One head at a time; it slides away
+  // as its card ends. A request taller than a few lines isn't held: it would cover the page.
+  // The held request's distance from the top of the view: clear of the panel's rounded edge.
+  const pinGap = 8;
+  let pinned = null, pinQueued = false;
+  function pinTurn() {
+    pinQueued = false;
+    let next = null, top = 0;
+    if (cardsOn) {
+      for (const head of list.querySelectorAll('.turn-head')) {
+        // Where the head lies in the flow, which a held head no longer tells: just above its card's first shown block.
+        let body = head.nextElementSibling;
+        while (body && !body.classList.contains('turn-head') && body.offsetParent === null) body = body.nextElementSibling;
+        if (!body || body.classList.contains('turn-head')) continue;
+        const height = head.offsetHeight;
+        const natural = body.getBoundingClientRect().top - height;
+        if (natural > pinGap) break;
+        if (height > 96) continue;
+        let end = body;
+        while (end.nextElementSibling && !end.classList.contains('turn-end') && !end.nextElementSibling.classList.contains('turn-head')) end = end.nextElementSibling;
+        const bottom = end.getBoundingClientRect().bottom;
+        if (bottom <= 0) continue;
+        next = head; top = Math.min(pinGap, bottom - height - 14);
+      }
+    }
+    if (pinned && pinned !== next) { pinned.classList.remove('pinned'); pinned.style.top = ''; }
+    pinned = next;
+    if (pinned) { pinned.classList.add('pinned'); pinned.style.top = top + 'px'; }
+  }
+  function queuePin() { if (!pinQueued) { pinQueued = true; requestAnimationFrame(pinTurn); } }
+  window.addEventListener('scroll', queuePin, { passive: true });
+  window.addEventListener('resize', queuePin);
 
   const outline = el(`<nav class="outline" aria-label="Prompts"></nav>`);
   document.body.appendChild(outline);

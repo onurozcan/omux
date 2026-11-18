@@ -16,8 +16,12 @@ struct ProjectRail: View {
     @State private var hover = 0
     /// The idle projects are listed under their stack instead of folded into it.
     @State private var idleListed = false
+    @ObservedObject private var home = HomeState.shared
+    @AppStorage(Prefs.homeEnabled) private var homeEnabled = true
 
     static let width: CGFloat = 46
+    /// The tiles' margin: with the gutter after the strip, the same on both sides of a tile.
+    static let inset: CGFloat = 11
     static let openWidth: CGFloat = 196
 
     /// Pinned and active projects, in the sidebar's own order.
@@ -36,8 +40,13 @@ struct ProjectRail: View {
         VStack(spacing: 6) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 7) {
+                    if homeEnabled {
+                        HomeMark(shown: home.shown, named: open) { home.shown = true; open = false }
+                        // A line under it: the projects start below.
+                        Hairline().padding(.bottom, 1)
+                    }
                     ForEach(active) { group in
-                        ProjectMark(group: group, shown: group.id == shownID, named: open) { pick(group) }
+                        ProjectMark(group: group, shown: group.id == shownID && !home.shown, named: open) { pick(group) }
                             .contextMenu { GroupMenu(group: group) }
                     }
                     let idle = idle
@@ -67,7 +76,7 @@ struct ProjectRail: View {
                     }
                     if listed {
                         ForEach(idle) { group in
-                            ProjectMark(group: group, shown: group.id == shownID, named: open, quiet: true) { pick(group) }
+                            ProjectMark(group: group, shown: group.id == shownID && !home.shown, named: open, quiet: true) { pick(group) }
                                 .contextMenu { GroupMenu(group: group) }
                         }
                     }
@@ -91,26 +100,29 @@ struct ProjectRail: View {
                     }
                 }
                 .padding(.vertical, 3)
-                .padding(.horizontal, 8)
+                // As far from the window's edge as from the card beside the strip.
+                .padding(.horizontal, Self.inset)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             // The limits ride on the rail, so they show whether or not the session list does.
             UsageView(onRail: true, railOpen: open)
-                .padding(.leading, 8)
+                .padding(.leading, Self.inset)
                 .padding(.bottom, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 2) {
                 VStack(spacing: 2) {
-                    Button { store.showRecentSessions = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                    Button { store.showRecentSessions = true } label: { Image(systemName: "clock.arrow.circlepath").font(.system(size: 13.5, weight: .medium)) }
                         .help("Open recent conversation (⇧⌘O)")
-                    SettingsLink { Image(systemName: "gearshape") }
+                    // Drawn as wide as the limits' ring above them.
+                    SettingsLink { Image(systemName: "gearshape").font(.system(size: 13.5, weight: .medium)) }
                         .help("Settings (⌘,)")
                 }
                 Spacer(minLength: 0)
             }
-            .buttonStyle(IconButtonStyle(size: 26))
+            // As wide as a tile, on the tiles' own axis.
+            .buttonStyle(IconButtonStyle(size: 30))
             .foregroundStyle(.secondary)
-            .padding(.leading, 10)
+            .padding(.leading, Self.inset)
         }
         // Clear of the window's close, minimise and zoom buttons.
         .padding(.top, 34)
@@ -119,7 +131,8 @@ struct ProjectRail: View {
         .frame(maxHeight: .infinity)
         .background(Color.black.opacity(0.18))
         .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .trailing) { Hairline(vertical: true) }
+        // Closed, the strip is the window's own surface and has no edge; open, it lies over the cards.
+        .overlay(alignment: .trailing) { if open { Hairline(vertical: true) } }
         .shadow(color: .black.opacity(open ? 0.45 : 0), radius: 14, x: 8)
         .contentShape(Rectangle())
         // A click on the strip's own empty space stays here and doesn't reach the list under it.
@@ -134,7 +147,8 @@ struct ProjectRail: View {
                     if hover == turn { withAnimation(.easeOut(duration: 0.16)) { open = true } }
                 }
             } else {
-                withAnimation(.easeOut(duration: 0.14)) { open = false }
+                // The idle projects fold back with it: they were listed to pick one from.
+                withAnimation(.easeOut(duration: 0.14)) { open = false; idleListed = false }
             }
         }
     }
@@ -183,7 +197,7 @@ private struct ProjectMark: View {
                         UnevenRoundedRectangle(bottomTrailingRadius: 3, topTrailingRadius: 3, style: .continuous)
                             .fill(.primary.opacity(0.9))
                             .frame(width: 3, height: 20)
-                            .offset(x: -8)
+                            .offset(x: -ProjectRail.inset)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
@@ -313,6 +327,7 @@ final class RailState: ObservableObject {
     /// A project picked on the rail: its window, on the session last on show there. Without
     /// one to go back to, the session that waits for you, else the one last worked in.
     func show(_ group: TabGroup, in store: Store) {
+        HomeState.shared.shown = false
         shownGroupID = group.id
         guard store.selectedGroup?.id != group.id else { return }
         let remembered = last[group.id.uuidString].flatMap { id in group.tabs.first { $0.id.uuidString == id } }
@@ -320,6 +335,43 @@ final class RailState: ObservableObject {
             ?? group.tabs.first { store.runtime[$0.id]?.statusState == .blocked }
             ?? group.tabs.max { (store.runtime[$0.id]?.lastActivity ?? .distantPast) < (store.runtime[$1.id]?.lastActivity ?? .distantPast) }
         if let pick { store.selectedTabID = pick.id }
+    }
+}
+
+/// Home's tile, first on the rail: the screen for every project at once. Its dot says a
+/// session somewhere waits for you.
+struct HomeMark: View {
+    @EnvironmentObject var store: Store
+    let shown: Bool
+    var named = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let waiting = store.allTabs.filter { store.runtime[$0.tab.id]?.statusState == .blocked || store.runtime[$0.tab.id]?.needsAttention == true }.count
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: "house.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(shown ? .primary : .secondary)
+                    .frame(width: 30, height: 30)
+                    // Flat, where the projects' tiles have a sheen: it is a place, not a project.
+                    .background(shape.fill(.primary.opacity(shown ? 0.14 : hovering ? 0.07 : 0)))
+                if named {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Home").font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary).lineLimit(1)
+                        Text(waiting > 0 ? "\(waiting) waiting for you" : "Every project at once")
+                            .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(named ? "" : "Home: what waits for you, what is at work, your to-dos and the week's numbers")
     }
 }
 

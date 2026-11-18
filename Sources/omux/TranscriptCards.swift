@@ -384,7 +384,7 @@ struct QuestionCard: View {
 }
 
 /// Prompts Claude Code draws on screen without a status record: trusting a new folder, confirming a
-/// model or effort switch. Answerable here. While it starts up, the last lines of the screen.
+/// model or effort switch. Answerable here. While it starts up for a prompt that waits, the last line of the screen.
 struct ScreenPromptCard: View {
     @EnvironmentObject var store: Store
     let tabID: UUID
@@ -419,11 +419,20 @@ struct ScreenPromptCard: View {
                 }
             } else if starting, !lines.isEmpty, !ClaudeScreen.showsPrompt(lines) {
                 // Only until its prompt box is up: after that there is nothing left to answer.
-                Card(color: .secondary, title: "Starting Claude Code", icon: "hourglass", subtitle: "Answer in the terminal if it asks something") {
-                    Text(lines.suffix(6).joined(separator: "\n"))
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(6)
+                // One quiet line, what the terminal says last: the box already says it is starting.
+                if let last = lines.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "hourglass").font(.system(size: 9.5, weight: .medium)).foregroundStyle(.tertiary)
+                        Text(last.trimmingCharacters(in: .whitespaces))
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 6)
+                    .help("Claude Code is starting. Answer in the terminal (⌥⌘P) if it asks something.")
                 }
             }
         }

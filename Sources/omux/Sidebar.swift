@@ -118,6 +118,8 @@ struct Sidebar: View {
         return HStack(spacing: 0) {
             if rail { Color.clear.frame(width: ProjectRail.width) }
             listColumn(all: all, skipped: skipped, shown: shown)
+                .padding(.bottom, Glass.gap)
+                .padding(.leading, Glass.gap)
                 // Under the open strip the list takes nothing: not a click, not a hover.
                 .allowsHitTesting(!(rail && railState.open))
                 .environment(\.hoverBlocked, rail && railState.open)
@@ -139,7 +141,7 @@ struct Sidebar: View {
             // The list follows the selection to its project, wherever it was made.
             railState.noteSelection(in: store)
         }
-        .background(Color(nsColor: theme.chrome))
+        .background(Glass.backdrop(theme))
         .contextMenu {
             // Empty-space menu; rows and project headers override it with their own.
             Button("New Project") { store.newGroup() }
@@ -188,6 +190,8 @@ struct Sidebar: View {
             // The list grows into the title bar's safe area when it touches it, which would put it
             // over the buttons and take their clicks. A 1pt gap keeps it below them.
             Spacer(minLength: 0).frame(height: 1)
+            // The card starts under the window's buttons, which lie over this column's corner.
+            VStack(spacing: 0) {
             if rail, let group = shownGroup { RailProjectTitle(group: group) }
 
             // No selection binding: the system's selection is a solid bar. Rows select themselves
@@ -250,6 +254,9 @@ struct Sidebar: View {
                 Hairline()
                 UsageView()
             }
+            }
+            .background(LinearGradient(colors: [.white.opacity(0.07), .white.opacity(0.025)], startPoint: .top, endPoint: .bottom))
+            .glassCard()
         }
     }
 }

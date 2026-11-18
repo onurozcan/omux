@@ -1,8 +1,18 @@
-# omux
+<h1 align="center">omux</h1>
 
-**The native agentic development platform for the Mac: a small Swift terminal that runs fleets of Claude Code and Codex sessions.**
+<h3 align="center">The native agentic development platform for the Mac.</h3>
 
-Written in Swift on SwiftTerm, no Electron, launches instantly. omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
+<p align="center">A small Swift terminal that runs fleets of Claude Code and Codex sessions.<br>
+Written in Swift on SwiftTerm, no Electron, launches instantly.</p>
+
+<p align="center">
+  <a href="https://github.com/onurozcan/omux/releases/latest"><img src="https://img.shields.io/github/v/release/onurozcan/omux" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-native-black" alt="Apple Silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/onurozcan/omux" alt="MIT licence"></a>
+</p>
+
+omux keeps many [Claude Code](https://claude.com/claude-code) and [Codex](https://developers.openai.com/codex/cli) sessions in one window, shows you which one needs you, lets you answer from the sidebar, and gives each session its own branch.
 
 ![omux with the project rail, one project's sessions, a Claude Code conversation in turn cards, and the Changes panel showing a diff](docs/hero.png)
 

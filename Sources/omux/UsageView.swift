@@ -9,7 +9,9 @@ struct UsageView: View {
     @AppStorage(Prefs.usageInterval) private var usageInterval = 300.0
 
     /// Codex sessions show Codex's limits; every other session shows Claude's, as before.
-    private var isCodex: Bool { store.selectedProvider == .codex }
+    private var isCodex: Bool { (provider ?? store.selectedProvider) == .codex }
+    /// Set to show one agent's limits whatever session is selected, as Home does.
+    var provider: SessionProvider?
     private var limits: [UsageMonitor.Limit] { isCodex ? codex.limits : monitor.limits }
 
     /// On the project rail the limits are one small set of nested rings, and lines of text
@@ -21,7 +23,7 @@ struct UsageView: View {
         Group {
             if onRail { rings } else { bars }
         }
-        .onAppear { monitor.start() }
+        .onAppear { if provider != .codex { monitor.start() } }
         .onDisappear { monitor.stop() }
         .onChange(of: usageInterval) { _, seconds in monitor.schedule(every: seconds) }
         .task(id: isCodex) {
@@ -53,8 +55,8 @@ struct UsageView: View {
                 }
                 if limits.isEmpty { Circle().stroke(.primary.opacity(0.1), lineWidth: 2) }
             }
-            .frame(width: 18, height: 18)
-            .padding(6)
+            .frame(width: 16, height: 16)
+            .padding(7)
             .contentShape(Rectangle())
             .onTapGesture { if isCodex { Task { await codex.refreshUsage() } } else { monitor.refresh() } }
             .help(railOpen ? "" : summary)

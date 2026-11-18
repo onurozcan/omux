@@ -61,11 +61,11 @@ struct RightPanel: View {
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 28)
-            .background(Color(nsColor: theme.chrome))
-            // A real hairline rather than an overlay: the split views below extend into any safe
-            // area they touch, and the tab bar sits in the title bar's. The hairline keeps them apart.
-            Hairline()
+            // A real gap rather than nothing: the split views below extend into any safe area
+            // they touch, and the tab bar sits in the title bar's. The point keeps them apart.
+            Color.clear.frame(height: 1)
 
+            Group {
             if let group = store.selectedGroup, group.isRemote, let host = group.host, current == .files {
                 // The folder is on another machine: listed there, and files copied here to be shown.
                 let folder = store.selectedTab?.directory ?? group.directory ?? "~"
@@ -96,9 +96,11 @@ struct RightPanel: View {
                 }
             }
             }
+            }
+            // One surface for every tab, the session's own.
+            .background(Color(nsColor: theme.background))
+            .glassCard()
         }
-        // One surface for every tab, the session's own.
-        .background(Color(nsColor: theme.background))
 
     }
 
