@@ -28,6 +28,10 @@ public struct RecentSession: Identifiable, Hashable {
     public let prompt: String
     public let date: Date
 
+    public init(id: UUID, cwd: String, prompt: String, date: Date) {
+        self.id = id; self.cwd = cwd; self.prompt = prompt; self.date = date
+    }
+
     public var folder: String { cwd.tildeAbbreviated }
 
     /// Short name for a tab: first words of the first prompt.

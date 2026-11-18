@@ -27,6 +27,12 @@ struct OmuxApp: App {
         .handlesExternalEvents(matching: [])
         .commands { AppCommands(store: store) }
 
+        Window("Statistics", id: "stats") {
+            StatsView()
+                .frame(minWidth: 900, minHeight: 600)
+        }
+        .defaultSize(width: 1240, height: 900)
+
         Settings { SettingsView() }
     }
 }
@@ -1053,6 +1059,7 @@ struct PaneDropDelegate: DropDelegate {
 
 struct AppCommands: Commands {
     @ObservedObject var store: Store
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(after: .appInfo) { CheckForUpdatesButton() }
@@ -1112,6 +1119,10 @@ struct AppCommands: Commands {
             Button("Bigger") { Fonts.adjustSize(by: 1) }.keyboardShortcut("+")
             Button("Smaller") { Fonts.adjustSize(by: -1) }.keyboardShortcut("-")
             Button("Default Font Size") { Fonts.adjustSize(by: nil) }.keyboardShortcut("0")
+        }
+        CommandGroup(before: .windowList) {
+            Button("Statistics") { openWindow(id: "stats") }.keyboardShortcut("y", modifiers: [.command, .shift])
+            Divider()
         }
         CommandMenu("Session") {
             Button("Rename") { store.renamingID = store.selectedTabID }.keyboardShortcut("r")
@@ -1253,3 +1264,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert
     }
 }
+
