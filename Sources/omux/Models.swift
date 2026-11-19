@@ -122,6 +122,8 @@ struct TabGroup: Identifiable, Codable, Hashable {
     var forcedIdle = false
     /// Kept at the top of the sidebar, above the projects at work, and never folded into the idle stack.
     var pinned = false
+    /// File name of the project's picture in `ProjectIcons.directory`, shown on the rail in place of its initials.
+    var icon: String?
     /// An SSH destination, as `ssh` takes it ("devbox", "me@10.0.0.5"), when the project lives
     /// on another machine: its sessions run there and keep running with omux closed. `directory`
     /// is then a folder on that machine. nil for a project on this Mac.
@@ -151,6 +153,7 @@ struct TabGroup: Identifiable, Codable, Hashable {
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive)
         forcedIdle = try c.decodeIfPresent(Bool.self, forKey: .forcedIdle) ?? false
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        icon = try c.decodeIfPresent(String.self, forKey: .icon)
         host = try c.decodeIfPresent(String.self, forKey: .host)
         tabs = try c.decodeIfPresent([TabItem].self, forKey: .tabs) ?? []
     }

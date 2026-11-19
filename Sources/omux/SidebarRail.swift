@@ -179,9 +179,7 @@ private struct ProjectMark: View {
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         Button(action: action) {
           HStack(spacing: 9) {
-            Text(Self.initials(group.name))
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(hue)
+            tileFace(hue: hue, shape: shape)
                 .frame(width: 30, height: 30)
                 .background {
                     if shown {
@@ -224,6 +222,15 @@ private struct ProjectMark: View {
         .onHover { hovering = $0 }
         // Open, the strip says all this itself.
         .help(named ? "" : Self.summary(group.name, sessions: group.tabs.count, waiting: waiting, failed: failed, working: working))
+    }
+
+    /// The picture the project was given, else its initials.
+    @ViewBuilder private func tileFace(hue: Color, shape: RoundedRectangle) -> some View {
+        if let picture = ProjectIcons.image(named: group.icon) {
+            Image(nsImage: picture).resizable().scaledToFill().clipShape(shape)
+        } else {
+            Text(Self.initials(group.name)).font(.system(size: 11, weight: .bold)).foregroundStyle(hue)
+        }
     }
 
     /// Six colours a project can have. Which one comes from its name, so it is the same on
