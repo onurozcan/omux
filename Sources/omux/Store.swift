@@ -76,6 +76,8 @@ final class Store: ObservableObject {
     @Published var editingGroupID: UUID?
     @Published var showQuickSwitcher = false
     @Published var showRecentSessions = false
+    /// The statistics page is in place of the session.
+    @Published var showStats = false
     @Published var showRemoteProject = false
     /// What the New Remote Project sheet starts with, when asked for with a machine and folder.
     var remoteDraft: (host: String, folder: String) = ("", "")
@@ -1126,7 +1128,7 @@ final class Store: ObservableObject {
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
     /// report "/Users/me/app".
-    private static func samePath(_ directory: String?, _ path: String) -> Bool {
+    static func samePath(_ directory: String?, _ path: String) -> Bool {
         func normalized(_ p: String) -> String { ((p as NSString).expandingTildeInPath as NSString).standardizingPath }
         return directory.map(normalized) == normalized(path)
     }

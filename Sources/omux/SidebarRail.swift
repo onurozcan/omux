@@ -113,6 +113,9 @@ struct ProjectRail: View {
                 VStack(spacing: 2) {
                     Button { store.showRecentSessions = true } label: { Image(systemName: "clock.arrow.circlepath").font(.system(size: 13.5, weight: .medium)) }
                         .help("Open recent conversation (⇧⌘O)")
+                    Button { store.showStats.toggle() } label: { Image(systemName: "chart.bar.xaxis").font(.system(size: 13.5, weight: .medium)) }
+                        .foregroundStyle(store.showStats ? .primary : .secondary)
+                        .help("Statistics (⇧⌘Y)")
                     // Drawn as wide as the limits' ring above them.
                     SettingsLink { Image(systemName: "gearshape").font(.system(size: 13.5, weight: .medium)) }
                         .help("Settings (⌘,)")

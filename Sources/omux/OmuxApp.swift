@@ -567,6 +567,11 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 // Room for the rail, which lies over this edge so it can open across the session.
                 if railAlone { Color.clear.frame(width: ProjectRail.width) }
+                if store.showStats {
+                    StatsView(theme: theme, showSidebar: $showSidebar)
+                        .frame(minWidth: 360)
+                        .ignoresSafeArea(.container, edges: .top)
+                } else {
                 VStack(spacing: 0) {
                     SessionHeader(theme: theme, showFiles: $showFiles, showSidebar: $showSidebar)
                         // Above the panes: their layout is measured with GeometryReader, which
@@ -602,7 +607,8 @@ struct ContentView: View {
                 }
                 .frame(minWidth: 360)
                 .ignoresSafeArea(.container, edges: .top)
-                if showFiles, !home.shown {
+                }
+                if showFiles, !home.shown, !store.showStats {
                     // As narrow as the sidebar by default; the gutter on its edge resizes it.
                     PanelHandle(width: $panelWidth)
                     RightPanel(root: projectRoot, theme: theme)
@@ -627,7 +633,11 @@ struct ContentView: View {
         .background(WindowChrome())
         .preferredColorScheme(theme.colorScheme)
         .background(Color(nsColor: theme.chrome))
-        .onChange(of: store.selectedTabID, initial: true) { _, _ in RailState.shared.noteSelection(in: store) }
+        .onChange(of: store.selectedTabID, initial: true) { _, _ in
+            RailState.shared.noteSelection(in: store)
+            // Picking a session goes back to it.
+            store.showStats = false
+        }
         .onChange(of: themeName) { _, _ in store.applyAppearance() }
         .onChange(of: fontFamily) { _, _ in store.applyAppearance() }
         .onChange(of: fontSize) { _, _ in store.applyAppearance() }
@@ -1118,6 +1128,10 @@ struct AppCommands: Commands {
             Button("Smaller") { Fonts.adjustSize(by: -1) }.keyboardShortcut("-")
             Button("Default Font Size") { Fonts.adjustSize(by: nil) }.keyboardShortcut("0")
         }
+        CommandGroup(before: .windowList) {
+            Button("Statistics") { store.showStats.toggle() }.keyboardShortcut("y", modifiers: [.command, .shift])
+            Divider()
+        }
         CommandMenu("Session") {
             Button("Rename") { store.renamingID = store.selectedTabID }.keyboardShortcut("r")
             Button("Edit Session…") { store.editingTabID = store.selectedTabID }.keyboardShortcut("i")
@@ -1258,3 +1272,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert
     }
 }
+
