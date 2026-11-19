@@ -54,12 +54,16 @@ final class Store: ObservableObject {
     /// beyond the session, such as it starting to work or asking for attention. See `update`.
     private(set) var runtime: [UUID: TabRuntime] = [:] {
         didSet {
+            runtimeChanged.send(runtime)
             let count = runtime.values.filter(\.needsAttention).count
             guard count != attentionCount else { return }
             attentionCount = count
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
     }
+    /// Every change to any session's live state, for what watches all sessions at once without
+    /// drawing anything (Keep Awake counts the agents at work, subagents included).
+    let runtimeChanged = PassthroughSubject<[UUID: TabRuntime], Never>()
     private var attentionCount = 0
     private var sessions: [UUID: SessionState] = [:]
 

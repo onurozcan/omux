@@ -252,7 +252,11 @@ struct Sidebar: View {
             // On a rail the limits are on the rail itself.
             if !rail {
                 Hairline()
-                UsageView()
+                HStack(alignment: .top, spacing: 0) {
+                    UsageView()
+                    // The Keep Awake cup, beside the limits while it is on.
+                    AwakeIndicator().padding(.top, 6).padding(.trailing, 8)
+                }
             }
             }
             .background(LinearGradient(colors: [.white.opacity(0.07), .white.opacity(0.025)], startPoint: .top, endPoint: .bottom))

@@ -11,7 +11,7 @@ open /Applications/omux.app
 ./build.sh --beta
 ```
 
-builds and installs **omux Beta** next to the release app instead, with its own bundle id, preferences and workspace, so you can try a branch without touching your sessions. On its first launch it copies the release app's settings.
+builds and installs **omux Beta** next to the release app instead, with its own bundle id, preferences and workspace, so you can try a branch without touching your sessions. On its first launch it copies the release app's settings. Keep Awake needs a build signed with a real certificate: the helper only answers an app signed by its own team, so in an ad hoc build it refuses and the lid can't close (a free Apple Development certificate from Xcode › Settings › Accounts is enough). If you switch an installed beta from ad hoc to signed, turn Keep Awake off and on once so the helper is registered again. Also, the release and beta apps shouldn't both keep the Mac awake at once: they share the system's one sleep setting.
 
 ```sh
 ./build.sh --dist
@@ -24,5 +24,7 @@ builds the release that goes on GitHub: signed with the Developer ID certificate
 ```sh
 swift test
 ```
+
+To try Keep Awake's time limit without waiting hours, `defaults write net.pf1.omux.beta keepAwakeLimit 120` makes it 2 minutes in the beta (it counts while the screen is dark, so use View › Screen Off); picking a limit in Settings sets it back.
 
 The opt-in Codex integration checks are described in [codex.md](codex.md#checks). A GitHub Actions workflow builds and tests every pull request.

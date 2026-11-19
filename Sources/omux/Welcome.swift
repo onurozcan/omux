@@ -23,6 +23,7 @@ struct WelcomeSheet: View {
     @State private var codexPath: String??
     @State private var notifications: UNAuthorizationStatus?
     @State private var checkedUsage = false
+    @AppStorage(Prefs.keepAwake) private var keepAwakeOn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -39,6 +40,7 @@ struct WelcomeSheet: View {
                     agents
                     notificationsSection
                     usageSection
+                    keepAwakeSection
                     projects
                 }
                 .padding(20)
@@ -157,6 +159,19 @@ struct WelcomeSheet: View {
             }
         }
         .font(.callout)
+    }
+
+    private var keepAwakeSection: some View {
+        section("Keep awake", "cup.and.saucer") {
+            Text("omux can keep your Mac awake while agents work, even with the lid closed and the Mac in your bag. It stops on its own if the Mac gets hot, the battery falls to 10%, or the time limit passes. Turning it on asks for administrator approval once.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if keepAwakeOn {
+                KeepAwakeHelperStatus()
+            } else {
+                Button("Turn on") { KeepAwake.shared.setEnabled(true) }
+                    .controlSize(.small)
+            }
+        }
     }
 
     private var projects: some View {

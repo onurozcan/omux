@@ -111,6 +111,8 @@ struct ProjectRail: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 2) {
                 VStack(spacing: 2) {
+                    // The Keep Awake cup, under the limits while it is on.
+                    AwakeIndicator().padding(.vertical, 4)
                     Button { store.showRecentSessions = true } label: { Image(systemName: "clock.arrow.circlepath").font(.system(size: 13.5, weight: .medium)) }
                         .help("Open recent conversation (⇧⌘O)")
                     // Drawn as wide as the limits' ring above them.
