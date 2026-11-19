@@ -76,4 +76,26 @@ final class WorkTokensTests: XCTestCase {
         let session = try XCTUnwrap(WorkStats.parse(Data((#"{"type":"user","timestamp":"2026-11-10T09:59:00.000Z","cwd":"/tmp/p","message":{"content":"hi"}}"# + "\n" + big).utf8), id: "y"))
         XCTAssertEqual(session.tokens, WorkTokens(input: 1, output: 2, cacheWrite: 3, cacheRead: 4))
     }
+
+    func testTokensByHourForRangesNotStartingAtMidnight() throws {
+        func line(_ id: String, _ time: String, _ out: Int) -> String {
+            #"{"type":"assistant","timestamp":"\#(time)","cwd":"/tmp/p","message":{"id":"\#(id)","content":[],"usage":{"input_tokens":0,"output_tokens":\#(out)}}}"#
+        }
+        let text = [line("msg_a", "2026-11-10T08:10:00.000Z", 5), line("msg_b", "2026-11-10T10:40:00.000Z", 7)].joined(separator: "\n")
+        let session = try XCTUnwrap(WorkStats.parse(Data(text.utf8), id: "h"))
+        XCTAssertEqual(session.tokenHours.count, 2)
+        let iso = ISO8601DateFormatter()
+        let from = try XCTUnwrap(iso.date(from: "2026-11-10T09:00:00Z"))
+        XCTAssertEqual(session.tokens(from: from, to: from.addingTimeInterval(86400)).output, 7)
+        XCTAssertEqual(session.tokens(from: from.addingTimeInterval(-3600), to: from).output, 5)
+    }
+
+    func testTimePerHour() throws {
+        let iso = ISO8601DateFormatter()
+        let start = try XCTUnwrap(iso.date(from: "2026-11-10T09:30:00Z"))
+        let hours = WorkStats.per(.hour, [WorkSpan(start: start, end: start.addingTimeInterval(3600))])
+        XCTAssertEqual(hours.count, 2)
+        XCTAssertEqual(hours.values.reduce(0, +), 3600)
+        XCTAssertEqual(hours.values.max(), 1800)
+    }
 }

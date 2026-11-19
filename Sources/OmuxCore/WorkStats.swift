@@ -45,9 +45,9 @@ public struct WorkTokens: Codable, Hashable {
     }
 }
 
-/// A conversation's tokens on one day.
+/// A conversation's tokens on one day, or in one hour.
 public struct WorkTokenDay: Codable, Hashable {
-    /// Local midnight.
+    /// Local midnight, or the start of the hour.
     public var day: Date
     public var tokens: WorkTokens
 }
@@ -64,11 +64,13 @@ public struct WorkSession: Codable, Hashable, Identifiable {
     public var spans: [WorkSpan]
     /// Its tokens day by day, its subagents' included.
     public var tokenDays: [WorkTokenDay] = []
+    /// The same hour by hour, for ranges that don't start at midnight.
+    public var tokenHours: [WorkTokenDay] = []
 
     public var tokens: WorkTokens { tokenDays.reduce(WorkTokens()) { $0 + $1.tokens } }
-    /// Its tokens on the days in [from, to).
+    /// Its tokens in the hours in [from, to).
     public func tokens(from: Date, to: Date) -> WorkTokens {
-        tokenDays.reduce(WorkTokens()) { $1.day >= from && $1.day < to ? $0 + $1.tokens : $0 }
+        (tokenHours.isEmpty ? tokenDays : tokenHours).reduce(WorkTokens()) { $1.day >= from && $1.day < to ? $0 + $1.tokens : $0 }
     }
 
     public var start: Date { spans.first?.start ?? .distantPast }
@@ -84,7 +86,7 @@ public enum WorkStats {
     /// A stretch with a single event still took some time.
     public static let minimumSpan: TimeInterval = 60
     /// Bumped when what is read from a transcript changes, so cached readings are redone.
-    public static let cacheVersion = 3
+    public static let cacheVersion = 4
     static let maxPrompts = 40
     static let maxPromptLength = 240
 
@@ -168,12 +170,17 @@ public enum WorkStats {
         guard let cwd, !times.isEmpty else { return nil }
         let calendar = Calendar.current
         var byDay: [Date: WorkTokens] = [:]
-        for (when, tokens) in usage.values { byDay[calendar.startOfDay(for: when), default: WorkTokens()] += tokens }
+        var byHour: [Date: WorkTokens] = [:]
+        for (when, tokens) in usage.values {
+            byDay[calendar.startOfDay(for: when), default: WorkTokens()] += tokens
+            byHour[calendar.dateInterval(of: .hour, for: when)?.start ?? when, default: WorkTokens()] += tokens
+        }
         times.sort()
         let title = customTitle ?? aiTitle ?? prompts.first?.text ?? "Untitled session"
         return WorkSession(id: id, cwd: cwd, title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                            branch: branch, prompts: prompts, spans: spans(times),
-                           tokenDays: byDay.map { WorkTokenDay(day: $0.key, tokens: $0.value) }.sorted { $0.day < $1.day })
+                           tokenDays: byDay.map { WorkTokenDay(day: $0.key, tokens: $0.value) }.sorted { $0.day < $1.day },
+                           tokenHours: byHour.map { WorkTokenDay(day: $0.key, tokens: $0.value) }.sorted { $0.day < $1.day })
     }
 
     /// The message id and usage of a line too big to parse whole: the id comes before the
@@ -291,12 +298,17 @@ public enum WorkStats {
 
     /// How much of `spans` falls on each day (local midnight to midnight).
     public static func perDay(_ spans: [WorkSpan], calendar: Calendar = .current) -> [Date: TimeInterval] {
+        per(.day, spans, calendar: calendar)
+    }
+
+    /// How much of `spans` falls in each day or hour.
+    public static func per(_ unit: Calendar.Component, _ spans: [WorkSpan], calendar: Calendar = .current) -> [Date: TimeInterval] {
         var result: [Date: TimeInterval] = [:]
         for span in spans {
             var cursor = span.start
             while cursor < span.end {
-                let day = calendar.startOfDay(for: cursor)
-                guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+                guard let day = calendar.dateInterval(of: unit, for: cursor)?.start,
+                      let next = calendar.date(byAdding: unit, value: 1, to: day) else { break }
                 let end = min(next, span.end)
                 result[day, default: 0] += end.timeIntervalSince(cursor)
                 cursor = end
