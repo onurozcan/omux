@@ -85,6 +85,16 @@ cp Resources/omux.icns "$APP/Contents/Resources/"
 if command -v node >/dev/null; then node --check Resources/transcript/transcript.js; fi
 cp -R Resources/transcript "$APP/Contents/Resources/transcript"
 cp -R Resources/icons "$APP/Contents/Resources/icons"
+# The session host for other machines, when scripts/build-host.sh has built it: omux
+# installs it over SSH on a machine a project is set to run on.
+if ls build/host/omux-host-linux-*.tar.xz >/dev/null 2>&1; then
+  mkdir -p "$APP/Contents/Resources/host"
+  cp build/host/omux-host-linux-*.tar.xz build/host/omux-host-linux-*.sha256 "$APP/Contents/Resources/host/"
+elif [[ "$MODE" == dist ]]; then
+  echo "No host builds in build/host: a release without them can't set up other machines." >&2
+  echo "Run scripts/fetch-host.sh (GitHub's builds for this commit) first." >&2
+  exit 1
+fi
 for bundle in .build/release/*.bundle; do
   [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
@@ -109,8 +119,13 @@ sign_sparkle() {
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
 
 if [[ "$MODE" == "install" ]]; then
-  # A stable signing identity keeps macOS from re-asking permissions after each rebuild.
-  IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}' || true)
+  # A stable signing identity keeps macOS from re-asking permissions after each rebuild. The
+  # Developer ID certificate is the one releases carry, so a dev build and an update can replace
+  # each other in /Applications without Accessibility, Screen Recording and folder grants
+  # starting over; without it, the Apple Development certificate, then an ad-hoc signature.
+  IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
+  IDENTITY=$(echo "$IDENTITIES" | grep "Developer ID Application" | head -1 | awk '{print $2}')
+  [[ -z "$IDENTITY" ]] && IDENTITY=$(echo "$IDENTITIES" | grep "Apple Development" | head -1 | awk '{print $2}')
   sign_sparkle "${IDENTITY:--}"
   codesign --force --sign "${IDENTITY:--}" "$APP/Contents/Resources/bin/omux" 2>&1 | without "replacing existing signature"
   codesign --force --sign "${IDENTITY:--}" --identifier "$AWAKE_LABEL" "$APP/Contents/MacOS/omux-awake" 2>&1 | without "replacing existing signature"

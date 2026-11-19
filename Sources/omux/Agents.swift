@@ -1,37 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// A Claude Code subagent of one session. Claude Code writes each one to
-/// ~/.claude/projects/<project>/<session>/subagents/agent-<id>.meta.json, with its
-/// transcript next to it as agent-<id>.jsonl.
-struct SubAgent: Identifiable, Equatable {
-    let id: String
-    let type: String
-    let description: String
-    let background: Bool
-    let depth: Int
-    var finished: Bool
-    let started: Date
-    var ended: Date?
-    let transcript: URL
-    var activity: String?
-    var toolCount: Int
-    /// Set from the session's OSC 7501 child records when one matches this agent.
-    var blocked = false
-
-    var elapsedText: String {
-        let seconds = Int(max(0, (ended ?? Date()).timeIntervalSince(started)))
-        return seconds >= 3600 ? "\(seconds / 3600)h \(seconds % 3600 / 60)m" : String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
-
+extension SubAgent {
     var color: Color { blocked ? Palette.needs : finished ? Palette.done : Palette.working }
-
-    /// The tool it's using, for tight spaces: "Grep".
-    var shortActivity: String {
-        if blocked { return "needs you" }
-        if finished { return "done" }
-        return activity?.split(separator: " ").first.map(String.init) ?? "starting"
-    }
 }
 
 struct AgentRef: Equatable {
@@ -60,18 +31,37 @@ final class AgentMonitor: ObservableObject {
     private let scanner = AgentScanner()
     private let queue = DispatchQueue(label: "omux.agents", qos: .utility)
     private var scanning = false
+    /// Something changed while a scan was in flight: scan again as soon as it lands.
+    private var rescanWanted = false
+    /// A safety net behind the watchers, for a file system that doesn't report changes.
     private var timer: Timer?
     /// When an agent without a "finished" mark was first seen with its session idle.
     private var stopped: [String: Date] = [:]
+    /// The folders and files whose changes mean another look: by path.
+    private var watchers: [String: PathWatcher] = [:]
+    private var pollScheduled = false
+    /// Takes a finished agent off the list when its time is up.
+    private var expiry: Task<Void, Never>?
 
     private init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in
             Task { @MainActor in AgentMonitor.shared.poll() }
         }
     }
 
+    /// A look soon, once; the writes behind one event tend to come in a burst.
+    func schedulePoll() {
+        guard !pollScheduled else { return }
+        pollScheduled = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            self.pollScheduled = false
+            self.poll()
+        }
+    }
+
     func poll() {
-        guard !scanning else { return }
+        if scanning { rescanWanted = true; return }
         let store = Store.shared
         var sessions: [AgentScanner.Session] = []
         var children: [UUID: [TabRuntime.StatusChild]] = [:]
@@ -81,7 +71,8 @@ final class AgentMonitor: ObservableObject {
             let rt = store.runtime[entry.tab.id] ?? TabRuntime()
             let active = !rt.exited && (rt.busy || rt.statusState == .working || rt.statusState == .blocked)
             guard active || agents[entry.tab.id] != nil else { continue }
-            sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active))
+            sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active,
+                                  project: store.claudeProjectFolderURL(for: entry.tab.id)))
             children[entry.tab.id] = rt.statusChildren
             if rt.statusState == .working || rt.statusState == .blocked { working.insert(entry.tab.id) }
         }
@@ -89,9 +80,11 @@ final class AgentMonitor: ObservableObject {
         scanning = true
         let scanner = self.scanner
         queue.async {
-            let found = scanner.scan(sessions)
+            let (found, watch) = scanner.scan(sessions)
             DispatchQueue.main.async {
                 self.scanning = false
+                if self.rescanWanted { self.rescanWanted = false; self.schedulePoll() }
+                self.watch(watch)
                 var result: [UUID: [SubAgent]] = [:]
                 let now = Date()
                 for (tab, list) in found {
@@ -115,7 +108,35 @@ final class AgentMonitor: ObservableObject {
                 }
                 self.stopped = self.stopped.filter { now.timeIntervalSince($0.value) < 3600 }
                 if result != self.agents { self.agents = result }
+                self.scheduleExpiry(of: result, now: now)
             }
+        }
+    }
+
+    /// Watches exactly these paths, dropping the rest. A folder that doesn't exist yet is
+    /// skipped; its parent is in the set, and tells when it appears.
+    private func watch(_ paths: Set<String>) {
+        for path in watchers.keys where !paths.contains(path) { watchers[path] = nil }
+        for path in paths where watchers[path] == nil {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else { continue }
+            watchers[path] = PathWatcher(path: path, directory: isDirectory.boolValue) { [weak self] in self?.schedulePoll() }
+        }
+    }
+
+    /// Finished agents leave the list on their own clock, which no file event announces.
+    private func scheduleExpiry(of agents: [UUID: [SubAgent]], now: Date) {
+        expiry?.cancel(); expiry = nil
+        let ends = agents.values.flatMap { $0 }.compactMap { agent -> Date? in
+            guard agent.finished, let ended = agent.ended else { return nil }
+            return ended.addingTimeInterval(agent.background ? AgentScanner.lingerBackground : AgentScanner.lingerForeground)
+        }
+        guard let soonest = ends.min() else { return }
+        let wait = max(0.2, soonest.timeIntervalSince(now) + 0.1)
+        expiry = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled else { return }
+            self.poll()
         }
     }
 
@@ -128,170 +149,8 @@ final class AgentMonitor: ObservableObject {
     }
 }
 
-/// The file work behind AgentMonitor. Used only on the monitor's queue.
-/// Only ever used on AgentMonitor's serial queue.
-private final class AgentScanner: @unchecked Sendable {
-    struct Session {
-        let tab: UUID
-        let session: String
-        let active: Bool
-    }
-
-    private struct Meta: Decodable {
-        var agentType: String?
-        var description: String?
-        var requestShape: String?
-        var spawnDepth: Int?
-        var finished: Bool?
-    }
-
-    private struct Progress {
-        var offset: UInt64 = 0
-        var remainder = Data()
-        var tools = 0
-        var activity: String?
-    }
-
-    /// How long a finished agent stays listed.
-    static let lingerForeground: TimeInterval = 20
-    static let lingerBackground: TimeInterval = 120
-
-    private var folders: [String: URL] = [:]
-    private var misses: [String: Date] = [:]
-    private var progress: [String: Progress] = [:]
-
-    func scan(_ sessions: [Session]) -> [UUID: [SubAgent]] {
-        var result: [UUID: [SubAgent]] = [:]
-        for session in sessions {
-            guard let folder = folder(for: session.session) else { continue }
-            let agents = agents(in: folder, active: session.active)
-            if !agents.isEmpty { result[session.tab] = agents }
-        }
-        return result
-    }
-
-    /// The session's subagents folder; it appears with the first subagent.
-    private func folder(for session: String) -> URL? {
-        if let folder = folders[session] { return folder }
-        if let miss = misses[session], Date().timeIntervalSince(miss) < 3 { return nil }
-        let projects = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/projects")
-        for name in (try? FileManager.default.contentsOfDirectory(atPath: projects.path)) ?? [] {
-            let folder = projects.appendingPathComponent(name).appendingPathComponent(session).appendingPathComponent("subagents")
-            if FileManager.default.fileExists(atPath: folder.path) {
-                folders[session] = folder
-                return folder
-            }
-        }
-        misses[session] = Date()
-        return nil
-    }
-
-    private func agents(in folder: URL, active: Bool) -> [SubAgent] {
-        let fm = FileManager.default
-        let now = Date()
-        var agents: [SubAgent] = []
-        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] where name.hasSuffix(".meta.json") {
-            let id = String(name.dropLast(".meta.json".count))
-            let metaURL = folder.appendingPathComponent(name)
-            let transcript = folder.appendingPathComponent(id + ".jsonl")
-            let metaDate = modified(metaURL) ?? .distantPast
-            let transcriptDate = modified(transcript) ?? metaDate
-            // Old agents are skipped by date alone, without opening their files: a running
-            // agent keeps writing its transcript, a finished one only lingers briefly.
-            let recentlyWritten = now.timeIntervalSince(transcriptDate) < 1800
-            guard now.timeIntervalSince(metaDate) < Self.lingerBackground || (active && recentlyWritten) else { continue }
-            guard let data = fm.contents(atPath: metaURL.path), let meta = try? JSONDecoder().decode(Meta.self, from: data) else { continue }
-            let finished = meta.finished ?? false
-            let background = meta.requestShape == "background"
-            if finished {
-                let linger = background ? Self.lingerBackground : Self.lingerForeground
-                guard now.timeIntervalSince(metaDate) < linger else { continue }
-            } else {
-                guard active, recentlyWritten else { continue }
-            }
-            var state = progress[transcript.path] ?? Progress()
-            read(transcript, into: &state)
-            progress[transcript.path] = state
-            let started = (try? fm.attributesOfItem(atPath: transcript.path)[.creationDate] as? Date) ?? metaDate
-            agents.append(SubAgent(
-                id: id,
-                type: meta.agentType ?? "agent",
-                description: meta.description ?? id,
-                background: background,
-                depth: max(1, meta.spawnDepth ?? 1),
-                finished: finished,
-                started: started,
-                ended: finished ? metaDate : nil,
-                transcript: transcript,
-                activity: state.activity,
-                toolCount: state.tools
-            ))
-        }
-        return agents.sorted { $0.started < $1.started }
-    }
-
-    private func modified(_ url: URL) -> Date? {
-        try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date
-    }
-
-    /// Reads only what was appended since last time, counting tool calls.
-    private func read(_ url: URL, into state: inout Progress) {
-        for object in Transcript.newObjects(url, offset: &state.offset, remainder: &state.remainder) {
-            guard object["type"] as? String == "assistant",
-                  let content = (object["message"] as? [String: Any])?["content"] as? [[String: Any]] else { continue }
-            for item in content where item["type"] as? String == "tool_use" {
-                state.tools += 1
-                state.activity = Transcript.summary(name: item["name"] as? String ?? "Tool", input: item["input"] as? [String: Any] ?? [:])
-            }
-        }
-    }
-}
-
 // MARK: - Transcript
 
-enum Transcript {
-    /// JSON objects for the complete lines appended after `offset`; a partial last line
-    /// waits in `remainder` for the next read.
-    static func newObjects(_ url: URL, offset: inout UInt64, remainder: inout Data) -> [[String: Any]] {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
-        defer { try? handle.close() }
-        guard let size = try? handle.seekToEnd(), size > offset else { return [] }
-        try? handle.seek(toOffset: offset)
-        let chunk = handle.readData(ofLength: Int(min(size - offset, 64 << 20)))
-        offset += UInt64(chunk.count)
-        let data = remainder + chunk
-        guard let end = data.lastIndex(of: 0x0A) else { remainder = data; return [] }
-        remainder = Data(data[data.index(after: end)...])
-        return data[..<end].split(separator: 0x0A).compactMap {
-            try? JSONSerialization.jsonObject(with: Data($0)) as? [String: Any]
-        }
-    }
-
-    /// "Grep "useTheme"", "Read src/app.tsx", "Bash npm test".
-    static func summary(name: String, input: [String: Any]) -> String {
-        var detail = ""
-        if let command = input["command"] as? String {
-            detail = command
-        } else if let path = (input["file_path"] ?? input["notebook_path"]) as? String {
-            detail = (path as NSString).lastPathComponent
-        } else if let pattern = input["pattern"] as? String {
-            detail = "\"\(pattern)\""
-        } else if let other = ["url", "query", "description", "prompt", "path"].lazy.compactMap({ input[$0] as? String }).first {
-            detail = other
-        }
-        detail = detail.replacingOccurrences(of: "\n", with: " ")
-        if detail.count > 90 { detail = String(detail.prefix(90)) + "…" }
-        return detail.isEmpty ? name : "\(name) \(detail)"
-    }
-
-    static func text(of content: Any?) -> String {
-        if let string = content as? String { return string }
-        if let items = content as? [[String: Any]] {
-            return items.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: "\n")
-        }
-        return ""
-    }
-}
 
 struct TranscriptEntry: Identifiable, Equatable {
     enum Kind { case task, text, tool }
@@ -311,16 +170,22 @@ final class AgentTranscript: ObservableObject {
     private var remainder = Data()
     private var toolRows: [String: Int] = [:]
     private var loading = false
+    /// The file changed while a read was in flight: read again as soon as it lands.
+    private var reloadWanted = false
     private var timer: Timer?
 
     private enum Event {
         case task(String), text(String), tool(id: String, title: String), result(id: String, text: String, error: Bool)
     }
 
+    /// Wakes on every append; the timer is a safety net behind it.
+    private var watcher: PathWatcher?
+
     init(url: URL) {
         self.url = url
         load()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+        watcher = PathWatcher(path: url.path) { [weak self] in self?.load() }
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.load() }
         }
     }
@@ -328,7 +193,7 @@ final class AgentTranscript: ObservableObject {
     deinit { timer?.invalidate() }
 
     func load() {
-        guard !loading else { return }
+        if loading { reloadWanted = true; return }
         loading = true
         let url = self.url
         var offset = self.offset
@@ -391,6 +256,7 @@ final class AgentTranscript: ObservableObject {
                 self.remainder = rest
                 self.apply(found)
                 self.loading = false
+                if self.reloadWanted { self.reloadWanted = false; self.load() }
             }
         }
     }
@@ -461,7 +327,7 @@ struct AgentRows: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(
-                            store.openAgent?.agentID == agent.id ? Color.accentColor.opacity(0.22) : .clear,
+                            store.openAgent?.agentID == agent.id ? Color.accent.opacity(0.22) : .clear,
                             in: RoundedRectangle(cornerRadius: 4)
                         )
                         .contentShape(Rectangle())
@@ -519,6 +385,8 @@ struct AgentList: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var monitor = AgentMonitor.shared
     let tabID: UUID
+    /// In the right panel's Agents tab the list takes the panel's width; in a popover, its own.
+    var inPanel = false
     let dismiss: () -> Void
 
     var body: some View {
@@ -549,7 +417,8 @@ struct AgentList: View {
                 .padding(.top, 4)
         }
         .padding(8)
-        .frame(width: 400)
+        .frame(width: inPanel ? nil : 400)
+        .frame(maxWidth: inPanel ? .infinity : nil, alignment: .leading)
     }
 
     private func row(_ agent: SubAgent) -> some View {
@@ -583,7 +452,7 @@ struct AgentList: View {
     }
 }
 
-/// A subagent's transcript, shown where the file preview usually is.
+/// A subagent's transcript, shown in the right panel's Agents tab.
 struct AgentTranscriptView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var monitor = AgentMonitor.shared
@@ -595,7 +464,10 @@ struct AgentTranscriptView: View {
         _transcript = StateObject(wrappedValue: AgentTranscript(url: ref.transcript))
     }
 
-    var body: some View {
+    var body: some View { WithRuntime(ref.tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let live = monitor.agents[ref.tabID]?.first { $0.id == ref.agentID }
         VStack(spacing: 0) {
             HStack(spacing: 8) {
@@ -616,13 +488,9 @@ struct AgentTranscriptView: View {
                     PermissionButtons(tabID: ref.tabID)
                 }
                 Button { store.openAgent = nil } label: { Image(systemName: "xmark") }
-                    .help("Close transcript")
+                    .help("Back to the agents")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .panelHeader()
 
             ScrollViewReader { proxy in
                 ScrollView {

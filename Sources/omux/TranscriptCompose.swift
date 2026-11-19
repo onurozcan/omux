@@ -38,6 +38,10 @@ struct ComposeBox: View {
     let send: (String) -> Void
     /// The field took focus: the pane around it should become the selected one.
     var onFocus: () -> Void = {}
+    /// The box serves several panes: it says which one it writes to.
+    var addressed = false
+    /// Reorders, removes or sends the queue: "up", "down", "remove" or "now", and the prompt's block.
+    var onQueue: (String, Int) -> Void = { _, _ in }
 
     @State private var draft = ""
     @State private var suggestions: [Suggestion] = []
@@ -50,6 +54,8 @@ struct ComposeBox: View {
     @State private var files: FileIndex?
     @State private var saveWork: DispatchWorkItem?
     @State private var attachments: [URL] = []
+    /// Attached files are on their way to the session's machine; the message goes when they are there.
+    @State private var uploading = false
     @State private var dropping = false
     /// ⌘V with an image or files on the clipboard attaches them; the field takes text as usual.
     @State private var pasteMonitor: Any?
@@ -63,8 +69,9 @@ struct ComposeBox: View {
         let insert: String
     }
 
-    /// Full model ids, so the choice is exact; Claude Code takes them as `/model <id>`.
-    static let claudeModels = ["default", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "opusplan"]
+    /// Full model ids, so the choice is exact; Claude Code takes them as `/model <id>`. Read from
+    /// the installed Claude Code, so a new model is listed the day it learns of it.
+    @ObservedObject private var claudeModels = ClaudeModels.shared
     static let efforts = ["auto", "low", "medium", "high", "xhigh", "max"]
     /// Claude Code's permission modes, in the order shift-tab cycles them.
     static let modes = ["default", "accept edits", "plan", "auto"]
@@ -77,10 +84,14 @@ struct ComposeBox: View {
         return String(draft[draft.index(after: last)...])
     }
 
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let empty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let runtime = store.runtime[tabID] ?? TabRuntime()
         VStack(alignment: .leading, spacing: 0) {
+            queueShelf(runtime)
             if !suggestions.isEmpty { suggestionList }
             if !attachments.isEmpty { attachmentRow }
             TextField(placeholder, text: $draft, axis: .vertical)
@@ -102,11 +113,12 @@ struct ComposeBox: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 Button { attach() } label: { Image(systemName: "paperclip") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle(size: 24))
                     .foregroundStyle(.secondary)
                     .help("Attach files: their paths go into the prompt. Pasting an image attaches it too.")
+                if addressed { RecipientChip(tabID: tabID, name: name) }
                 if provider != .custom { modelChip }
                 if provider == .claude { effortChip }
                 if provider == .claude, let mode {
@@ -114,8 +126,9 @@ struct ComposeBox: View {
                         ForEach(Self.modes, id: \.self) { name in
                             Toggle(name, isOn: Binding(get: { mode == name }, set: { if $0 { cycle(to: name) } }))
                         }
-                    } label: { chip(mode) }
-                    .menuStyle(.borderlessButton)
+                    } label: { ChipLabel(text: Self.modeName(mode), icon: Self.modeIcon(mode)) }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
                     .menuIndicator(.hidden)
                     .fixedSize()
                     .help("Permission mode: default, accept edits, plan, or auto. Changed with shift-tab, as in the terminal.")
@@ -144,7 +157,7 @@ struct ComposeBox: View {
                     .help("Interrupt the agent (⌘.)")
                 }
                 Button { dictate() } label: { Image(systemName: "mic") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle(size: 24))
                     .foregroundStyle(.secondary)
                     .help("Dictate into the message")
                 Button(action: submit) {
@@ -152,22 +165,23 @@ struct ComposeBox: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(empty ? Color.secondary : Color.white)
                         .frame(width: 26, height: 26)
-                        .background(empty ? Color.primary.opacity(0.08) : Color.accentColor, in: Circle())
+                        .background(empty ? Color.primary.opacity(0.08) : Color.accent, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .disabled(empty)
                 .keyboardShortcut(.return, modifiers: .command)
                 .help("Send (⏎ or ⌘⏎)")
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 9)
+            .padding(.bottom, 9)
         }
-        .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(dropping ? Color.accentColor : focused ? Color.accentColor.opacity(0.7) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
+        .background(.primary.opacity(dropping ? 0.09 : 0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(dropping ? Color.accent : focused ? Color.accent.opacity(0.55) : .primary.opacity(0.12), lineWidth: dropping ? 1.5 : 1))
         .animation(.easeOut(duration: 0.12), value: dropping)
-        .padding(12)
-        .background(Color(nsColor: theme.chrome))
-        .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        // No band of its own behind it: the box stands on the panel it belongs to.
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
         .onPasteCommand(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff]) { providers in take(providers) }
         .onDrop(of: [UTType.fileURL, UTType.image, UTType.png, UTType.tiff], isTargeted: $dropping) { providers in take(providers); return true }
         .onAppear {
@@ -182,7 +196,7 @@ struct ComposeBox: View {
             // would otherwise fight over it and move the selection to the last one.
             if store.selectedTabID == tabID { focused = true }
             commands.load(provider: provider, project: projectDirectory)
-            files = FileIndex.shared(for: projectDirectory)
+            files = machine.map { FileIndex.shared(for: remoteDirectory, host: $0) } ?? FileIndex.shared(for: projectDirectory)
         }
         .onChange(of: store.selectedTabID) { _, id in
             if id == tabID, !focused { focused = true }
@@ -225,6 +239,14 @@ struct ComposeBox: View {
         store.tab(tabID)?.directory.map { ($0 as NSString).expandingTildeInPath } ?? store.runtime[tabID]?.cwd ?? NSHomeDirectory()
     }
 
+    /// The machine this session runs on, when it isn't this Mac.
+    private var machine: String? { store.group(containing: tabID).flatMap { $0.isRemote ? $0.host : nil } }
+
+    /// The session's folder there, as the project names it: "~" is that machine's home.
+    private var remoteDirectory: String {
+        store.tab(tabID)?.directory ?? store.group(containing: tabID)?.directory ?? "~"
+    }
+
     // MARK: Chips
 
     /// The model in force: chosen here, else the project's, else what the transcript shows, else Claude Code's own default.
@@ -248,7 +270,7 @@ struct ComposeBox: View {
         let codexModels = CodexModels.list()
         return Menu {
             Section {
-                let listed = Self.claudeModels + (provider == .claude ? (current.map { Self.claudeModels.contains($0) ? [] : [$0] } ?? []) : [])
+                let listed = claudeModels.list + (provider == .claude ? (current.map { claudeModels.list.contains($0) ? [] : [$0] } ?? []) : [])
                 ForEach(listed, id: \.self) { id in
                     Toggle(isOn: Binding(get: { provider == .claude && (current == id || (id == "default" && current == nil)) }, set: { if $0 { pick(.claude, model: id) } })) {
                         Text(id == "default" ? "Default" : id)
@@ -273,9 +295,11 @@ struct ComposeBox: View {
             }
         } label: {
             // Plain, like the other chips; the marks live in the menu.
-            chip(isAgent ? (current.map { provider == .codex ? Self.codexName($0, in: codexModels) : TranscriptPanel.shortModel($0) } ?? (provider == .codex ? (codexModels.first { $0.isDefault }?.name ?? "Model") : "Model")) : "Agent")
+            ChipLabel(text: isAgent ? (current.map { provider == .codex ? Self.codexName($0, in: codexModels) : TranscriptPanel.shortModel($0) } ?? (provider == .codex ? (codexModels.first { $0.isDefault }?.name ?? "Model") : "Model")) : "Choose agent",
+                      icon: "sparkle", logo: isAgent ? ProviderLogo.image(for: provider) : nil)
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help(isAgent ? "Agent and model for this session. A model of the other agent switches the session to it." : "Start Claude Code or Codex in this session with the model you pick.")
@@ -331,9 +355,10 @@ struct ComposeBox: View {
                 Toggle(level, isOn: Binding(get: { current == level }, set: { if $0 { pickEffort(level) } }))
             }
         } label: {
-            chip("effort " + current)
+            ChipLabel(text: Self.effortName(current), icon: "dial.medium")
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Thinking effort for this session (/effort)")
@@ -350,13 +375,76 @@ struct ComposeBox: View {
         send("/effort \(level)")
     }
 
-    private func chip(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(.primary.opacity(0.08), in: Capsule())
+    /// "auto" → "Auto effort", "xhigh" → "X-high effort".
+    static func effortName(_ level: String) -> String {
+        (level == "xhigh" ? "X-high" : level.prefix(1).uppercased() + level.dropFirst()) + " effort"
+    }
+
+    static func modeName(_ mode: String) -> String {
+        switch mode {
+        case "default": "Ask first"
+        case "accept edits": "Accept edits"
+        case "plan": "Plan"
+        case "auto": "Auto mode"
+        default: mode.prefix(1).uppercased() + mode.dropFirst()
+        }
+    }
+
+    static func modeIcon(_ mode: String) -> String {
+        switch mode {
+        case "accept edits": "pencil"
+        case "plan": "list.bullet"
+        case "auto": "bolt.fill"
+        default: "hand.raised"
+        }
+    }
+
+    // MARK: The queue
+
+    /// Prompts sent while the agent works wait here, on top of the box they were typed in,
+    /// until it takes them.
+    @ViewBuilder private func queueShelf(_ runtime: TabRuntime) -> some View {
+        let items = model.blocks.filter(\.inQueue)
+        if !items.isEmpty, runtime.statusState == .working || runtime.statusState == .blocked {
+            // Claude Code's queue can be changed while it works; Codex takes its own at the turn's end.
+            let editable = provider == .claude && runtime.statusState == .working
+            VStack(spacing: 1) {
+                HStack(spacing: 8) {
+                    Text("Queued · \(items.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(provider == .claude ? "read after the running step, in order" : "sent when the turn ends")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if editable, items.contains(where: { $0.pending == .queued }) {
+                        Button("Send now") { onQueue("now", items[0].id) }
+                            .buttonStyle(PromptButtonStyle())
+                            .scaleEffect(0.88, anchor: .trailing)
+                            .help("Interrupt the turn and send the queue now (⌃X ⌃S)")
+                    }
+                }
+                .padding(.leading, 8)
+                .padding(.trailing, 4)
+                .frame(height: 24)
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, block in
+                    QueueRow(number: index + 1, text: block.text, first: index == 0, last: index == items.count - 1,
+                             editable: editable && block.pending == .queued) { action in
+                        if action == "edit" {
+                            // Back into the box to be changed; sending it queues it again.
+                            onQueue("remove", block.id)
+                            draft = draft.isEmpty ? block.text : draft + "\n" + block.text
+                            focused = true
+                        } else {
+                            onQueue(action, block.id)
+                        }
+                    }
+                }
+            }
+            .padding(4)
+            Hairline()
+        }
     }
 
     // MARK: Suggestions
@@ -371,13 +459,13 @@ struct ComposeBox: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(height: 24)
-                .background(index == selected ? Color.accentColor.opacity(0.18) : .clear)
+                .background(index == selected ? Color.accent.opacity(0.18) : .clear)
                 .contentShape(Rectangle())
                 .onTapGesture { selected = index; _ = accept() }
             }
         }
         .padding(.vertical, 4)
-        .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+        .overlay(alignment: .bottom) { Hairline() }
     }
 
     private func refreshSuggestions() {
@@ -433,10 +521,34 @@ struct ComposeBox: View {
 
     private func submit() {
         if accept() { return }
-        var text = draft
-        // Attached files go after the message as paths, the way a drop onto the terminal lands.
-        let paths = attachments.map { $0.path.contains(" ") ? "\"\($0.path)\"" : $0.path }
-        if !paths.isEmpty { text = (text.trimmingCharacters(in: .whitespacesAndNewlines) + " " + paths.joined(separator: " ")).trimmingCharacters(in: .whitespaces) }
+        let draft = draft
+        func message(_ paths: [String]) -> String {
+            // Attached files go after the message as paths, the way a drop onto the terminal lands.
+            let quoted = paths.map { $0.contains(" ") ? "\"\($0)\"" : $0 }
+            return quoted.isEmpty ? draft : (draft.trimmingCharacters(in: .whitespacesAndNewlines) + " " + quoted.joined(separator: " ")).trimmingCharacters(in: .whitespaces)
+        }
+        // An agent on another machine can't read a file on this one: what is attached is
+        // copied there first, and it is the copy's path that goes into the prompt.
+        if let machine, !attachments.isEmpty {
+            guard !uploading else { return }
+            uploading = true
+            let files = attachments
+            Task {
+                var paths: [String] = []
+                for file in files {
+                    guard let path = await RemoteMachines.upload(file, to: machine) else {
+                        uploading = false
+                        Notices.shared.post("Couldn't send \(file.lastPathComponent) to \(machine)", detail: "The message wasn't sent. Check the connection and try again.", isError: true)
+                        return
+                    }
+                    paths.append(path)
+                }
+                uploading = false
+                send(message(paths))
+            }
+            return
+        }
+        let text = message(attachments.map(\.path))
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // The panel clears the draft, attachments included, once the message went out; that
         // may be now, or once the agent is up or a dialog answered.
@@ -619,7 +731,18 @@ struct CommandIndex {
         .init(name: "plan", detail: "Plan before editing"), .init(name: "review", detail: "Review a pull request"),
         .init(name: "resume", detail: "Resume a conversation"), .init(name: "rewind", detail: "Go back to an earlier turn"),
         .init(name: "context", detail: "What's in the context window"), .init(name: "usage", detail: "Plan limits"),
-    ]
+        .init(name: "remote-control", detail: "Continue this session from claude.ai or your phone"),
+        .init(name: "add-dir", detail: "Let the agent work in another folder too"), .init(name: "fast", detail: "Faster output, on or off"),
+        .init(name: "code-review", detail: "Review the current changes for bugs"), .init(name: "security-review", detail: "Security review of the pending changes"),
+        .init(name: "simplify", detail: "Clean up the changed code"), .init(name: "pr-comments", detail: "Read a pull request's comments"),
+        .init(name: "loop", detail: "Repeat a prompt or command on an interval"), .init(name: "schedule", detail: "Scheduled cloud agents"),
+        .init(name: "output-style", detail: "How replies are written · opens in the terminal"), .init(name: "export", detail: "Save the conversation · opens in the terminal"),
+        .init(name: "tasks", detail: "Background tasks · opens in the terminal"), .init(name: "todos", detail: "The agent's to-do list · opens in the terminal"),
+        .init(name: "ide", detail: "Connect an editor · opens in the terminal"), .init(name: "statusline", detail: "Set up the status line"),
+        .init(name: "terminal-setup", detail: "Key bindings for the terminal"), .init(name: "vim", detail: "Vim keys in the prompt"),
+        .init(name: "release-notes", detail: "What's new in Claude Code"), .init(name: "feedback", detail: "Send feedback to Anthropic"),
+        .init(name: "upgrade", detail: "Change plan"), .init(name: "login", detail: "Sign in · opens in the terminal"), .init(name: "logout", detail: "Sign out"),
+    ] + machines
     static let codex: [Command] = [
         .init(name: "mcp", detail: "MCP servers · overview here"), .init(name: "skills", detail: "Skills · overview here"),
         .init(name: "hooks", detail: "Hooks · overview here"), .init(name: "permissions", detail: "Approvals and sandbox · overview here"),
@@ -627,6 +750,12 @@ struct CommandIndex {
         .init(name: "new", detail: "Start a new thread"), .init(name: "init", detail: "Write an AGENTS.md"), .init(name: "compact", detail: "Summarize the thread"),
         .init(name: "diff", detail: "Show the diff"), .init(name: "mention", detail: "Mention a file"), .init(name: "status", detail: "Session status"),
         .init(name: "quit", detail: "Exit Codex"),
+    ] + machines
+    /// omux's own, about the machines projects run on; they never reach the agent.
+    static let machines: [Command] = [
+        .init(name: "machines", detail: "Machines projects run on · overview here"),
+        .init(name: "machine", detail: "How this session's machine is · overview here"),
+        .init(name: "remote", detail: "New project on another machine: /remote devbox ~/code/app"),
     ]
 
     mutating func load(provider: SessionProvider, project: String) {
@@ -642,8 +771,34 @@ struct CommandIndex {
                 list.append(.init(name: name, detail: label))
             }
         }
+        list += Self.pluginCommands(project: project)
         var seen: Set<String> = []
         items = list.filter { seen.insert($0.name).inserted }
+    }
+
+    /// Commands and skills of installed plugins, as Claude Code names them: "plugin:command".
+    /// A plugin installed for one project counts only in that project.
+    static func pluginCommands(project: String, registry: String = NSHomeDirectory() + "/.claude/plugins/installed_plugins.json") -> [Command] {
+        guard let data = FileManager.default.contents(atPath: registry),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let plugins = object["plugins"] as? [String: Any] else { return [] }
+        let here = ((project as NSString).expandingTildeInPath as NSString).standardizingPath
+        var found: [Command] = []
+        for key in plugins.keys.sorted() {
+            let plugin = String(key.split(separator: "@").first ?? Substring(key))
+            for install in plugins[key] as? [[String: Any]] ?? [] {
+                guard let path = install["installPath"] as? String else { continue }
+                if install["scope"] as? String == "project" {
+                    guard let owner = install["projectPath"] as? String, here == owner || here.hasPrefix(owner + "/") else { continue }
+                }
+                for name in markdownNames(in: path + "/commands") { found.append(.init(name: "\(plugin):\(name)", detail: "\(plugin) plugin")) }
+                for name in ((try? FileManager.default.contentsOfDirectory(atPath: path + "/skills")) ?? []).sorted()
+                where FileManager.default.fileExists(atPath: "\(path)/skills/\(name)/SKILL.md") {
+                    found.append(.init(name: "\(plugin):\(name)", detail: "\(plugin) plugin skill"))
+                }
+            }
+        }
+        return found
     }
 
     /// "review.md" → "review", "git/commit.md" → "git:commit".
@@ -671,12 +826,16 @@ final class FileIndex: @unchecked Sendable {
     private static let skipped: Set<String> = ["node_modules", ".git", ".build", "build", "dist", ".next", "target", "DerivedData", "Pods", ".worktrees", "vendor", ".venv", "venv", "__pycache__"]
     private static let maxAge: TimeInterval = 120
 
-    private init(root: String) { self.root = root }
+    /// The machine the folder is on, when it isn't this Mac.
+    let host: String?
 
-    static func shared(for root: String) -> FileIndex {
+    private init(root: String, host: String? = nil) { self.root = root; self.host = host }
+
+    static func shared(for root: String, host: String? = nil) -> FileIndex {
         registry.lock(); defer { registry.unlock() }
-        let index = indexes[root] ?? FileIndex(root: root)
-        indexes[root] = index
+        let key = host.map { $0 + ":" + root } ?? root
+        let index = indexes[key] ?? FileIndex(root: root, host: host)
+        indexes[key] = index
         index.refreshIfStale()
         return index
     }
@@ -688,6 +847,14 @@ final class FileIndex: @unchecked Sendable {
         loading = true
         lock.unlock()
         let root = root
+        if let host {
+            // A folder on another machine is listed there, in one go.
+            Task.detached { [self] in
+                let found = await RemoteMachines.files(on: host, in: root)
+                take(found, keepingWhatIsThereIfEmpty: true)
+            }
+            return
+        }
         DispatchQueue.global(qos: .utility).async { [self] in
             var found: [String] = []
             let url = URL(fileURLWithPath: root)
@@ -706,6 +873,16 @@ final class FileIndex: @unchecked Sendable {
             loading = false
             lock.unlock()
         }
+    }
+
+    /// What a listing found. A listing from another machine that came back empty, as when it
+    /// couldn't be reached, leaves what was known in place.
+    private func take(_ found: [String], keepingWhatIsThereIfEmpty keep: Bool) {
+        lock.lock()
+        if !found.isEmpty || !keep || paths.isEmpty { paths = found }
+        loadedAt = Date()
+        loading = false
+        lock.unlock()
     }
 
     func search(_ query: String, limit: Int) -> [String] {
@@ -787,5 +964,48 @@ private struct AttachmentChip: View {
                 return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
             }.value
         }
+    }
+}
+
+/// One prompt waiting in the queue: its place, its text, and on hover what can be done with it.
+private struct QueueRow: View {
+    let number: Int
+    let text: String
+    let first: Bool
+    let last: Bool
+    let editable: Bool
+    let act: (String) -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("\(number)")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .frame(width: 14, alignment: .trailing)
+            Text(text.replacingOccurrences(of: "\n", with: " "))
+                .font(.system(size: 12))
+                .foregroundStyle(.primary.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            if editable, hovering {
+                HStack(spacing: 0) {
+                    Button { act("up") } label: { Image(systemName: "arrow.up") }.disabled(first).help("Earlier")
+                    Button { act("down") } label: { Image(systemName: "arrow.down") }.disabled(last).help("Later")
+                    Button { act("edit") } label: { Image(systemName: "pencil") }.help("Take it back into the box to change it")
+                    Button { act("remove") } label: { Image(systemName: "xmark") }.help("Remove from the queue")
+                }
+                .buttonStyle(IconButtonStyle(size: 20))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 4)
+        .frame(height: 26)
+        .background(.primary.opacity(hovering ? 0.05 : 0), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .help(text)
     }
 }

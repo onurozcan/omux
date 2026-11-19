@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class CheckLogTests: XCTestCase {
     private func job(_ link: String) -> (repo: String, id: String)? {

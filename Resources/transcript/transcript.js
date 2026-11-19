@@ -311,9 +311,9 @@
   function userHTML(block) {
     if (block.pending === 'removed' || (isQueued(block) && nestQueued)) return `<div class="queued-slot" hidden></div>`;
     const images = (block.images || []).map(src => `<img class="thumb" src="${src}" alt="pasted image">`).join('');
-    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>`
-      : block.pending === 'sent' ? `<div class="pending"><span class="dot pulse"></span>Sending</div>` : '';
-    return `<div class="user${block.pending ? ' is-pending' : ''}">` +
+    // A prompt just sent looks like any other prompt; its record replaces it in place when it lands.
+    const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>` : '';
+    return `<div class="user${block.pending && block.pending !== 'sent' ? ' is-pending' : ''}">` +
       `<div class="actions"><button type="button" data-act="quote">Quote</button><button type="button" data-act="resend">Send again</button><button type="button" data-act="copy">Copy</button></div>` +
       `${images ? `<div class="thumbs">${images}</div>` : ''}` +
       `<div class="bubble">${esc(block.text)}</div>${state || (block.time ? `<div class="time">${timeOf(block.time)}</div>` : '')}</div>`;
@@ -448,8 +448,12 @@
         const verb = last && last.kind === 'tools' ? 'Working' : (last && last.kind === 'user' ? 'Thinking' : 'Working');
         return `<div class="status working"><span class="dot pulse" style="background: var(--blue); margin-top: 5px"></span><div class="grow"><div class="title"><span>${verb}<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></span><span class="elapsed" data-since="${s.since || ''}"></span></div>${s.detail ? `<div class="detail">${esc(s.detail)}</div>` : ''}${s.live ? `<div class="live">${markdown(s.live)}<span class="caret"></span></div>` : ''}</div></div>`;
       }
-      case 'done':
-        return `<div class="status done"><span class="dot" style="background: var(--green)"></span><span>Done</span>${s.workedFor ? `<span class="worked">· worked for ${esc(s.workedFor)}</span>` : ''}</div>`;
+      case 'done': {
+        const worked = s.workedFor ? `<span class="worked">· worked for ${esc(s.workedFor)}</span>` : '';
+        // The reply read off the screen, until its record arrives and takes its place.
+        if (s.live) return `<div class="status done"><span class="dot" style="background: var(--green); margin-top: 5px"></span><div class="grow"><div class="title"><span>Done</span>${worked}</div><div class="live">${markdown(s.live)}</div></div></div>`;
+        return `<div class="status done"><span class="dot" style="background: var(--green)"></span><span>Done</span>${worked}</div>`;
+      }
       case 'blocked':
         return `<div class="status blocked"><span class="dot pulse" style="background: var(--amber)"></span><span>${esc(s.detail ? 'Needs you · ' + s.detail : 'Needs you')}</span><span class="hint">answer in the terminal or type below</span></div>`;
       case 'error':
@@ -458,6 +462,28 @@
         return `<div class="status stopped">Stopped · send a message to start it again</div>`;
     }
     return '';
+  }
+
+  // Updates a status card to match `next` without replacing it; false when they differ in kind.
+  function patchStatus(cur, next) {
+    if (cur.className.replace(' enter', '') !== next.className) return false;
+    const a = cur.querySelector(':scope > .grow'), b = next.querySelector(':scope > .grow');
+    if (!a || !b) return false;
+    const at = a.querySelector(':scope > .title'), bt = b.querySelector(':scope > .title');
+    if (!at || !bt || at.children.length !== bt.children.length) return false;
+    for (let i = 0; i < bt.children.length; i++) {
+      const x = at.children[i], y = bt.children[i];
+      if (x.className !== y.className) return false;
+      if (y.classList.contains('elapsed')) { x.dataset.since = y.dataset.since; continue; }
+      if (x.textContent !== y.textContent) x.replaceWith(y.cloneNode(true));
+    }
+    for (const cls of ['detail', 'live']) {
+      const x = a.querySelector(`:scope > .${cls}`), y = b.querySelector(`:scope > .${cls}`);
+      if (x && y) { if (x.innerHTML !== y.innerHTML) x.innerHTML = y.innerHTML; }
+      else if (x) x.remove();
+      else if (y) { y.classList.add('enter'); if (cls === 'detail') at.after(y); else a.appendChild(y); }
+    }
+    return true;
   }
 
   function tick() {
@@ -548,6 +574,8 @@
             // A tool row that just finished gets a brief highlight.
             if (block.kind === 'tools' && entry.block && entry.block.tools) {
               const was = new Set(entry.block.tools.filter(t => t.running).map(t => t.id));
+              const had = new Set(entry.block.tools.map(t => t.id));
+              for (const t of block.tools) if (!had.has(t.id)) { const el = node.querySelector(`[data-row="${CSS.escape(t.id)}"]`); if (el) el.classList.add('enter'); }
               for (const t of block.tools) if (was.has(t.id) && !t.running) { const el = node.querySelector(`[data-row="${CSS.escape(t.id)}"]`); if (el) el.classList.add('just-done'); }
             }
             entry.el.replaceWith(node);
@@ -569,21 +597,33 @@
         const entry = cache.get(block.id);
         if (!entry) continue;
         const node = entry.el;
-        if (prev ? prev.nextElementSibling !== node : node.parentNode !== list) list.insertBefore(node, prev ? prev.nextElementSibling : list.firstChild);
+        // A turn's foot sits between two blocks without being one.
+        let after = prev ? prev.nextElementSibling : null;
+        while (after && after.classList.contains('turn-foot')) after = after.nextElementSibling;
+        if (prev ? after !== node : node.parentNode !== list) list.insertBefore(node, prev ? prev.nextElementSibling : list.firstChild);
         prev = node;
       }
       if (pendingBuild.length && !buildTimer) buildTimer = setTimeout(buildPending, 40);
     }
     const queuedNow = blocks.filter(isQueued);
-    renderQueue(nestQueued ? queuedNow : [], queueReadsMidTurn);
+    // The queue is on the compose box now; the page keeps the prompts out of the stream and draws no panel of its own.
+    renderQueue([], queueReadsMidTurn);
     const html = statusHTML(payload.status || null, queuedNow) || '';
     if (switched || html !== statusNow || (statusEl && statusEl.parentNode !== list)) {
-      statusNow = html;
-      if (statusEl) { statusEl.remove(); statusEl = null; }
-      if (html) { statusEl = el(html); list.appendChild(statusEl); }
-    } else if (statusEl && statusEl !== list.lastElementChild) {
+      const next = html ? el(html) : null;
+      // The same card with new words: change them in place, so its dots and pulse keep their beat.
+      if (!switched && statusEl && next && statusEl.parentNode === list && patchStatus(statusEl, next)) {
+        statusNow = html;
+      } else {
+        const fresh = !switched && statusNow !== '' && !!next;
+        statusNow = html;
+        if (statusEl) { statusEl.remove(); statusEl = null; }
+        if (next) { statusEl = next; if (fresh) statusEl.classList.add('enter'); list.appendChild(statusEl); }
+      }
+    } else if (statusEl && statusEl !== lastReal()) {
       list.appendChild(statusEl);
     }
+    decorateTurns();
     tick();
     if (blocksChanged) renderOutline(blocks);
     if (blocksChanged && update.full) {
@@ -618,6 +658,7 @@
       frag.appendChild(node);
     }
     list.insertBefore(frag, first || statusEl);
+    decorateTurns();
     const grown = document.body.scrollHeight - before;
     // Content was added above: keep the view on what it showed, or at the end if it was there.
     if (wasBottom) toBottom();
@@ -632,6 +673,97 @@
     const node = build(entry.block);
     entry.el.replaceWith(node);
     entry.el = node;
+    decorateTurns();
+  }
+
+  // MARK: Turn cards. A request and everything up to the next one are drawn as one card: the
+  // request is its header, and a foot says what the turn took and changed. The blocks stay
+  // flat children of the list, as the rest of this page expects; classes join them up.
+  let cardsOn = false;
+  const openTurns = new Set(), closedTurns = new Set();
+  const turnFeet = new Map();   // the request's block id -> its foot
+  const turnMarks = ['turn-head', 'turn-mid', 'turn-end', 'turn-live', 'turn-folded', 'turn-worked'];
+  function lastReal() {
+    let node = list.lastElementChild;
+    while (node && node.classList.contains('turn-foot')) node = node.previousElementSibling;
+    return node;
+  }
+  function baseName(path) { return path.split('/').pop(); }
+  function decorateTurns() {
+    requestAnimationFrame(() => queuePin());
+    const kids = Array.from(list.children);
+    if (!cardsOn) {
+      if (!turnFeet.size && !list.querySelector('.turn-head')) return;
+      kids.forEach(k => { k.classList.remove(...turnMarks); delete k.dataset.sum; });
+      for (const foot of turnFeet.values()) foot.remove();
+      turnFeet.clear();
+      return;
+    }
+    const turns = [];
+    let cur = null;
+    for (const node of kids) {
+      if (node.classList.contains('turn-foot')) continue;
+      const block = node.dataset.id !== undefined ? blocksNow[Number(node.dataset.id)] : null;
+      if (block && block.kind === 'user' && !node.hidden) { cur = { key: block.id, head: node, nodes: [node], blocks: [block] }; turns.push(cur); }
+      else if (cur && (block || node === statusEl)) { cur.nodes.push(node); if (block) cur.blocks.push(block); }
+      else { node.classList.remove(...turnMarks); delete node.dataset.sum; }
+    }
+    const kept = new Set();
+    turns.forEach((turn, at) => {
+      const last = at === turns.length - 1;
+      const live = last && !!statusEl && statusEl.parentNode === list && /\b(working|blocked)\b/.test(statusEl.className);
+      // The two latest turns show in full; older ones fold to their header until opened.
+      const folded = !live && (closedTurns.has(turn.key) || (!openTurns.has(turn.key) && at < turns.length - 2));
+      let steps = 0, worked = '';
+      const files = new Map();
+      for (const b of turn.blocks) {
+        if (b.kind === 'tools') for (const row of (b.tools || [])) {
+          steps++;
+          if (editTools.has(row.name) && row.path && (row.old != null || row.new != null || row.unified != null)) {
+            const [add, del] = diffCounts(row), sum = files.get(row.path) || [0, 0];
+            files.set(row.path, [sum[0] + add, sum[1] + del]);
+          }
+        }
+        if (b.kind === 'note') { const m = /^Worked for (.+)$/.exec(b.text || ''); if (m) worked = m[1]; }
+      }
+      const bits = [];
+      if (steps) bits.push(`<span class="pill">${steps} step${steps === 1 ? '' : 's'}</span>`);
+      if (worked) bits.push(`<span class="pill">${esc(worked)}</span>`);
+      const paths = Array.from(files.entries());
+      paths.slice(0, 4).forEach(([path, [add, del]]) => {
+        const where = hasGit ? 'data-changes' : `data-open-path="${esc(path)}"`;
+        bits.push(`<span class="pill file" ${where} title="${esc(path)}">${esc(baseName(path))} <span class="add">+${add}</span>${del ? ` <span class="del">−${del}</span>` : ''}</span>`);
+      });
+      if (paths.length > 4) bits.push(`<span class="pill">${paths.length - 4} more file${paths.length - 4 === 1 ? '' : 's'}</span>`);
+      const footHTML = live || !bits.length ? '' : bits.join('');
+      let foot = turnFeet.get(turn.key);
+      if (footHTML) {
+        if (!foot) { foot = el('<div class="turn-foot"></div>'); turnFeet.set(turn.key, foot); }
+        if (foot.dataset.html !== footHTML) { foot.innerHTML = footHTML; foot.dataset.html = footHTML; }
+        const tail = turn.nodes[turn.nodes.length - 1];
+        if (tail.nextElementSibling !== foot) tail.after(foot);
+        kept.add(turn.key);
+      } else if (foot) { foot.remove(); turnFeet.delete(turn.key); foot = null; }
+      const all = foot ? turn.nodes.concat([foot]) : turn.nodes;
+      // What is visible last closes the card: the header itself when the turn is folded.
+      const shown = folded ? [turn.head] : all.filter(n => !n.hidden);
+      const end = shown[shown.length - 1];
+      for (const node of all) {
+        const block = node.dataset.id !== undefined ? blocksNow[Number(node.dataset.id)] : null;
+        node.classList.toggle('turn-head', node === turn.head);
+        node.classList.toggle('turn-mid', node !== turn.head);
+        node.classList.toggle('turn-end', node === end);
+        node.classList.toggle('turn-live', live);
+        node.classList.toggle('turn-folded', folded);
+        node.classList.toggle('turn-worked', !!block && block.kind === 'note' && /^Worked for /.test(block.text || ''));
+      }
+      const sum = [];
+      if (files.size) sum.push(`${files.size} file${files.size === 1 ? '' : 's'}`);
+      else if (steps) sum.push(`${steps} step${steps === 1 ? '' : 's'}`);
+      if (worked) sum.push(worked);
+      turn.head.dataset.sum = folded ? sum.join(' · ') : '';
+    });
+    for (const [key, foot] of turnFeet) if (!kept.has(key)) { foot.remove(); turnFeet.delete(key); }
   }
 
   // MARK: Jump to latest, and the outline of prompts.
@@ -644,6 +776,40 @@
     jump.textContent = unseen > 0 ? `↓ ${unseen} new` : '↓ Latest';
   }
   window.addEventListener('scroll', () => { if (nearBottom()) unseen = 0; updateJump(); }, { passive: true });
+
+  // The request of the turn being read stays at the top of the view, so a long card's sides end
+  // in its own rounded top instead of running off the page. One head at a time; it slides away
+  // as its card ends. A request taller than a few lines isn't held: it would cover the page.
+  // The held request's distance from the top of the view: clear of the panel's rounded edge.
+  const pinGap = 8;
+  let pinned = null, pinQueued = false;
+  function pinTurn() {
+    pinQueued = false;
+    let next = null, top = 0;
+    if (cardsOn) {
+      for (const head of list.querySelectorAll('.turn-head')) {
+        // Where the head lies in the flow, which a held head no longer tells: just above its card's first shown block.
+        let body = head.nextElementSibling;
+        while (body && !body.classList.contains('turn-head') && body.offsetParent === null) body = body.nextElementSibling;
+        if (!body || body.classList.contains('turn-head')) continue;
+        const height = head.offsetHeight;
+        const natural = body.getBoundingClientRect().top - height;
+        if (natural > pinGap) break;
+        if (height > 96) continue;
+        let end = body;
+        while (end.nextElementSibling && !end.classList.contains('turn-end') && !end.nextElementSibling.classList.contains('turn-head')) end = end.nextElementSibling;
+        const bottom = end.getBoundingClientRect().bottom;
+        if (bottom <= 0) continue;
+        next = head; top = Math.min(pinGap, bottom - height - 14);
+      }
+    }
+    if (pinned && pinned !== next) { pinned.classList.remove('pinned'); pinned.style.top = ''; }
+    pinned = next;
+    if (pinned) { pinned.classList.add('pinned'); pinned.style.top = top + 'px'; }
+  }
+  function queuePin() { if (!pinQueued) { pinQueued = true; requestAnimationFrame(pinTurn); } }
+  window.addEventListener('scroll', queuePin, { passive: true });
+  window.addEventListener('resize', queuePin);
 
   const outline = el(`<nav class="outline" aria-label="Prompts"></nav>`);
   document.body.appendChild(outline);
@@ -727,6 +893,15 @@
     return entry ? entry.block : null;
   }
   list.addEventListener('click', e => {
+    // A click on a turn's header folds the turn or opens it; its buttons and a selection don't.
+    const head = cardsOn ? e.target.closest('.turn-head') : null;
+    if (head && !e.target.closest('.actions, button, a, img') && window.getSelection().isCollapsed) {
+      const key = Number(head.dataset.id);
+      if (head.classList.contains('turn-folded')) { closedTurns.delete(key); openTurns.add(key); }
+      else { openTurns.delete(key); closedTurns.add(key); }
+      decorateTurns();
+      return;
+    }
     const copy = e.target.closest('.copy');
     if (copy) {
       const code = copy.parentElement.querySelector('code');
@@ -822,6 +997,7 @@
     const root = document.documentElement.style;
     if (theme.bg) root.setProperty('--bg', theme.bg);
     if (theme.fg) root.setProperty('--fg', theme.fg);
+    document.body.classList.toggle('neutral', !!theme.neutral);
     if (theme.accent) {
       root.setProperty('--accent', theme.accent);
       root.setProperty('--accent-soft', theme.accentSoft || theme.accent);
@@ -829,6 +1005,7 @@
     if (theme.mono) root.setProperty('--mono', theme.mono);
     if (theme.font) root.setProperty('--font', theme.font);
     if (theme.size) root.setProperty('--size', theme.size + 'px');
+    if (cardsOn !== !!theme.cards) { cardsOn = !!theme.cards; document.body.classList.toggle('cards', cardsOn); decorateTurns(); }
     const body = document.body.classList;
     ['width-wide', 'width-narrow', 'compact', 'bubbles-outline', 'bubbles-plain', 'no-times'].forEach(c => body.remove(c));
     if (theme.width === 'wide' || theme.width === 'narrow') body.add('width-' + theme.width);

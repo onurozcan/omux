@@ -84,100 +84,143 @@ struct FilePanel: View {
     @EnvironmentObject var store: Store
     let root: URL
     let theme: Theme
+    /// Files is the panel's tab in view. Behind another tab it stays alive but stops scanning.
+    var visible = true
     @AppStorage(Prefs.filesByDate) private var byDate = false
     @AppStorage(Prefs.filesBrowserCollapsed) private var browserCollapsed = false
+
+    /// Whether the list of mentioned files can be seen at all; reading the scrollback for it is
+    /// the dear part.
+    private var listsMentions: Bool { visible && !browserCollapsed }
     @State private var rootNode: FileNode?
     @State private var watcher: FolderWatcher?
     @State private var version = 0
     @State private var selected: String?
+    /// The row the highlight is on: "m:" and a path for a mentioned file, "t:" and one for the tree.
+    @State private var cursor: String?
+    /// The folders shown open.
+    @State private var expanded: Set<String> = []
+    @FocusState private var listFocused: Bool
     @State private var previewURL: URL?
 
     var body: some View {
-        VSplitView {
-            Group {
-                if let agent = store.openAgent, agent.tabID == store.selectedTabID {
-                    AgentTranscriptView(ref: agent).id(agent.agentID)
-                } else if let ref = store.openCodexAgent, ref.tabID == store.selectedTabID {
-                    CodexAgentTranscriptView(ref: ref).id(ref.agent.id)
-                } else if let url = previewURL {
-                    FilePreview(url: url)
-                } else {
-                    Text("Select a file to preview")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if previewURL == nil, !browserCollapsed {
+                // Nothing open: the folder gets the whole panel.
+                browser
+            } else {
+                VSplitView {
+                    Group {
+                        if let url = previewURL {
+                            FilePreview(url: url) { previewURL = nil; selected = nil; cursor = nil }
+                        } else {
+                            EmptyState(icon: "doc.text.magnifyingglass", title: "No file open", detail: "Show the folder below and pick a file.")
+                        }
+                    }
+                    .frame(minHeight: 200)
+                    .background(Color(nsColor: theme.background))
+                    .layoutPriority(1)
+
+                    browser
+                        .frame(minHeight: browserCollapsed ? 30 : 80, idealHeight: browserCollapsed ? 30 : 180, maxHeight: browserCollapsed ? 30 : .infinity)
                 }
             }
-            .frame(minHeight: 200)
-            .background(Color(nsColor: theme.background))
-            .layoutPriority(1)
+        }
+        .background(Color(nsColor: theme.background))
+        .onAppear { load(); showRequested(); store.scanMentionedPaths() }
+        .onChange(of: root) { _, _ in load() }
+        .onChange(of: store.previewRequest) { _, _ in showRequested() }
+        .onChange(of: store.selectedTabID) { _, _ in if listsMentions { store.scanMentionedPaths() } }
+        .onChange(of: listsMentions) { _, shown in if shown { store.scanMentionedPaths() } }
+        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in if listsMentions { store.scanMentionedPaths() } }
+        .onChange(of: byDate) { _, _ in refresh() }
+        .onChange(of: selected) { _, path in
+            guard let path else { return }
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
+                show(URL(fileURLWithPath: path))
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            providers.first?.loadDataRepresentation(forTypeIdentifier: "public.file-url") { data, _ in
+                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                DispatchQueue.main.async { show(url) }
+            }
+            return true
+        }
+    }
 
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Button { browserCollapsed.toggle() } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 7, weight: .bold))
-                            .rotationEffect(.degrees(browserCollapsed ? 0 : 90))
-                            .frame(width: 10, height: 10)
-                    }
-                    .help(browserCollapsed ? "Show files" : "Hide files")
-                    Text(root.lastPathComponent)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer()
-                    if !browserCollapsed {
-                        Picker("", selection: $byDate) {
-                            Text("Name").tag(false)
-                            Text("Date").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .controlSize(.mini)
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                    Button { NSWorkspace.shared.open(root) } label: { Image(systemName: "arrow.up.forward.square") }
-                        .help("Open folder in Finder")
+    /// The folder: its header, the files the session mentioned, and the tree.
+    private var browser: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button { browserCollapsed.toggle() } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 7, weight: .bold))
+                        .rotationEffect(.degrees(browserCollapsed ? 0 : 90))
+                        .frame(width: 10, height: 10)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
-                .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
-
+                .help(browserCollapsed ? "Show files" : "Hide files")
+                Text(root.lastPathComponent)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Spacer()
                 if !browserCollapsed {
-                    List(selection: $selected) {
+                    Button { byDate.toggle() } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.up.arrow.down").font(.system(size: 8.5, weight: .semibold))
+                            Text(byDate ? "Date" : "Name").font(.system(size: 10.5, weight: .medium))
+                        }
+                        .padding(.horizontal, 7)
+                        .frame(height: 20)
+                        .background(.primary.opacity(0.07), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help(byDate ? "Sorted by date changed. Click to sort by name." : "Sorted by name. Click to sort by date changed.")
+                }
+                Button { NSWorkspace.shared.open(root) } label: { Image(systemName: "arrow.up.forward.square") }
+                    .help("Open folder in Finder")
+            }
+            .panelHeader()
+
+            if !browserCollapsed {
+                ScrollViewReader { proxy in
+                    List {
                         if !store.mentionedPaths.isEmpty {
                             Section("Mentioned in session") {
                                 ForEach(store.mentionedPaths.reversed(), id: \.self) { path in
                                     let url = URL(fileURLWithPath: path)
-                                    Label {
-                                        HStack(spacing: 4) {
+                                    SoftRow(selected: isCursor("m:" + path, path: path)) { pick("m:" + path, path: path, node: nil) } content: {
+                                        HStack(spacing: 5) {
+                                            Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable().frame(width: 14, height: 14)
                                             Text(url.lastPathComponent).lineLimit(1)
                                             Text(url.deletingLastPathComponent().path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
                                                 .foregroundStyle(.tertiary)
                                                 .lineLimit(1)
                                                 .truncationMode(.head)
                                         }
-                                    } icon: {
-                                        Image(nsImage: NSWorkspace.shared.icon(forFile: path))
-                                            .resizable()
-                                            .frame(width: 14, height: 14)
                                     }
-                                    .tag(path)
+                                    .id("m:" + path)
                                 }
                             }
                         }
                         Section(root.lastPathComponent) {
-                        if let rootNode {
-                            OutlineGroup(rootNode.children ?? [], id: \.id, children: \.children) { node in
-                                Label {
-                                    Text(node.name).lineLimit(1)
-                                } icon: {
-                                    Image(nsImage: NSWorkspace.shared.icon(forFile: node.url.path))
-                                        .resizable()
-                                        .frame(width: 14, height: 14)
+                            ForEach(treeRows, id: \.node.id) { row in
+                                let node = row.node
+                                SoftRow(selected: isCursor("t:" + node.id, path: node.id)) { pick("t:" + node.id, path: node.id, node: node) } content: {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "chevron.right")
+                                            .font(.system(size: 7.5, weight: .bold))
+                                            .foregroundStyle(.tertiary)
+                                            .rotationEffect(.degrees(expanded.contains(node.id) ? 90 : 0))
+                                            .frame(width: 10)
+                                            .opacity(node.isDirectory ? 1 : 0)
+                                        Image(nsImage: NSWorkspace.shared.icon(forFile: node.url.path)).resizable().frame(width: 14, height: 14)
+                                        Text(node.name).lineLimit(1)
+                                    }
+                                    .padding(.leading, CGFloat(row.depth) * 14)
                                 }
-                                .tag(node.id)
+                                .id("t:" + node.id)
                                 .contextMenu {
                                     Button("Open") { NSWorkspace.shared.open(node.url) }
                                     Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([node.url]) }
@@ -188,52 +231,96 @@ struct FilePanel: View {
                                 }
                             }
                         }
-                        }
                     }
-                    .id(version)
                     .listStyle(.sidebar)
                     .scrollContentBackground(.hidden)
+                    // Up and down walk the rows, right and left open and close a folder.
+                    .focusable()
+                    .focusEffectDisabled()
+                    .focused($listFocused)
+                    .onKeyPress(.upArrow) { step(-1, proxy) }
+                    .onKeyPress(.downArrow) { step(1, proxy) }
+                    .onKeyPress(.rightArrow) { fold(open: true) }
+                    .onKeyPress(.leftArrow) { fold(open: false) }
                 }
             }
-            .frame(minHeight: browserCollapsed ? 28 : 80, idealHeight: browserCollapsed ? 28 : 180, maxHeight: browserCollapsed ? 28 : .infinity)
         }
-        .background(Color(nsColor: theme.chrome))
-        .onAppear { load(); showRequested(); store.scanMentionedPaths() }
-        .onChange(of: root) { _, _ in load() }
-        .onChange(of: store.previewRequest) { _, _ in showRequested() }
-        .onChange(of: store.selectedTabID) { _, _ in store.scanMentionedPaths() }
-        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in store.scanMentionedPaths() }
-        .onChange(of: byDate) { _, _ in refresh() }
-        .onChange(of: selected) { _, path in
-            guard let path else { return }
-            store.openAgent = nil
-            store.openCodexAgent = nil
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), !isDir.boolValue {
-                previewURL = URL(fileURLWithPath: path)
+    }
+
+    // MARK: The tree, kept flat
+
+    private struct TreeRow {
+        let node: FileNode
+        let depth: Int
+    }
+
+    /// The rows on screen: the folder's entries, with those of every open folder under it.
+    private var treeRows: [TreeRow] {
+        var rows: [TreeRow] = []
+        func walk(_ nodes: [FileNode], _ depth: Int) {
+            for node in nodes {
+                rows.append(TreeRow(node: node, depth: depth))
+                if node.isDirectory, expanded.contains(node.id) { walk(node.children ?? [], depth + 1) }
             }
         }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            providers.first?.loadDataRepresentation(forTypeIdentifier: "public.file-url") { data, _ in
-                guard let data, let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                DispatchQueue.main.async { previewURL = url }
-            }
-            return true
+        walk(rootNode?.children ?? [], 0)
+        return rows
+    }
+
+    /// Whether a row is the one picked: by its own key, or by its path when the pick came from
+    /// outside the list (a path clicked in the transcript).
+    private func isCursor(_ key: String, path: String) -> Bool {
+        cursor.map { $0 == key } ?? (selected == path)
+    }
+
+    /// A click or the arrow keys landing on a row: a file is shown, a clicked folder opens or closes.
+    private func pick(_ key: String, path: String, node: FileNode?, byKey: Bool = false) {
+        cursor = key
+        listFocused = true
+        if let node, node.isDirectory {
+            if !byKey { if expanded.contains(node.id) { expanded.remove(node.id) } else { expanded.insert(node.id) } }
+        } else {
+            selected = path
         }
+    }
+
+    private func step(_ by: Int, _ proxy: ScrollViewProxy) -> KeyPress.Result {
+        let all: [(key: String, path: String, node: FileNode?)] =
+            store.mentionedPaths.reversed().map { ("m:" + $0, $0, nil) } + treeRows.map { ("t:" + $0.node.id, $0.node.id, $0.node) }
+        guard !all.isEmpty else { return .ignored }
+        let at = all.firstIndex { row in cursor.map { $0 == row.key } ?? (row.path == selected) } ?? (by > 0 ? -1 : all.count)
+        let next = all[min(max(at + by, 0), all.count - 1)]
+        pick(next.key, path: next.path, node: next.node, byKey: true)
+        proxy.scrollTo(next.key)
+        return .handled
+    }
+
+    private func fold(open: Bool) -> KeyPress.Result {
+        guard let cursor, cursor.hasPrefix("t:") else { return .ignored }
+        let id = String(cursor.dropFirst(2))
+        guard treeRows.contains(where: { $0.node.id == id && $0.node.isDirectory }) else { return .ignored }
+        if open { expanded.insert(id) } else { expanded.remove(id) }
+        return .handled
+    }
+
+    /// A page goes to the Browser tab, rendered; everything else previews here.
+    private func show(_ url: URL) {
+        if Store.opensInBrowser(url) { store.showInBrowser(url) } else { previewURL = url }
     }
 
     private func showRequested() {
         guard let path = store.previewRequest else { return }
-        store.openAgent = nil
-        store.openCodexAgent = nil
         previewURL = URL(fileURLWithPath: path)
         selected = path
+        cursor = nil
         store.previewRequest = nil
     }
 
     private func load() {
         rootNode = FileNode(url: root, isDirectory: true)
         selected = nil
+        cursor = nil
+        expanded = []
         previewURL = nil
         version += 1
         watcher = FolderWatcher(path: root.path) { refresh() }
@@ -249,12 +336,14 @@ struct FilePanel: View {
 
 struct FilePreview: View {
     let url: URL
+    /// Closes the preview, where the panel can show something else in its place.
+    var onClose: (() -> Void)?
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
-    @AppStorage(Prefs.theme) private var themeName = Theme.dark.rawValue
+    @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
     /// Markdown shows rendered until the pencil switches it to the editor.
     @State private var editingMarkdown = false
 
-    private var theme: Theme { Theme(rawValue: themeName) ?? .dark }
+    private var theme: Theme { Theme(rawValue: themeName) ?? .black }
 
     private static let images: Set<String> = ["png", "jpg", "jpeg", "heic", "bmp", "tiff", "tif", "webp", "svg"]
     private static let media: Set<String> = ["mp4", "mov", "m4v", "mp3", "m4a", "wav", "aac", "aiff"]
@@ -262,9 +351,12 @@ struct FilePreview: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 14, height: 14).padding(.trailing, 5)
                 Text(url.lastPathComponent)
                     .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.trailing, 6)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
@@ -276,14 +368,14 @@ struct FilePreview: View {
                 if isMarkdown, isSmall {
                     Button { editingMarkdown.toggle() } label: {
                         Image(systemName: editingMarkdown ? "doc.richtext" : "pencil")
-                            .foregroundStyle(editingMarkdown ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(editingMarkdown ? Color.accent : Color.secondary)
                     }
                     .help(editingMarkdown ? "Show rendered" : "Edit the markdown")
                 }
                 if isText {
                     Button { wrapLines.toggle() } label: {
                         Image(systemName: "arrow.turn.down.left")
-                            .foregroundStyle(wrapLines ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(wrapLines ? Color.accent : Color.secondary)
                     }
                     .help(wrapLines ? "Don't wrap lines" : "Wrap lines")
                 }
@@ -291,12 +383,12 @@ struct FilePreview: View {
                     .help("Open with default app")
                 Button { NSWorkspace.shared.activateFileViewerSelecting([url]) } label: { Image(systemName: "folder") }
                     .help("Reveal in Finder")
+                if let onClose {
+                    Button(action: onClose) { Image(systemName: "xmark") }
+                        .help("Close the file")
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .panelHeader()
 
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }

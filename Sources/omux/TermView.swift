@@ -12,6 +12,8 @@ enum TermEvent {
     case status(TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild])
     /// ⌘-click on a file path in the output.
     case openPath(String)
+    /// ⌘-click on a web address in the output.
+    case openLink(URL)
     /// A desktop notification the program asked for (OSC 9 or OSC 777).
     case notification(title: String?, body: String)
 }
@@ -137,15 +139,25 @@ final class TermView: LocalProcessTerminalView {
     }
 
     /// ⌘-click: file paths go to the preview panel, folders (app bundles too) are shown in
-    /// Finder rather than opened, everything else (URLs) goes to the system.
+    /// Finder rather than opened, web addresses go to the session's browser, and everything
+    /// else (mail, other apps' links) goes to the system.
     override func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
         if let path = Self.filePath(from: link) {
             emit(.openPath(path))
         } else if let folder = Self.filePath(from: link, folders: true) {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: folder)])
+        } else if let url = Self.webURL(from: link) {
+            emit(.openLink(url))
         } else {
             super.requestOpenLink(source: source, link: link, params: params)
         }
+    }
+
+    /// The address when a link is one a browser shows: http or https, nothing else.
+    nonisolated static func webURL(from link: String) -> URL? {
+        guard let url = URL(string: link.trimmingCharacters(in: .whitespaces)), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              url.host?.isEmpty == false else { return nil }
+        return url
     }
 
     nonisolated static func filePath(from link: String, folders: Bool = false) -> String? {

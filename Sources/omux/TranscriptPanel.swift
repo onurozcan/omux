@@ -7,6 +7,7 @@ import SwiftUI
 
 struct TranscriptPanel: View {
     @EnvironmentObject var store: Store
+    @Environment(\.openSettings) private var openSettings
     @ObservedObject private var codex = CodexManager.shared
     @ObservedObject private var agents = AgentMonitor.shared
     @StateObject private var model: SessionTranscript
@@ -30,6 +31,11 @@ struct TranscriptPanel: View {
     @State private var sendNotice: String?
     /// The reply as it appears on the terminal, ahead of the transcript file.
     @State private var liveText: String?
+    /// The turn has ended but its reply isn't in the transcript yet: the card stays on Working
+    /// until the record lands, so Done never shows over a blank with the text popping in after.
+    @State private var replyPending = false
+    @State private var replyWait = 0
+    @State private var heldSince: Date?
     /// The screen output and transcript version `readLive` last read at.
     @State private var liveRead = ScreenReadMemo<LiveReadKey>()
     private struct LiveReadKey: Equatable { let output: UInt64?; let version: Int }
@@ -40,22 +46,23 @@ struct TranscriptPanel: View {
     /// Prompts waiting for the agent to come up, sent in order once it has: the hand-off
     /// written on a switch, then what the user typed meanwhile.
     @State private var starting: [(text: String, echoed: Bool)] = []
-    @AppStorage(Prefs.accent) private var accentChoice = "system"
+    @AppStorage(Prefs.accent) private var accentChoice = "neutral"
     @AppStorage(Prefs.transcriptFont) private var transcriptFont = ""
-    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 13.0
+    @AppStorage(Prefs.transcriptSize) private var transcriptSize = 12.0
     @AppStorage(Prefs.transcriptWidth) private var transcriptWidth = "full"
     @AppStorage(Prefs.transcriptDensity) private var transcriptDensity = "comfortable"
     @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
     private var style: TranscriptStyle {
         TranscriptStyle(accent: accentChoice, font: transcriptFont, size: transcriptSize, width: transcriptWidth,
-                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps)
+                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps, layout: transcriptLayout)
     }
+    @AppStorage(Prefs.transcriptLayout) private var transcriptLayout = "cards"
     /// Whether the project is a git repository, checked once per folder rather than on every redraw.
     @State private var hasGit = false
 
     init(tab: TabItem, provider: SessionProvider, theme: Theme, compact: Bool = false, slot: String? = nil, hooks: DropHooks? = nil,
-         claudeFile: @escaping () -> URL?, codexThread: @escaping () -> String?) {
+         claudeFile: @escaping () -> URL?, claudeFolder: @escaping () -> URL? = { nil }, codexThread: @escaping () -> String?) {
         tabID = tab.id
         name = tab.name
         initialProvider = provider
@@ -65,12 +72,15 @@ struct TranscriptPanel: View {
         self.hooks = hooks
         // A page that already loaded for this slot redraws in place: no stand-in needed.
         _pageReady = State(initialValue: TranscriptPages.shared.isLoaded(self.slot))
-        _model = StateObject(wrappedValue: TranscriptModels.shared.model(for: tab, provider: provider, claudeFile: claudeFile, codexThread: codexThread))
+        _model = StateObject(wrappedValue: TranscriptModels.shared.model(for: tab, provider: provider, claudeFile: claudeFile, claudeFolder: claudeFolder, codexThread: codexThread))
     }
 
     private var isAgent: Bool { provider == .claude || provider == .codex }
 
-    var body: some View {
+    var body: some View { WithRuntime(tabID) { _ in sessionBody } }
+
+    /// Drawn again whenever this session's live state changes; see `WithRuntime`.
+    @ViewBuilder private var sessionBody: some View {
         let runtime = store.runtime[tabID] ?? TabRuntime()
         VStack(spacing: 0) {
             header(runtime)
@@ -111,11 +121,45 @@ struct TranscriptPanel: View {
                     ComposeDrafts.version += 1
                     sendNotice = "Codex quit before taking the prompt. It's back in the box."
                 }
-                .onChange(of: runtime.statusState) { _, state in
+                .onChange(of: runtime.statusState) { old, state in
+                    let stateName = state.map { String(describing: $0) } ?? "none"
+                    Timing.mark("status", tabID, stateName + (liveText != nil ? " live" : ""))
+                    // Claude Code reports the turn over a moment before it writes the reply's
+                    // record. Done waits for the record, briefly, and the last of the reply is
+                    // read off the screen meanwhile.
+                    if provider == .claude, old == .working, state == .done, !replyLanded {
+                        readLive(final: true)
+                        heldSince = workingSince
+                        replyPending = true
+                        replyWait += 1
+                        let wait = replyWait
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { if replyWait == wait { replyPending = false } }
+                    } else if state != .done {
+                        replyPending = false
+                    }
                     workingSince = state == .working ? (workingSince ?? Date()) : nil
-                    if state != .working { liveText = nil; liveRead.key = nil }
+                    if state != .working {
+                        // The reply read off the screen stays until its record lands, so the turn
+                        // doesn't show Done over a blank before the text; the record replaces it.
+                        liveRead.key = nil
+                        if liveText != nil {
+                            let lingering = liveText
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { if liveText == lingering, store.runtime[tabID]?.statusState != .working { liveText = nil } }
+                        }
+                    }
                     // The dialog is gone: what was held goes now, in order.
                     if state != .blocked { releaseHeld() }
+                    // Idle and staying idle: nothing is waiting in the agent's queue any more.
+                    if state != .working, state != .blocked, model.hasQueuedEchoes {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                            let now = store.runtime[tabID]?.statusState
+                            if now != .working, now != .blocked { model.settleQueue() }
+                        }
+                    }
+                }
+                .onChange(of: model.version) { _, _ in
+                    if replyPending, replyLanded { replyPending = false; Timing.mark("reply-shown", tabID) }
+                    if liveText != nil, runtime.statusState != .working, !replyPending { liveText = nil }
                 }
                 .task(id: runtime.statusState == .working) {
                     // While the agent writes, follow the reply on the screen.
@@ -125,9 +169,23 @@ struct TranscriptPanel: View {
                         try? await Task.sleep(for: .milliseconds(700))
                     }
                 }
+            // The cards and the box are as wide as the conversation above them.
             cards(runtime)
-            ComposeBox(tabID: tabID, name: name, provider: provider, theme: theme, model: model, notice: $sendNotice, send: send, onFocus: select)
-                .onTapGesture(perform: select)
+                .frame(maxWidth: columnWidth)
+                .frame(maxWidth: .infinity)
+            if inPane {
+                // The panes share one box under them all; this pane tells it how to write here.
+                Color.clear.frame(height: 0)
+                    .onAppear { routeCompose() }
+                    .onChange(of: provider) { _, _ in routeCompose() }
+                    .onDisappear { PaneCompose.shared.remove(tabID) }
+            } else {
+                ComposeBox(tabID: tabID, name: name, provider: provider, theme: theme, model: model, notice: $sendNotice, send: send, onFocus: select,
+                           onQueue: { requeue(action: $0, id: $1) })
+                    .frame(maxWidth: columnWidth)
+                    .frame(maxWidth: .infinity)
+                    .onTapGesture(perform: select)
+            }
         }
         .background(Color(nsColor: theme.background))
         .onAppear {
@@ -147,42 +205,27 @@ struct TranscriptPanel: View {
 
     @ViewBuilder
     private func header(_ runtime: TabRuntime) -> some View {
-        if compact {
+        if compact, slot == "single" {
+            // The window's own header carries the readout for the one session it shows.
+        } else if compact {
             HStack(spacing: 10) {
                 Spacer()
-                if let model = model.lastModel { Text(Self.shortModel(model)) }
-                if let context = model.lastContext { Text("ctx \(Self.tokens(context))").monospacedDigit() }
-                if model.totalOut > 0 { Text("out \(Self.tokens(model.totalOut))").monospacedDigit() }
-                Button { TerminalPeek.shared.show(tabID, store: store) } label: {
-                    HStack(spacing: 4) { Image(systemName: "terminal").imageScale(.small); Text("Terminal") }
-                }
-                .buttonStyle(.plain)
-                .help("Show the terminal underneath (⌥⌘P): for dialogs like /config, or to see the raw screen")
+                SessionReadout(tabID: tabID, model: model)
             }
-            .font(.system(size: 10))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .frame(height: 20)
+            .padding(.horizontal, 8)
+            .frame(height: 22)
         } else {
             HStack(spacing: 8) {
                 if let color = runtime.statusColor { Circle().fill(color).frame(width: 7, height: 7) }
                 Text(name).font(.system(size: 11, weight: .semibold)).lineLimit(1)
                 Text(provider.label).foregroundStyle(.secondary)
                 Spacer()
-                if let model = model.lastModel { Text(Self.shortModel(model)).foregroundStyle(.secondary) }
-                if let context = model.lastContext {
-                    Text("ctx \(Self.tokens(context))").foregroundStyle(.secondary).monospacedDigit()
-                        .help("Tokens the latest reply was produced from: input plus cache")
-                }
-                if model.totalOut > 0 {
-                    Text("out \(Self.tokens(model.totalOut))").foregroundStyle(.secondary).monospacedDigit()
-                        .help("Tokens written over the session")
-                }
+                SessionReadout(tabID: tabID, model: model, terminal: false)
             }
             .font(.system(size: 11))
             .padding(.horizontal, 12)
             .frame(height: 28)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .overlay(alignment: .bottom) { Hairline() }
         }
     }
 
@@ -196,7 +239,17 @@ struct TranscriptPanel: View {
     }
 
     static func tokens(_ n: Int) -> String {
-        n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)"
+        n >= 1_000_000 ? String(format: "%.1fM", Double(n) / 1_000_000).replacingOccurrences(of: ".0M", with: "M")
+            : n >= 1000 ? String(format: n >= 100_000 ? "%.0fk" : "%.1fk", Double(n) / 1000) : "\(n)"
+    }
+
+    /// The context window a Claude model works in, as far as its name tells: a million tokens
+    /// for the models that have it, 200k otherwise. A session already past 200k has the larger
+    /// one. Nil for other agents, whose windows omux doesn't know.
+    static func contextWindow(model: String?, provider: SessionProvider, used: Int) -> Int? {
+        guard provider == .claude, let id = model?.lowercased() else { return nil }
+        let large = id.contains("[1m]") || id.contains("fable") || id.contains("mythos") || used > 200_000
+        return large ? 1_000_000 : 200_000
     }
 
     // MARK: Cards
@@ -206,12 +259,14 @@ struct TranscriptPanel: View {
         let pending = model.pendingTool
         if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "ExitPlanMode", let plan = pending.new {
             PlanCard(tabID: tabID, plan: plan)
-        } else if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "AskUserQuestion", let question = pending.questions.first {
-            QuestionCard(tabID: tabID, question: question)
+        } else if provider == .claude, runtime.statusState == .blocked, let pending, pending.name == "AskUserQuestion", !pending.questions.isEmpty {
+            QuestionCard(tabID: tabID, questions: pending.questions)
         } else if runtime.awaitsPermission || codex.approval(for: tabID) != nil {
             PermissionCard(tabID: tabID, provider: provider, pending: pending)
         } else if provider == .claude, !runtime.exited, runtime.busy {
-            ScreenPromptCard(tabID: tabID, starting: runtime.statusState == nil)
+            // Starting only once a prompt was sent and waits for it: a stopped session's shell
+            // is no start, whatever its screen shows.
+            ScreenPromptCard(tabID: tabID, starting: runtime.statusState == nil && !starting.isEmpty)
         }
     }
 
@@ -238,12 +293,14 @@ struct TranscriptPanel: View {
             switch runtime.statusState {
             case .working:
                 status = .init(state: "working", detail: runtime.statusDetail, since: workingSince.map { Int($0.timeIntervalSince1970 * 1000) }, live: liveText, queueEditable: provider == .claude)
+            case .done where replyPending:
+                status = .init(state: "working", since: heldSince.map { Int($0.timeIntervalSince1970 * 1000) }, live: liveText, queueEditable: provider == .claude)
             case .done:
                 var worked: String?
                 if let start = model.lastPrompt, let end = model.lastWrite, end.timeIntervalSince(start) >= 2 {
                     worked = SessionTranscript.duration(end.timeIntervalSince(start))
                 }
-                status = .init(state: "done", workedFor: worked)
+                status = .init(state: "done", workedFor: worked, live: liveText)
             case .blocked where !runtime.awaitsPermission && model.pendingTool.map({ !["ExitPlanMode", "AskUserQuestion"].contains($0.name) }) ?? true:
                 status = .init(state: "blocked", detail: runtime.statusDetail ?? runtime.statusKind)
             case .error:
@@ -272,14 +329,33 @@ struct TranscriptPanel: View {
         if store.selectedTabID != tabID { store.selectedTabID = tabID }
     }
 
+    /// The page's own column: Settings › Appearance › Transcript › Width.
+    private var columnWidth: CGFloat {
+        switch transcriptWidth { case "wide": 900; case "narrow": 700; default: .infinity }
+    }
+
+    /// One of several panes on screen, as opposed to the one session the window shows.
+    private var inPane: Bool { slot != "single" && compact }
+
+    private func routeCompose() {
+        PaneCompose.shared.set(.init(provider: provider, model: model, notice: $sendNotice, send: send, queue: { requeue(action: $0, id: $1) }), for: tabID)
+    }
+
     // MARK: Streaming from the screen
 
     /// While the agent works, the reply it's writing is on the terminal before it's in the
     /// transcript: the text after the last reply marker, up to the prompt box.
-    private func readLive() {
-        guard provider == .claude, store.runtime[tabID]?.statusState == .working else { if liveText != nil { liveText = nil }; return }
+    /// Whether the turn's reply is in the transcript: its last block of the conversation is the
+    /// assistant's text, not the prompt or a tool call still ahead of it.
+    private var replyLanded: Bool {
+        model.blocks.last { [.user, .assistant, .tools, .thinking].contains($0.kind) }?.kind == .assistant
+    }
+
+    /// `final` reads once more as the turn ends, for a reply written since the last look.
+    private func readLive(final: Bool = false) {
+        guard provider == .claude, final || store.runtime[tabID]?.statusState == .working else { return }
         // Nothing new on the screen and nothing new in the transcript: the last read still holds.
-        guard liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
+        guard final || liveRead.changed(to: LiveReadKey(output: store.outputGeneration(tabID), version: model.version)) else { return }
         let lines = store.screenLines(tabID, count: 60)
         guard let start = lines.lastIndex(where: { line in
             let t = line.trimmingCharacters(in: .whitespaces)
@@ -309,9 +385,15 @@ struct TranscriptPanel: View {
             store.showPanel(.changes)
         case "path":
             guard let raw = message["path"] as? String else { return }
+            if let group = store.group(containing: tabID), group.isRemote {
+                // A path on the session's machine: the Files tab gets it from there.
+                let folder = store.runtime[tabID]?.cwd ?? store.tab(tabID)?.directory ?? group.directory ?? "~"
+                store.previewRequest = raw.hasPrefix("/") || raw.hasPrefix("~") ? raw : folder + "/" + raw
+                return
+            }
             let path = raw.hasPrefix("/") || raw.hasPrefix("~") ? (raw as NSString).expandingTildeInPath
                 : (baseDirectory as NSString).appendingPathComponent(raw)
-            if FileManager.default.fileExists(atPath: path) { store.previewRequest = path }
+            if FileManager.default.fileExists(atPath: path) { store.preview(path) }
         case "agent":
             if let id = message["id"] as? String, let agent = agents.agents[tabID]?.first(where: { $0.id == id }) {
                 store.openAgentTranscript(agent, in: tabID)
@@ -349,6 +431,11 @@ struct TranscriptPanel: View {
     /// or its settings files, then the overview is redrawn.
     private func configure(_ message: [String: Any]) {
         guard let action = message["action"] as? String, let blockID = message["block"] as? Int else { return }
+        if action == "machines-open" {
+            UserDefaults.standard.set(SettingsView.Pane.machines.rawValue, forKey: SettingsView.paneKey)
+            openSettings()
+            return
+        }
         let fields = message["fields"] as? [String: String] ?? [:]
         let name = (fields["name"] ?? message["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
         let arg = message["arg"] as? String ?? ""
@@ -470,9 +557,9 @@ struct TranscriptPanel: View {
         // ⌃X ⌃S: Claude Code interrupts the turn and takes the queue now.
         if action == "now" { store.sendKeys("\u{18}\u{13}", to: tabID); return }
         // Only prompts Claude Code has confirmed as queued; one still on its way can't be pulled back yet.
-        let queued = model.blocks.filter { $0.kind == .user && $0.pending == "queued" }
+        let queued = model.blocks.filter { $0.kind == .user && $0.pending == .queued }
         guard let index = queued.firstIndex(where: { $0.id == id }) else { return }
-        if model.blocks.contains(where: { $0.kind == .user && $0.pending == "queuing" }) { model.note("A prompt is still on its way to the queue; try again in a moment."); return }
+        if model.blocks.contains(where: { $0.kind == .user && $0.pending == .queuing }) { model.note("A prompt is still on its way to the queue; try again in a moment."); return }
         // ⌃U clears one line of the prompt, so a multi-line prompt can't be pulled back cleanly.
         if queued.contains(where: { $0.text.contains("\n") }) { model.note("A queued prompt spans several lines; reorder it with ↑ in the terminal."); return }
         var texts = queued.map(\.text)
@@ -605,11 +692,53 @@ struct TranscriptPanel: View {
         return rt.tuiReady || (rt.agentConnectedAt.map { Date().timeIntervalSince($0) > 8 } ?? false)
     }
 
+    /// omux's own commands about machines: /machines, /machine and /remote. They are answered
+    /// here and never typed into the agent. True when `text` was one.
+    private func machineCommand(_ text: String) -> Bool {
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let command = words.first, ["/machines", "/machine", "/remote"].contains(command) else { return false }
+        sendNotice = nil
+        ComposeDrafts.text[tabID] = ""
+        ComposeDrafts.version += 1
+        let machines = RemoteMachines.shared
+        if command == "/remote" {
+            store.remoteDraft = (words.count > 1 ? words[1] : "", words.count > 2 ? words[2...].joined(separator: " ") : "")
+            store.showRemoteProject = true
+            return true
+        }
+        let remote = store.groups.filter(\.isRemote)
+        var hosts: [String]
+        if command == "/machine" {
+            guard let host = store.group(containing: tabID).flatMap({ $0.isRemote ? $0.host : nil }) else {
+                model.note("This session runs on this Mac. /remote devbox ~/code/app makes a project on another machine.")
+                return true
+            }
+            hosts = [host]
+        } else {
+            var seen: Set<String> = []
+            hosts = (remote.compactMap(\.host) + machines.remembered).filter { seen.insert($0).inserted }
+        }
+        let projects = Dictionary(grouping: remote, by: { $0.host ?? "" }).mapValues { $0.map(\.name) }
+        // What is known now, then what a fresh look at each finds.
+        let id = model.show(machines.overview(hosts: hosts, projects: projects))
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for host in hosts { group.addTask { await machines.check(host, quietly: true) } }
+            }
+            model.update(info: id, with: machines.overview(hosts: hosts, projects: projects))
+        }
+        return true
+    }
+
     private func send(_ text: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        if machineCommand(text) { return }
         // Overviews omux can draw from the agent's files, instead of the terminal's dialog.
-        if provider != .custom, text.hasPrefix("/"), !text.contains(" "), AgentConfig.hasOverview(for: String(text.dropFirst())) {
+        // Not for a session on another machine: the files that count are there, and the
+        // agent's own dialog reads those.
+        if provider != .custom, text.hasPrefix("/"), !text.contains(" "), store.group(containing: tabID)?.isRemote != true,
+           AgentConfig.hasOverview(for: String(text.dropFirst())) {
             let command = String(text.dropFirst())
             let project = projectDirectory
             let agent: SessionProvider = provider == .codex ? .codex : .claude
@@ -643,6 +772,7 @@ struct TranscriptPanel: View {
             return
         }
         if agentRunning || provider == .custom {
+            Timing.mark("send", tabID)
             if store.sendText(text, to: tabID, submit: true) {
                 sent(text)
                 if Self.opensDialog(text, provider: provider) {
@@ -680,6 +810,11 @@ struct TranscriptPanel: View {
                 ComposeDrafts.version += 1
             }
             var sawAgent = false
+            // How long Claude Code's own prompt box has been on screen without a status report.
+            var promptShown = 0
+            // Half-seconds with no agent in the shell and none on its way, and whether the
+            // start has been asked for a second time.
+            var idle = 0, retried = false
             for _ in 0..<240 {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let rt = store.runtime[tabID], !rt.exited else { continue }
@@ -689,7 +824,10 @@ struct TranscriptPanel: View {
                 // on the screen is the sure sign it's up. Claude Code reports its status as
                 // soon as it's ready; typed at before that, it has been seen to stop reporting.
                 let composer = rt.provider == .codex && !store.isStarting(tabID) && store.composerVisible(tabID)
-                if composer || (Self.takesInput(rt) && (rt.provider != .codex || rt.tuiReady)) {
+                // A resumed Claude Code sometimes never reports: its prompt box, steady on the
+                // screen for five seconds, is then taken as the sign it is up.
+                if rt.provider != .codex, store.shellRunsAgent(tabID), ClaudeScreen.showsPrompt(store.screenLines(tabID, count: 14)) { promptShown += 1 } else { promptShown = 0 }
+                if composer || promptShown >= 10 || (Self.takesInput(rt) && (rt.provider != .codex || rt.tuiReady)) {
                     // A beat for the prompt to be ready for input.
                     try? await Task.sleep(for: .seconds(1))
                     for (index, queued) in starting.enumerated() {
@@ -711,6 +849,10 @@ struct TranscriptPanel: View {
                 }
                 let running = store.shellRunsAgent(tabID)
                 if running { sawAgent = true; continue }
+                // Nothing came up in the shell: the start was turned away, by a shell still
+                // busy with its own start-up. Asked once more, now that it has settled.
+                idle = sawAgent || store.isStarting(tabID) ? 0 : idle + 1
+                if idle == 6, !retried { retried = true; store.start(tabID); continue }
                 guard sawAgent, !store.isStarting(tabID) else { continue }
                 // The agent came and went. omux starts Codex again after its self-update;
                 // anything else is for the user to see in the terminal.
@@ -774,7 +916,8 @@ struct TranscriptPanel: View {
         let builtIn: Set<String> = ["mcp", "config", "permissions", "plugins", "plugin", "skills", "hooks", "agents", "memory", "doctor",
                                     "resume", "rewind", "help", "login", "logout", "status", "usage", "context", "cost", "vim",
                                     "terminal-setup", "statusline", "bug", "release-notes", "upgrade", "export", "privacy-settings",
-                                    "settings", "theme", "keybindings", "ide", "install-github-app", "install-slack-app", "model", "effort"]
+                                    "settings", "theme", "keybindings", "ide", "install-github-app", "install-slack-app", "model", "effort",
+                                    "output-style", "tasks", "todos", "feedback"]
         // A custom command or skill replies in the conversation; anything else built in draws on screen.
         return builtIn.contains(command)
     }
@@ -821,7 +964,7 @@ struct TranscriptStandIn: View {
                 switch block.kind {
                 case .user:
                     HStack { Spacer(minLength: 48); Text(Self.clip(block.text, 400)).font(.system(size: 13)).padding(.horizontal, 13).padding(.vertical, 9)
-                        .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 12)) }
+                        .background(Color.accent.opacity(0.16), in: RoundedRectangle(cornerRadius: 12)) }
                 case .assistant:
                     Text(Self.clip(block.text, 1200)).font(.system(size: 13)).lineSpacing(3).frame(maxWidth: .infinity, alignment: .leading)
                 case .tools:
@@ -853,5 +996,63 @@ struct TranscriptStandIn: View {
 
     private static func clip(_ text: String, _ limit: Int) -> String {
         text.count > limit ? String(text.prefix(limit)) + "…" : text
+    }
+}
+
+/// What a session runs on and how full its context is, in one line: the model, a meter of the
+/// context against its window, and the way to the terminal underneath.
+struct SessionReadout: View {
+    @EnvironmentObject var store: Store
+    @ObservedObject private var peek = TerminalPeek.shared
+    let tabID: UUID
+    @ObservedObject var model: SessionTranscript
+    var terminal = true
+
+    var body: some View {
+        HStack(spacing: 9) {
+            if let name = model.lastModel {
+                Text(TranscriptPanel.shortModel(name)).foregroundStyle(.secondary)
+            }
+            if let used = model.lastContext {
+                let window = TranscriptPanel.contextWindow(model: model.lastModel, provider: model.provider, used: used)
+                HStack(spacing: 5) {
+                    if let window {
+                        let share = min(1, Double(used) / Double(window))
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.primary.opacity(0.1))
+                            Capsule().fill(share >= 0.9 ? Palette.error : share >= 0.75 ? Palette.needs : Palette.quiet)
+                                .frame(width: max(3, 34 * share))
+                        }
+                        .frame(width: 34, height: 3)
+                    }
+                    Text(window.map { "\(TranscriptPanel.tokens(used)) of \(TranscriptPanel.tokens($0))" } ?? "\(TranscriptPanel.tokens(used)) context")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .help(help(used: used, window: window))
+            }
+            if terminal {
+                // An eye, not a terminal: this looks behind the session, it doesn't open a shell.
+                // One button both ways: filled and lit while the terminal is what shows.
+                let peeking = peek.tabs.contains(tabID)
+                Button { if peeking { peek.hide(tabID) } else { peek.show(tabID, store: store) } } label: {
+                    Image(systemName: peeking ? "eye.fill" : "eye")
+                }
+                .buttonStyle(IconButtonStyle())
+                .foregroundStyle(peeking ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .background(.primary.opacity(peeking ? 0.14 : 0), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .help(peeking ? "Back to the conversation (⌥⌘P)" : "Show this session's terminal (⌥⌘P): for dialogs like /config, or to see the raw screen")
+            }
+        }
+        .font(.system(size: 10))
+        .lineLimit(1)
+    }
+
+    private func help(used: Int, window: Int?) -> String {
+        var text = "\(used.formatted()) tokens in the context of the latest reply"
+        if let window { text += ", of the \(TranscriptPanel.tokens(window)) this model is assumed to hold (\(Int((Double(used) / Double(window) * 100).rounded()))%)" }
+        text += "."
+        if model.totalOut > 0 { text += " \(model.totalOut.formatted()) tokens written this session." }
+        return text
     }
 }

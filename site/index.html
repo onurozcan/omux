@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>omux – The native agentic development platform for the Mac</title>
-  <meta name="description" content="omux is the native agentic development platform for the Mac: a 5 MB terminal that runs many Claude Code and Codex sessions side by side, with projects, worktrees, live status, Allow/Deny from the sidebar, subagents, pull request status, and a files, changes and browser panel.">
+  <meta name="description" content="omux is the native agentic development platform for the Mac: a small Swift terminal that runs many Claude Code and Codex sessions side by side, with projects, worktrees, live status, Allow/Deny from the sidebar, subagents, pull request status, and a files, changes and browser panel.">
   <link rel="canonical" href="https://omux.app/">
   <meta name="theme-color" content="#0F0F0F">
   <meta name="color-scheme" content="dark">
@@ -21,14 +21,14 @@
   <meta property="og:site_name" content="omux">
   <meta property="og:url" content="https://omux.app/">
   <meta property="og:title" content="omux – The native agentic development platform for the Mac">
-  <meta property="og:description" content="The native agentic development platform for the Mac: a 5 MB terminal that runs many Claude Code and Codex sessions side by side, each on its own branch.">
+  <meta property="og:description" content="The native agentic development platform for the Mac: a small Swift terminal that runs many Claude Code and Codex sessions side by side, each on its own branch.">
   <meta property="og:image" content="https://omux.app/social-preview.png">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="640">
   <meta property="og:image:alt" content="The omux icon next to the app window with three sessions in a sidebar">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="omux – The native agentic development platform for the Mac">
-  <meta name="twitter:description" content="The native agentic development platform for the Mac: a 5 MB terminal for many Claude Code and Codex sessions side by side.">
+  <meta name="twitter:description" content="The native agentic development platform for the Mac: a small Swift terminal for many Claude Code and Codex sessions side by side.">
   <meta name="twitter:image" content="https://omux.app/social-preview.png">
 
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -89,7 +89,7 @@
 
   <section class="hero">
     <div class="container">
-      <h1>The agentic development platform that's a 5 MB Mac app.</h1>
+      <h1>The agentic development platform that's a native Mac app.</h1>
       <p class="lede">Run many Claude Code and Codex sessions side by side in one native terminal. See which one is working, which one is done and which one needs you, give each its own branch, and keep every conversation across relaunches. No Electron, no account, no telemetry.</p>
       <div class="cta-row">
         <a class="btn btn-primary btn-large" href="https://github.com/onurozcan/omux/releases/latest" data-download data-download-label>Download for macOS</a>
@@ -100,8 +100,8 @@
 
     <div class="container container-wide">
       <figure class="shot">
-        <img src="shots/hero.png" srcset="shots/hero.png 1600w, shots/hero@2x.png 2400w" sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)" width="1600" height="985" alt="omux with eight projects in the sidebar, a Claude Code conversation in the transcript view, a Codex session waiting on Allow or Deny, and the Changes panel showing a diff">
-        <figcaption>Eight projects, one window. The transcript of a Claude Code session, a Codex session that needs you, and the diff. <a href="#tour">More screenshots</a>.</figcaption>
+        <img src="shots/hero.png" srcset="shots/hero.png 1600w, shots/hero@2x.png 2400w" sizes="(min-width: 1240px) 1200px, calc(100vw - 32px)" width="1600" height="984" alt="omux with the project rail, one project's sessions, a Claude Code conversation in turn cards, and the Changes panel showing a diff">
+        <figcaption>A rail of projects, one project's sessions, the conversation in turn cards, and the diff. <a href="#tour">More screenshots</a>.</figcaption>
       </figure>
     </div>
   </section>
@@ -111,24 +111,36 @@
       <h2>A closer look</h2>
       <div class="gallery">
         <figure class="shot">
-          <img src="shots/approval.png" srcset="shots/approval.png 1600w, shots/approval@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session asking to run npm outdated, with Allow and Deny in the transcript and in the sidebar">
-          <figcaption>Every approval is a card. Allow or Deny from the transcript or the sidebar, or tell the agent what to do instead.</figcaption>
+          <img src="shots/rail.png" srcset="shots/rail.png 1600w, shots/rail@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="The project rail opened under the pointer, each project a tile with its initials in its own colour, its name and its session count">
+          <figcaption>Every project is a tile on a rail, its initials in its own colour. Rest the pointer on it and it opens with each project's name and what its sessions are doing.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/codex.png" srcset="shots/codex.png 1600w, shots/codex@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Codex session's reply with a code block, next to the file it changes">
-          <figcaption>Codex replies stream in as they're written, with code blocks you can copy and files you can open.</figcaption>
+          <img src="shots/cards.png" srcset="shots/cards.png 1600w, shots/cards@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="A conversation as turn cards: an earlier turn folded to one line, then two turns with the command the agent ran and its answer">
+          <figcaption>Each turn is a card: what you asked on top, what the agent ran and said under it, the steps and the time at the foot. Earlier turns fold to one line.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/panes.png" srcset="shots/panes.png 1600w, shots/panes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="A Claude Code session and a Codex session side by side in one project, with the diff on the right">
-          <figcaption>Sessions side by side: drop one onto another to split the pane.</figcaption>
+          <img src="shots/prompt.png" srcset="shots/prompt.png 1600w, shots/prompt@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="Claude Code asking a question with two choices, shown as a card above the message box">
+          <figcaption>Whatever an agent asks is a card above the message box: a question with its choices, a command to allow, a folder to trust. Answer there, or type your own reply.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/editor.png" srcset="shots/editor.png 1600w, shots/editor@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The Files panel editing server.ts next to the conversation, with ⌘S to save">
+          <img src="shots/panes.png" srcset="shots/panes.png 1600w, shots/panes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="Two Claude Code sessions side by side in one project, with one message box under both that names the pane it writes to">
+          <figcaption>Sessions side by side, with one message box under them all that writes to the active pane.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/tabs.png" srcset="shots/tabs.png 1600w, shots/tabs@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="The session list closed: a project's sessions as tabs along the top, the open one wide, and the conversation in turn cards across the window">
+          <figcaption>Close the session list and a project's sessions become tabs along the top, agents on the left and shells apart on the right. A tab that waits for you blinks.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/changes.png" srcset="shots/changes.png 1600w, shots/changes@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="The Changes panel beside the conversation, showing the diff of a layout file with added and removed lines">
+          <figcaption>The Changes panel lists what the session changed and shows each diff. Click a line to leave a note for the agent.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/editor.png" srcset="shots/editor.png 1600w, shots/editor@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="The Files panel showing a test file next to the conversation, with ⌘S to save">
           <figcaption>Edit files in the Files panel, with syntax colors and ⌘S to save, while the agent keeps working.</figcaption>
         </figure>
         <figure class="shot">
-          <img src="shots/picker.png" srcset="shots/picker.png 1600w, shots/picker@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="985" loading="lazy" alt="The agent and model picker: Claude Code models and Codex models in one menu">
-          <figcaption>Switch a session between Claude Code and Codex, or change the model, from the compose box. The conversation is handed over.</figcaption>
+          <img src="shots/browser.png" srcset="shots/browser.png 1600w, shots/browser@2x.png 2400w" sizes="(min-width: 800px) 760px, calc(100vw - 32px)" width="1600" height="984" loading="lazy" alt="The Browser panel showing a web page beside the conversation">
+          <figcaption>A browser beside the conversation. Local servers a session prints, like localhost:3000, open there by themselves.</figcaption>
         </figure>
       </div>
     </div>
@@ -142,7 +154,7 @@
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>
           <h3>Projects and sessions</h3>
-          <p>A project is a folder; its sessions sit under it in the sidebar. Drag to reorder, rename, color. ⌘T starts a session, ⌘K jumps to one.</p>
+          <p>A project is a folder, shown as a tile on a rail and coloured by what needs you. Its sessions sit beside it, or as tabs along the top when you close the list. ⌘T starts a session, ⌘K jumps to one.</p>
         </article>
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg>
@@ -182,7 +194,17 @@
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg>
           <h3>Notifications and usage</h3>
-          <p>A macOS notification with a sound when a session you aren't watching needs you. Your Claude or Codex plan limits in the sidebar, with a plain explanation when they can't be read.</p>
+          <p>A macOS notification with a sound when a session you aren't watching needs you. Your Claude or Codex plan limits as rings on the rail, with a plain explanation when they can't be read.</p>
+        </article>
+        <article class="card">
+          <svg class="icon" aria-hidden="true"><use href="#i-terminal"/></svg>
+          <h3>Sessions on other machines</h3>
+          <p>Give a project a machine you reach with ssh and its sessions run there, and keep running when the Mac sleeps or omux quits. omux sets itself up over the same connection; Files, Changes, the transcript and Codex work as they do locally. Linux on Intel and ARM.</p>
+        </article>
+        <article class="card">
+          <svg class="icon" aria-hidden="true"><use href="#i-panels"/></svg>
+          <h3>Conversations in turn cards</h3>
+          <p>In the transcript view each request, its work and its answer are one card, with what it took and the files it changed at the foot; older turns fold to a line. Prompts you send while the agent works wait on a shelf above the message box.</p>
         </article>
       </div>
     </div>
@@ -201,12 +223,12 @@
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-cpu"/></svg>
           <h3>Native Swift, not Electron</h3>
-          <p>SwiftUI and SwiftTerm, a 5 MB download, a window that launches in under a second and idles at nothing. It looks and behaves like a Mac app because it is one.</p>
+          <p>SwiftUI and SwiftTerm, a small download, a window that launches in under a second and idles at nothing. It looks and behaves like a Mac app because it is one.</p>
         </article>
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-focus"/></svg>
           <h3>A minimal, focused interface</h3>
-          <p>A sidebar, one terminal, three panels. No blocks, no command palette of AI features, no agent of its own. Your attention goes to the sessions, and the sessions tell you when they need it.</p>
+          <p>A rail of projects, one session, four panels. No blocks, no command palette of AI features, no agent of its own. Your attention goes to the sessions, and the sessions tell you when they need it.</p>
         </article>
         <article class="card">
           <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>

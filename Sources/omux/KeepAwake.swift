@@ -138,9 +138,10 @@ final class KeepAwake: ObservableObject {
 
     /// Starts watching sessions, heat and sleep. Called once at launch.
     func start() {
-        Store.shared.$runtime
+        Store.shared.runtimeChanged
             .sink { [weak self] runtime in self?.update(runtime: runtime) }
             .store(in: &subscriptions)
+        update(runtime: Store.shared.runtime)
         let center = NotificationCenter.default
         center.publisher(for: ProcessInfo.thermalStateDidChangeNotification)
             .receive(on: DispatchQueue.main)

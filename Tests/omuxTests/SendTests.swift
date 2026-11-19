@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class SendTests: XCTestCase {
     /// A Return the agent took as a line break leaves the prompt in its input box: the last
@@ -85,6 +86,73 @@ final class SendTests: XCTestCase {
         XCTAssertFalse(Store.startsTurn(from: .working, to: .blocked))
         XCTAssertFalse(Store.startsTurn(from: .working, to: .done))
         XCTAssertFalse(Store.startsTurn(from: .done, to: nil))
+    }
+
+    /// The compose box offers Claude Code's own commands, /remote-control among them, and
+    /// what installed plugins add, under the names Claude Code gives those.
+    func testTheCommandListHasRemoteControlAndPluginCommands() throws {
+        XCTAssertTrue(CommandIndex.claude.contains { $0.name == "remote-control" })
+        XCTAssertEqual(Set(CommandIndex.claude.map(\.name)).count, CommandIndex.claude.count, "no command listed twice")
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("omux-plugins-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for path in ["mine/commands/git", "mine/skills/deploy", "theirs/commands"] {
+            try FileManager.default.createDirectory(at: dir.appendingPathComponent(path), withIntermediateDirectories: true)
+        }
+        try "x".write(to: dir.appendingPathComponent("mine/commands/git/commit.md"), atomically: true, encoding: .utf8)
+        try "x".write(to: dir.appendingPathComponent("mine/skills/deploy/SKILL.md"), atomically: true, encoding: .utf8)
+        try "x".write(to: dir.appendingPathComponent("theirs/commands/audit.md"), atomically: true, encoding: .utf8)
+        let registry: [String: Any] = ["version": 2, "plugins": [
+            "mine@market": [["scope": "user", "installPath": dir.appendingPathComponent("mine").path]],
+            "theirs@market": [["scope": "project", "projectPath": "/work/other", "installPath": dir.appendingPathComponent("theirs").path]],
+        ]]
+        let file = dir.appendingPathComponent("installed_plugins.json")
+        try JSONSerialization.data(withJSONObject: registry).write(to: file)
+        XCTAssertEqual(CommandIndex.pluginCommands(project: "/work/app", registry: file.path).map(\.name), ["mine:git:commit", "mine:deploy"])
+        XCTAssertEqual(CommandIndex.pluginCommands(project: "/work/other/sub", registry: file.path).map(\.name).sorted(), ["mine:deploy", "mine:git:commit", "theirs:audit"])
+    }
+
+    func testAProjectIsActivatedByAFreshStartOrAfterAnHour() {
+        let now = Date()
+        // No turn on record: the first one activates, whatever is up.
+        XCTAssertTrue(Store.activates(agentUp: true, lastTurn: nil, now: now))
+        // Prompting a project whose agent is up, minutes after its last turn, doesn't.
+        XCTAssertFalse(Store.activates(agentUp: true, lastTurn: now.addingTimeInterval(-600), now: now))
+        // Starting the agent afresh does, even right away.
+        XCTAssertTrue(Store.activates(agentUp: false, lastTurn: now.addingTimeInterval(-60), now: now))
+        // Coming back after an hour does, with the agent still sitting at its prompt.
+        XCTAssertTrue(Store.activates(agentUp: true, lastTurn: now.addingTimeInterval(-3601), now: now))
+    }
+
+    func testPagesOpenInTheBrowser() {
+        XCTAssertTrue(Store.opensInBrowser(URL(fileURLWithPath: "/p/site/index.html")))
+        XCTAssertTrue(Store.opensInBrowser(URL(fileURLWithPath: "/p/Report.HTM")))
+        XCTAssertFalse(Store.opensInBrowser(URL(fileURLWithPath: "/p/site/style.css")))
+        XCTAssertFalse(Store.opensInBrowser(URL(fileURLWithPath: "/p/notes.md")))
+    }
+
+    func testAPinnedProjectJoinsAfterTheOnesPinnedBefore() {
+        // Nothing active: the first project started goes to the top.
+        XCTAssertEqual(Store.offsetJoiningActive(from: 2, afterLastActive: nil), 0)
+        XCTAssertNil(Store.offsetJoiningActive(from: 0, afterLastActive: nil))
+        // Active projects at 0 and 1: a project below them slots in at 2, one already there stays.
+        XCTAssertEqual(Store.offsetJoiningActive(from: 4, afterLastActive: 1), 2)
+        XCTAssertNil(Store.offsetJoiningActive(from: 2, afterLastActive: 1))
+        // A project above the active ones moves down to sit after them (move semantics: offset 3 lands it at 2).
+        XCTAssertEqual(Store.offsetJoiningActive(from: 0, afterLastActive: 2), 3)
+        var groups = ["new", "a", "b", "idle"]
+        groups.move(fromOffsets: [0], toOffset: 3)
+        XCTAssertEqual(groups, ["a", "b", "new", "idle"])
+    }
+
+    /// A pinned project reads back from an older workspace file as unpinned, and keeps the flag it saved.
+    func testAProjectKeepsItsPin() throws {
+        var group = TabGroup(name: "p")
+        group.pinned = true
+        let data = try JSONEncoder().encode(group)
+        XCTAssertTrue(try JSONDecoder().decode(TabGroup.self, from: data).pinned)
+        let old = try JSONDecoder().decode(TabGroup.self, from: Data(#"{"name":"old"}"#.utf8))
+        XCTAssertFalse(old.pinned)
     }
 
     func testShellPathKeepsOrderAndDropsDuplicates() {

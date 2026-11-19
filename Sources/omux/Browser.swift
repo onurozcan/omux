@@ -55,6 +55,13 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         webView.load(URLRequest(url: url))
     }
 
+    /// Shows a local page; `folder` (the page's own, or the project's) is what it may read.
+    func load(file url: URL, within folder: URL) {
+        error = nil
+        address = url.absoluteString
+        webView.loadFileURL(url, allowingReadAccessTo: folder)
+    }
+
     func reload() {
         if error != nil, let failedURL {
             load(failedURL.absoluteString)
@@ -246,24 +253,36 @@ struct BrowserPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 2) {
                 Button { session.webView.goBack() } label: { Image(systemName: "chevron.left") }
                     .disabled(!session.canGoBack)
                     .help("Back")
                 Button { session.webView.goForward() } label: { Image(systemName: "chevron.right") }
                     .disabled(!session.canGoForward)
                     .help("Forward")
-                Button {
-                    if session.isLoading { session.webView.stopLoading() } else { session.reload() }
-                } label: { Image(systemName: session.isLoading ? "xmark" : "arrow.clockwise") }
-                    .help(session.isLoading ? "Stop" : "Reload")
-                TextField("localhost:3000", text: $session.address)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .onSubmit { session.load(session.address) }
+                // The address, with what kind of page it is on the left and reload on the right.
+                HStack(spacing: 6) {
+                    Image(systemName: addressIcon)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    TextField("Search or enter an address", text: $session.address)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.primary)
+                        .onSubmit { session.load(session.address) }
+                    if session.isLoading { ProgressView().controlSize(.mini).scaleEffect(0.7).frame(width: 12, height: 12) }
+                    Button {
+                        if session.isLoading { session.webView.stopLoading() } else { session.reload() }
+                    } label: { Image(systemName: session.isLoading ? "xmark" : "arrow.clockwise").font(.system(size: 10, weight: .medium)) }
+                        .buttonStyle(.plain)
+                        .disabled(session.currentURL == nil && !session.isLoading)
+                        .help(session.isLoading ? "Stop" : "Reload")
+                }
+                .fieldBox()
+                .padding(.horizontal, 4)
                 Button { session.togglePick() } label: {
                     Image(systemName: "scope")
-                        .foregroundStyle(session.picking ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(session.picking ? Color.accent : Color.secondary)
                 }
                 .disabled(session.currentURL == nil)
                 .help("Pick an element to send to this session")
@@ -273,20 +292,20 @@ struct BrowserPanel: View {
                 .disabled(session.currentURL == nil)
                 .help("Open in default browser")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IconButtonStyle(size: 24))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .overlay(alignment: .bottom) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .padding(.horizontal, 8)
+            .frame(height: 38)
+            .overlay(alignment: .bottom) { Hairline() }
 
             if session.picking {
                 Text("Click an element to add it to the session prompt. Esc cancels.")
                     .font(.caption)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accent)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.accentColor.opacity(0.1))
+                    .background(Color.accent.opacity(0.1))
             }
 
             ZStack {
@@ -302,7 +321,7 @@ struct BrowserPanel: View {
 
             if let notice = session.notice {
                 HStack(spacing: 6) {
-                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                    Image(systemName: "checkmark").foregroundStyle(Color.accent)
                     Text(notice).lineLimit(1).truncationMode(.middle)
                     Spacer()
                     Button { session.notice = nil } label: { Image(systemName: "xmark") }
@@ -312,12 +331,20 @@ struct BrowserPanel: View {
                 .font(.caption)
                 .padding(.horizontal, 10)
                 .frame(height: 30)
-                .background(Color(nsColor: theme.chrome))
+                .background(Color(nsColor: theme.background))
             }
         }
         .background(Color(nsColor: theme.background))
         .onAppear { openMentionedServer() }
         .onChange(of: store.mentionedURLs) { _, _ in openMentionedServer() }
+    }
+
+    /// A house for this Mac's own servers, a lock for https, a page for a file, a globe otherwise.
+    private var addressIcon: String {
+        guard let url = session.currentURL else { return "magnifyingglass" }
+        if url.isFileURL { return "doc" }
+        if let host = url.host, host == "localhost" || host == "127.0.0.1" || host.hasSuffix(".localhost") { return "house" }
+        return url.scheme == "https" ? "lock.fill" : "globe"
     }
 
     /// The first time the panel shows, it opens the server the session printed last.
@@ -327,33 +354,20 @@ struct BrowserPanel: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "globe").font(.system(size: 28)).foregroundStyle(.tertiary)
-            Text("No page open").font(.headline)
-            if store.mentionedURLs.isEmpty {
-                Text("Type an address above. Local servers this session prints, like localhost:3000, open here by themselves.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 260)
-            } else {
-                Text("Servers in this session's output:").font(.caption).foregroundStyle(.secondary)
-                ForEach(store.mentionedURLs.suffix(5).reversed(), id: \.self) { url in
-                    Button(url) { session.load(url) }.buttonStyle(.link)
-                }
+        EmptyState(icon: "globe", title: "No page open",
+                   detail: store.mentionedURLs.isEmpty
+                       ? "Type an address above. Local servers this session prints, like localhost:3000, open here by themselves."
+                       : "Servers in this session's output:") {
+            ForEach(store.mentionedURLs.suffix(5).reversed(), id: \.self) { url in
+                Button(url) { session.load(url) }.buttonStyle(.link)
             }
         }
-        .padding()
     }
 
     private func message(title: String, detail: String, retry: Bool) -> some View {
-        VStack(spacing: 8) {
-            Text(title).font(.headline)
-            Text(detail).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 280)
-            if retry { Button("Try Again") { session.reload() }.controlSize(.small) }
+        EmptyState(icon: "exclamationmark.triangle", title: title, detail: detail) {
+            if retry { Button("Try Again") { session.reload() }.controlSize(.small).padding(.top, 4) }
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: theme.background))
     }
 }

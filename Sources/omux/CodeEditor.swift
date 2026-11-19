@@ -92,6 +92,8 @@ final class FileDocument: ObservableObject {
             dirty = false
             changedOnDisk = false
             error = nil
+            // A copy of a file on another machine goes back to where it came from.
+            RemoteFiles.saved(url)
         } catch {
             self.error = "Couldn't save: \(error.localizedDescription)"
         }
@@ -282,7 +284,7 @@ struct FileEditorPane: View {
             .font(.system(size: 11))
             .padding(.horizontal, 10)
             .frame(height: 24)
-            .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 1) }
+            .overlay(alignment: .top) { Hairline() }
         }
     }
 

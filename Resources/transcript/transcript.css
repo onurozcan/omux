@@ -1,8 +1,8 @@
 :root {
   --bg: #161618; --fg: #e6e6e6; --muted: #8d8d93; --faint: #6f6f75; --line: rgba(128,128,128,0.18);
   --card: rgba(128,128,128,0.07); --card-strong: rgba(128,128,128,0.12); --accent: #2f6fed; --accent-soft: rgba(47,111,237,0.16);
-  --bubble: rgba(110,135,180,0.17); --bubble-line: rgba(110,135,180,0.22); --amber: #f59e0b; --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --violet: #a78bfa;
-  --font: -apple-system, 'SF Pro Text', system-ui, sans-serif; --mono: ui-monospace, 'SF Mono', Menlo, monospace; --size: 13px;
+  --bubble: rgba(255,255,255,0.075); --bubble-line: rgba(255,255,255,0.09); --amber: #f59e0b; --blue: #3b82f6; --green: #22c55e; --red: #ef4444; --violet: #a78bfa;
+  --font: -apple-system, 'SF Pro Text', system-ui, sans-serif; --mono: ui-monospace, 'SF Mono', Menlo, monospace; --size: 12px;
 }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: var(--size); line-height: 1.55; -webkit-font-smoothing: antialiased; }
 body { overflow-x: hidden; }
@@ -228,8 +228,8 @@ html.light .diff { background: rgba(0,0,0,0.04); }
 @keyframes dot { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 .status .caret { animation: blink 1s steps(2, start) infinite; }
 @keyframes blink { to { visibility: hidden; } }
-.enter { animation: enter 0.22s ease-out; }
-@keyframes enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.enter { animation: enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .tool.just-done { animation: justdone 1.2s ease-out; }
 @keyframes justdone { 0% { background: rgba(34,197,94,0.18); } 100% { background: transparent; } }
 .tool.just-done.failed { animation-name: justfailed; }
@@ -271,3 +271,69 @@ body.compact .tools { font-size: 11px; }
 body.bubbles-outline .user .bubble { background: transparent; border-color: var(--line); }
 body.bubbles-plain .user .bubble { background: transparent; border: none; padding: 2px 0; border-left: 2px solid var(--accent); padding-left: 10px; border-radius: 0; }
 body.no-times .user .time { display: none; }
+
+/* Neutral accent: no colour for links and the like, so they are told apart by an underline. */
+body.neutral a, body.neutral .path, body.neutral .more-output, body.neutral .tool .changes, body.neutral .info-head .manage { color: var(--fg); }
+body.neutral a { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 2px; }
+body.neutral .path { border-bottom-color: var(--faint); }
+body.neutral ::selection { background: rgba(128,128,128,0.35); }
+/* Neutral also greys the working colour: the Bash tag, running rows, spinners, the caret and the Working dot. */
+body.neutral { --blue: #9a9aa0; }
+body.neutral .tag.bash { background: rgba(128,128,128,0.16); }
+body.neutral .spin { border-color: rgba(128,128,128,0.3); border-top-color: var(--blue); }
+html.light body.neutral { --blue: #6e6e73; }
+
+/* Turn cards: a request, the work and the answer drawn as one card. The blocks are still
+   siblings in the list; the header, the middle and the end each draw their part of the edge. */
+body.cards main { gap: 0; }
+body.cards main > * { margin-top: 16px; }
+body.cards main > :first-child { margin-top: 0; }
+body.cards .turn-head, body.cards .turn-mid { background: var(--card); border-left: 1px solid var(--line); border-right: 1px solid var(--line); box-sizing: border-box; }
+body.cards .turn-mid { margin-top: 0; padding: 10px 12px 0 12px; }
+body.cards .turn-end { border-bottom: 1px solid var(--line); border-radius: 0 0 12px 12px; padding-bottom: 10px; }
+body.cards .turn-head { position: relative; display: flex; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 9px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; cursor: default; }
+body.cards .turn-head.turn-end { border-radius: 12px; padding-bottom: 9px; }
+/* The request reads at the size it was typed at: one point above the answer, the compose box's own. */
+body.cards .turn-head .bubble { order: 1; flex: 1 1 0; min-width: 0; background: transparent; border: 0; border-radius: 0; padding: 0; font-weight: 600; max-width: none; font-size: calc(var(--size) + 1px); }
+body.cards .turn-head .thumbs { order: 0; flex: 0 0 100%; justify-content: flex-start; }
+body.cards .turn-head::after { content: attr(data-sum); order: 2; flex: none; font-size: 10px; color: var(--faint); }
+body.cards .turn-head .time, body.cards .turn-head .pending { order: 3; flex: none; }
+body.cards .turn-head .actions { position: absolute; right: 10px; top: -11px; margin: 0; background: var(--bg); border-radius: 6px; }
+body.cards .turn-head.turn-folded .bubble { font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.cards .turn-head.turn-folded { cursor: pointer; }
+body.cards .turn-head.turn-folded:hover .bubble { color: var(--fg); }
+body.cards .turn-mid.turn-folded, body.cards .turn-worked { display: none; }
+body.cards .turn-live { border-color: color-mix(in srgb, var(--blue) 45%, var(--line)); }
+body.cards .turn-mid.tools { border-top: 0; border-bottom: 0; border-radius: 0; }
+body.cards .turn-mid.tools.turn-end { border-bottom: 1px solid var(--line); border-radius: 0 0 12px 12px; }
+body.cards .turn-mid.tools.turn-live { border-color: color-mix(in srgb, var(--blue) 45%, var(--line)); }
+body.cards .turn-mid.note { padding-top: 12px; }
+body.cards .turn-mid.status { padding-top: 12px; }
+.turn-foot { display: none; }
+body.cards .turn-foot { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; margin-top: 0; border-top: 0; }
+body.cards .turn-foot::before { content: ''; flex: 0 0 100%; height: 1px; background: var(--line); margin: 2px -12px 2px -12px; flex-basis: calc(100% + 24px); }
+.turn-foot .pill { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--card-strong); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.turn-foot .pill.file { cursor: pointer; font-family: var(--mono); font-size: 10px; }
+.turn-foot .pill.file:hover { color: var(--fg); }
+.turn-foot .add { color: var(--green); } .turn-foot .del { color: var(--red); }
+/* The request of the turn being read, held at the top of the view (transcript.js picks it). Its
+   colour is laid over the page's so what scrolls beneath doesn't show through, and the corners
+   outside its rounded top are painted the page's colour, hiding the card's sides there. */
+body.cards .turn-head.pinned { position: sticky; top: 8px; z-index: 4; background: linear-gradient(var(--card), var(--card)), var(--bg); box-shadow: 0 8px 12px -10px rgba(0,0,0,0.55); }
+/* A band of the page's colour above it, so the held request stands clear of the panel's own top
+   edge instead of lying on it, and nothing scrolls through the gap. */
+body.cards .turn-head.pinned::before { content: ''; position: absolute; left: -1px; right: -1px; top: -9px; height: 20px; pointer-events: none;
+  background: linear-gradient(var(--bg), var(--bg)) left top / 100% 8px no-repeat,
+              radial-gradient(circle at 12px 12px, transparent 11.5px, var(--bg) 12px) left 0 top 8px / 12px 12px no-repeat,
+              radial-gradient(circle at 0 12px, transparent 11.5px, var(--bg) 12px) right 0 top 8px / 12px 12px no-repeat; }
+body.cards .turn-head.pinned .actions { top: 5px; }
+/* A block that joins a card doesn't slide in: its edges are the card's own outline, and a
+   block easing up from 8px below opens a gap in it for a moment. Rows inside still ease in. */
+body.cards .turn-mid.enter, body.cards .turn-head.enter { animation: none; }
+
+/* The conversation and the message box under it share their edges: 12px each side, the box's
+   own inset. No scroll bar and no row of dots down the right edge to make room for. */
+main { padding-left: 12px; padding-right: 12px; }
+.outline { display: none !important; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+.jump { right: 22px; }

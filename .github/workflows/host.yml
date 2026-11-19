@@ -1,0 +1,66 @@
+name: Host builds
+
+# omux-host for Linux, built here on a clean machine from a known commit, for both
+# architectures natively. The app carries these and installs them on machines a project runs
+# on, so they come from this record and not from whoever cut the release. scripts/fetch-host.sh
+# brings a commit's builds down into build/host, where build.sh picks them up.
+on:
+  push:
+    branches: [main, core]
+    tags: ["v*"]
+    paths:
+      - "Sources/OmuxCore/**"
+      - "Sources/OmuxHostKit/**"
+      - "Sources/omux-host/**"
+      - "Package.swift"
+      - ".github/workflows/host.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: host-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Built on Amazon Linux 2 for its old C library (2.26): the program then runs on that
+      # version and every later one, which reaches Debian 10, Ubuntu 18.04, RHEL 8 and up.
+      # Run by hand, not as the job's container: the actions themselves need a newer one.
+      - name: Build
+        run: |
+          docker run --rm -v "$PWD":/src -w /src swift:6.2-amazonlinux2 \
+            swift build -c release --product omux-host --static-swift-stdlib
+      - name: Pack
+        run: |
+          mkdir -p out
+          sudo chown -R "$(id -u)" .build
+          strip -o out/omux-host-linux-${{ matrix.arch }} .build/release/omux-host
+          # Nothing newer than the baseline may be asked of the machine it lands on.
+          needs=$(objdump -T out/omux-host-linux-${{ matrix.arch }} | grep -o 'GLIBC_[0-9.]*' | sort -V | uniq | tail -1)
+          echo "Needs $needs"
+          [ "$(printf '%s\n' "$needs" GLIBC_2.26 | sort -V | tail -1)" = "GLIBC_2.26" ] || { echo "Built against too new a C library"; exit 1; }
+          cd out
+          # The hash is of the program itself: what the app compares with the copy on a machine.
+          sha256sum omux-host-linux-${{ matrix.arch }} | cut -d' ' -f1 > omux-host-linux-${{ matrix.arch }}.sha256
+          tar -cJf omux-host-linux-${{ matrix.arch }}.tar.xz omux-host-linux-${{ matrix.arch }}
+          rm omux-host-linux-${{ matrix.arch }}
+          ls -l
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: omux-host-linux-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 90

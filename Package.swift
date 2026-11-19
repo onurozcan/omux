@@ -1,36 +1,58 @@
 // swift-tools-version:6.2
 import PackageDescription
 
+// Linux builds the parts with no window: the core and the protocol, for the headless session
+// host. The app, its updater and its terminal view are macOS only.
+var dependencies: [Package.Dependency] = []
+var targets: [Target] = [
+    // What the app and the `omux` command line tool say to each other.
+    .target(name: "OmuxCLIProtocol", path: "Sources/OmuxCLIProtocol"),
+    // Everything about sessions and agents that needs no window: what the Mac app and the
+    // headless session host on Linux are both built on. Foundation only, so it compiles there.
+    .target(name: "OmuxCore", path: "Sources/OmuxCore"),
+    .testTarget(name: "OmuxCoreTests", dependencies: ["OmuxCore"]),
+    // The session host: the protocol, the sessions it keeps, and the socket it answers on.
+    .target(name: "OmuxHostKit", dependencies: ["OmuxCore"], path: "Sources/OmuxHostKit"),
+    // The host as a program, and the command line that talks to it: `omux-host`.
+    .executableTarget(name: "omux-host", dependencies: ["OmuxHostKit", "OmuxCore"], path: "Sources/omux-host"),
+    .testTarget(name: "OmuxHostKitTests", dependencies: ["OmuxHostKit"]),
+]
+
+#if os(macOS)
+dependencies += [
+    .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+]
+targets += [
+    // The `omux` tool; build.sh puts it in the app bundle at Contents/Resources/bin/omux.
+    .executableTarget(name: "omux-cli", dependencies: ["OmuxCLIProtocol"], path: "Sources/omux-cli"),
+    // What the app and its keep-awake helper say to each other, and the helper's lease rules.
+    .target(name: "OmuxAwakeProtocol", path: "Sources/OmuxAwakeProtocol"),
+    // The keep-awake helper; build.sh puts it in the app bundle at Contents/MacOS/omux-awake
+    // and registers it as a launch daemon (Contents/Library/LaunchDaemons).
+    .executableTarget(name: "omux-awake", dependencies: ["OmuxAwakeProtocol"], path: "Sources/omux-awake"),
+    .executableTarget(
+        name: "omux",
+        dependencies: [
+            .product(name: "SwiftTerm", package: "SwiftTerm"),
+            .product(name: "Sparkle", package: "Sparkle"),
+            "OmuxCLIProtocol",
+            "OmuxAwakeProtocol",
+            "OmuxCore",
+            "OmuxHostKit",
+        ],
+        path: "Sources/omux",
+        // build.sh embeds Sparkle.framework in the app bundle; the binary finds it there.
+        linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
+    ),
+    .testTarget(name: "omuxTests", dependencies: ["omux", "OmuxCore", "OmuxAwakeProtocol"]),
+]
+#endif
+
 let package = Package(
     name: "omux",
     platforms: [.macOS(.v14)],
-    dependencies: [
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", from: "1.2.0"),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
-    ],
-    targets: [
-        // What the app and the `omux` command line tool say to each other.
-        .target(name: "OmuxCLIProtocol", path: "Sources/OmuxCLIProtocol"),
-        // The `omux` tool; build.sh puts it in the app bundle at Contents/Resources/bin/omux.
-        .executableTarget(name: "omux-cli", dependencies: ["OmuxCLIProtocol"], path: "Sources/omux-cli"),
-        // What the app and its keep-awake helper say to each other, and the helper's lease rules.
-        .target(name: "OmuxAwakeProtocol", path: "Sources/OmuxAwakeProtocol"),
-        // The keep-awake helper; build.sh puts it in the app bundle at Contents/MacOS/omux-awake
-        // and registers it as a launch daemon (Contents/Library/LaunchDaemons).
-        .executableTarget(name: "omux-awake", dependencies: ["OmuxAwakeProtocol"], path: "Sources/omux-awake"),
-        .executableTarget(
-            name: "omux",
-            dependencies: [
-                .product(name: "SwiftTerm", package: "SwiftTerm"),
-                .product(name: "Sparkle", package: "Sparkle"),
-                "OmuxCLIProtocol",
-                "OmuxAwakeProtocol",
-            ],
-            path: "Sources/omux",
-            // build.sh embeds Sparkle.framework in the app bundle; the binary finds it there.
-            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
-        ),
-        .testTarget(name: "omuxTests", dependencies: ["omux", "OmuxAwakeProtocol"]),
-    ],
+    dependencies: dependencies,
+    targets: targets,
     swiftLanguageModes: [.v5]
 )

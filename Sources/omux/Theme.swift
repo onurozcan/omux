@@ -43,7 +43,7 @@ enum Theme: String, CaseIterable, Identifiable {
     static var lightThemes: [Theme] { allCases.filter(\.isLight) }
 
     static var current: Theme {
-        Theme(rawValue: UserDefaults.standard.string(forKey: Prefs.theme) ?? "") ?? .dark
+        Theme(rawValue: UserDefaults.standard.string(forKey: Prefs.theme) ?? "") ?? .black
     }
 
     var isLight: Bool { [.light, .solarizedLight, .catppuccinLatte, .githubLight].contains(self) }
@@ -145,10 +145,17 @@ enum Theme: String, CaseIterable, Identifiable {
     }
 }
 
+extension SwiftUI.Color {
+    /// The accent chosen in Settings. Not `accentColor`, which stays the system's whatever the
+    /// window's tint is, so a Neutral or fixed accent never reached the views that used it.
+    static var accent: SwiftUI.Color { SwiftUI.Color(nsColor: Appearance.accent) }
+}
+
 /// The accent colour and the transcript's typography and layout, from Settings.
 enum Appearance {
-    /// Accent choices: the system's, the theme's blue, or a fixed colour.
-    static let accents: [(id: String, label: String)] = [("system", "System"), ("theme", "Theme"), ("blue", "Blue"), ("purple", "Purple"), ("pink", "Pink"),
+    /// Accent choices: the system's, the theme's blue, a fixed colour, or none: Neutral greys
+    /// everything but the sidebar, whose selection keeps the system's colour.
+    static let accents: [(id: String, label: String)] = [("system", "System"), ("neutral", "Neutral"), ("theme", "Theme"), ("blue", "Blue"), ("purple", "Purple"), ("pink", "Pink"),
                                                         ("red", "Red"), ("orange", "Orange"), ("yellow", "Yellow"), ("green", "Green"), ("graphite", "Graphite")]
 
     static func accent(_ choice: String, theme: Theme) -> NSColor {
@@ -162,11 +169,12 @@ enum Appearance {
         case "yellow": return NSColor(hex: 0xD9A50B)
         case "green": return NSColor(hex: 0x22A55B)
         case "graphite": return NSColor(hex: 0x8E8E93)
+        case "neutral": return NSColor(hex: 0x808086)
         default: return .controlAccentColor
         }
     }
 
-    static var accent: NSColor { accent(UserDefaults.standard.string(forKey: Prefs.accent) ?? "system", theme: Theme.current) }
+    static var accent: NSColor { accent(UserDefaults.standard.string(forKey: Prefs.accent) ?? "neutral", theme: Theme.current) }
 
     static let transcriptSizes = 11.0 ... 18.0
     static let transcriptFonts: [(id: String, label: String)] = [("", "System"), ("serif", "Serif"), ("rounded", "Rounded"), ("mono", "Terminal font")]
@@ -177,21 +185,24 @@ enum Appearance {
 
 /// What the transcript page is told about how to look, beyond the theme's colours.
 struct TranscriptStyle: Equatable {
-    var accent = "system"
+    var accent = "neutral"
     var font = ""
-    var size = 13.0
+    var size = 12.0
     var width = "full"
     var density = "comfortable"
     var bubbles = "tinted"
     var timestamps = true
+    /// "cards": each request with its work and answer is one card. "plain": a stream of bubbles and rows.
+    var layout = "cards"
 
     static var current: TranscriptStyle {
         let d = UserDefaults.standard
-        return TranscriptStyle(accent: d.string(forKey: Prefs.accent) ?? "system", font: d.string(forKey: Prefs.transcriptFont) ?? "",
-                               size: d.double(forKey: Prefs.transcriptSize) > 0 ? d.double(forKey: Prefs.transcriptSize) : 13,
+        return TranscriptStyle(accent: d.string(forKey: Prefs.accent) ?? "neutral", font: d.string(forKey: Prefs.transcriptFont) ?? "",
+                               size: d.double(forKey: Prefs.transcriptSize) > 0 ? d.double(forKey: Prefs.transcriptSize) : 12,
                                width: d.string(forKey: Prefs.transcriptWidth) ?? "full", density: d.string(forKey: Prefs.transcriptDensity) ?? "comfortable",
                                bubbles: d.string(forKey: Prefs.transcriptBubbles) ?? "tinted",
-                               timestamps: d.object(forKey: Prefs.transcriptTimestamps) as? Bool ?? true)
+                               timestamps: d.object(forKey: Prefs.transcriptTimestamps) as? Bool ?? true,
+                               layout: d.string(forKey: Prefs.transcriptLayout) ?? "cards")
     }
 
     /// The CSS font stack for the body text.

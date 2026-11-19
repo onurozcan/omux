@@ -1,6 +1,7 @@
 import AppKit
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class TerminalAttachmentTests: XCTestCase {
     @MainActor

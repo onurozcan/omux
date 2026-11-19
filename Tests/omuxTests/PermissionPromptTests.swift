@@ -1,5 +1,6 @@
 import XCTest
 @testable import omux
+@testable import OmuxCore
 
 final class PermissionPromptTests: XCTestCase {
     private func runtime(_ message: String?, provider: SessionProvider? = .claude) -> TabRuntime {

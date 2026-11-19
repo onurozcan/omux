@@ -8,6 +8,121 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 - **Keep awake.** Settings › Sessions › Keep Awake keeps the Mac awake while agents work, even with the lid closed and the Mac in a bag. It starts when a session's agent starts working or needs you, and stops on its own when the Mac gets hot, the battery falls to 10%, or the screen has been dark for the time limit (3 hours by default). By default the Mac stays awake after agents finish, so you can keep going from your phone; a setting lets it sleep as soon as they do. While it's on, a small cup glows next to the usage limits; click it for details, Screen Off and Turn Off (and Turn On again). While it holds, View › Screen Off darkens the screens while agents keep working, without locking the Mac, and closing the lid plays the same short animation on MacBooks with a lid angle sensor. Closing the lid needs a small helper that runs as root, registered once with System Settings › Login Items: it only turns `pmset disablesleep` on and off, answers only omux, never touches the network, and lets the Mac sleep within two minutes if omux quits, crashes or hangs. Off by default.
 
+## [0.12.3] - 2026-11-18
+
+### Added
+- **Home.** The first tile on the project rail opens a screen with the sessions that need you and the ones at work, a to-do list whose items can be sent to a session or a new one, this week's prompts and tokens per day, per project and per model across Claude Code and Codex, both agents' plan limits and pull requests. The share button on the week's figures makes a picture of today or the week, sized for X at 1600×900 with omux.app in its corner, to copy or save; project names stay off it unless you tick them. Settings › General › Home turns it off.
+- **Links can open in your default browser.** Settings › General › Links chooses where a web link clicked in a conversation or a terminal opens: omux's browser beside the session, as before, or the browser macOS opens links with.
+
+### Changed
+- **The request stays at the top of a long turn.** While you scroll through a turn card, its request is held at the top of the conversation, so the card's sides end in its own rounded top instead of running off the page like a window border. It slides away as the card ends; a request longer than a few lines isn't held.
+- **The panels are cards.** The session list, the conversation and the right panel are each a rounded card with a faint edge on a darker backdrop, like the tiles of the project rail; their header rows sit on the backdrop above them.
+- **The rail's spacing is even.** Tiles have the same margin on both sides, and the limits ring, history and settings at the foot are the same width.
+- **Idle projects fold back when the pointer leaves the rail.** Listed from their "+N" tile, they stay only while the pointer is on the rail; an idle project that is on show keeps the list open.
+- **Starting Claude Code is one line.** The card with the terminal's last lines is a single quiet line above the message box, and it shows only after a message was sent to a session that has to start. A stopped session no longer shows it.
+
+### Fixed
+- **A message sent to a stopped session arrives.** A session whose agent had ended could show "Starting Claude Code" and hold the message; omux now checks whether the agent is still there before it waits, and starts it again when it isn't.
+- **Allow answers the prompt it is shown for.** The Allow and Deny buttons checked a stale reading of whether the agent was running and could do nothing.
+
+## [0.12.2] - 2026-11-16
+
+### Added
+- **A split button in the session header.** One button opens a menu: a new shell to the right or below, or another session of the project beside this one. The same choices stay in a session's own menu, and each pane keeps its buttons.
+
+### Changed
+- **The message box is as wide as the conversation.** The cards and the box under them share their edges, and with the transcript set to Wide or Narrow the box and the cards that ask something narrow with it. The band behind the box and the line over it are gone: it stands on the panel itself.
+- **No scroll bar and no dots beside the conversation.** The row of dots that jumped between prompts and the scroll bar are gone, and the cards take the room. Folded turns and ⌘F find an earlier prompt.
+- **The right panel is one surface.** Files, Changes, Browser and Agents sit on the conversation's own background, where the file tree and the list of changes were a lighter grey. Its tabs are drawn as the session header draws its sessions, on the same strip at the same height.
+
+## [0.12.1] - 2026-11-16
+
+### Changed
+- **The rail has colour of its own.** Each project's tile is dark with a faint sheen, and its initials are in a colour that belongs to the project, taken from its name so it is the same on every launch. The project on show fills softly with that colour. What needs you is a dot on the tile's corner again: amber for a session that waits, red for one that failed, blue for one at work.
+- **A project click goes back to where you were in it.** Picking a project on the rail switches the window to it, on the session that was open when you last left that project; it is remembered across launches. A project not visited yet shows the session that waits for you, else the one worked in last.
+- **The rail opens after a good second.** Resting the pointer on it for 1.2 seconds shows the names, where a third of a second did; a click on a tile is still immediate.
+
+### Fixed
+- **A working card keeps its outline.** Beside a Thinking row the outline of the turn at work fell back to the fainter colour, and every block that joined the card slid in from below, opening a gap in the outline for a moment each time the Working line changed. Blocks of a card now arrive in place and share one outline.
+
+## [0.12.0] - 2026-11-16
+
+### Added
+- **Projects on a rail.** The sidebar's projects are tiles on a narrow strip, each in the colour of what most needs you: amber when a session waits, red when one failed, blue while one works, grey when nothing is going on. A bar marks the project on show, and the list beside the strip holds that project's sessions. Resting the pointer on the strip opens it over the list with every project's name and what its sessions are doing. Idle projects fold into one tile. Settings › General › Sidebar › Projects brings back the single list.
+- **Sessions as tabs.** Closing the session list (⌃⌘S) keeps the rail and turns the project's sessions into tabs along the top of the window: agents on the left, the open one wide enough to say what it is doing, and shells apart on the right. A tab whose agent waits for you blinks slowly. Arrows, a sideways swipe or the mouse wheel move a row that doesn't fit.
+- **Turn cards.** In the transcript view each request, its work and its answer are one card. The request is its header, and a foot says how many steps it took, how long, and which files it changed, each one a way into Changes. The two latest turns show in full; older ones fold to their header and open with a click. Settings › Appearance › Transcript › Turns goes back to the plain stream.
+- **One message box for panes.** With several panes on screen no pane has a box of its own: the one under them all writes to the active pane and names it. A pane showing its terminal gets a line that types a command into it.
+- **A queue you can see.** Prompts sent while the agent works wait on a shelf on top of the message box, in order, where they can be moved earlier or later, taken back into the box to change, removed, or all sent now. It replaces the strip that floated over the transcript.
+- **How full the context is.** The session header shows the model and a small meter of the context against the model's window, such as "65k of 1M", amber from three quarters and red from nine tenths.
+- **Machines have a place in omux.** File › New Remote Project… (⌃⌘N) makes a project on another machine in one step: pick the machine from the ones you've used or the names in `~/.ssh/config`, or type one; browse its folders; and Test says before anything is created whether it can be reached, what system it is, whether Claude Code is there and whether the folder exists. A mistyped name is caught there, not in a session that won't connect. Settings › Machines lists every machine with how it is and what runs on it, where a session can be closed, a session started by omux on another Mac can be opened here, and omux can be taken off a machine. The sidebar marks a project whose machine can't be reached and says why. A machine name ssh would read as an option is refused.
+- **Machines from the compose box.** `/machines` shows the machines projects run on as a card in the transcript, each with how it is and what uses it; `/machine` shows the one this session runs on; `/remote devbox ~/code/app` opens New Remote Project with the machine and folder filled in and looked at. In a session on another machine, `@` offers that machine's files, a pasted image or attached file is copied there first so the agent can read it, and `/mcp`, `/plugins` and the like go to the agent's own dialog, since the settings that count are the machine's.
+- **Projects on another machine.** A project can name a machine you reach with ssh (Edit Project › Machine): a name from `~/.ssh/config` or `user@address`. Its sessions run there and keep running when the Mac sleeps or omux quits; open omux again and each session is as it was left, its screen restored. omux sets itself up on the machine the first time, over the same SSH connection, with nothing to install by hand, and one connection per machine is shared so a password or passphrase is asked for once. The terminal, the status in the sidebar, the transcript view and the subagent list work as they do for local sessions: the conversation's files are copied to the Mac as they grow. A dropped connection reconnects by itself and picks up where it was. Closing a session in omux closes it on the machine. The Files tab lists the machine's folder and opens its files from a copy kept fresh, saved back in place when you edit; the Changes tab shows the checkout's changes and diffs there. Codex runs on the machine too: its app-server is started there and reached through an SSH tunnel, so its transcript, approvals and status work as they do locally. Not yet for remote projects: Git worktrees, and opening a pull request from omux. Linux on Intel and on ARM. Updating omux updates the machine too, without touching what runs there: a session started under the older version carries on under it, and the newer one takes over once nothing is running.
+- **More commands in the compose box.** Typing `/` now offers `/remote-control` and the rest of Claude Code's commands that were missing from the list, such as `/add-dir`, `/fast`, `/code-review`, `/security-review`, `/export` and `/tasks`, along with the commands and skills of installed plugins, named as Claude Code names them. They could be typed in full before, but nothing suggested them.
+
+### Changed
+- **Whatever the agent asks is a proper card.** Permissions, questions, plans, a folder to trust and a model switch share one layout above the message box: a mark for the kind of prompt, the question as its title, the detail under it, and full-size buttons with the main answer filled.
+- **The question card is tighter.** Each choice is one line, its name followed by what it means, and the field for an answer in your own words looks like the message box, with its send button inside.
+- **The right panel's tabs are one control.** Files, Changes, Browser and Agents are a segmented control the width of the panel, level with the session header; in a narrow panel only the open tab keeps its name.
+- **Files gives the folder the whole panel** until a file is open, and an open file has a close button that brings it back. Folders you opened stay open when the tree refreshes.
+- **Changes reads lighter.** Added and removed lines carry a coloured bar in the gutter, a new file is no longer washed green from top to bottom, and each file in the list shows five squares for its balance of added and removed lines.
+- **The Browser's address is one field,** with a mark for the kind of page (this Mac, https, a file) and reload inside it.
+- **Selection is soft everywhere.** The session list, Changes and Files draw a quiet rounded highlight where the system drew a solid bar; the arrow keys still walk Changes and Files, and in Files right and left open and close a folder.
+- **Usage limits are rings on the rail,** one inside the other, with the figures beside them when the rail is open. They stay in view when the session list is closed.
+- **The compose box says what the next turn runs with.** Model, effort and permission mode are chips with a mark and a chevron: "Fable 5.1", "Auto effort", "Auto mode".
+- **One button for the terminal behind a transcript.** An eye in the session header shows the session's terminal and, lit, goes back to the conversation. The two split buttons left the header: a shell beside or below a session is in the session's menu, and on each pane.
+- **Black and Neutral are the defaults.** A new install starts on the Black theme with the Neutral accent, and with the transcript at 12 pt; the request at the top of a card is 13 pt, the size of the message box.
+- **Links open in the session's browser.** A web address clicked in the transcript, or ⌘-clicked in the terminal, shows in that session's Browser tab, beside the conversation it came from, where it used to open the default browser in another window. The Browser tab's button still takes the page to the default browser. Mail addresses and other apps' links go to the system as before.
+- **Neutral reaches the transcript's working colour.** With the Neutral accent, the Bash tag, running tool rows, spinners, the reply's caret, the Working dot and the starting cards are grey too. The sidebar and the session header keep the working blue.
+
+### Fixed
+- **A single question shows its choices again.** Claude Code now draws a one-question dialog with a single chip where it had a row of tabs, and omux, finding no tabs, showed only a field to type in. The card reads the new dialog and offers the options as before.
+- **A prompt reaches a resumed Claude Code that never reported in.** The message box waited for Claude Code to say it was ready, and a resumed session that didn't say so kept the prompt for two minutes and then handed it back. Its prompt box, steady on the screen for five seconds, now counts as ready.
+- **The starting card goes away once Claude Code is up.** It stayed over the message box while Claude Code was already waiting at its own prompt.
+- **Queued prompts are matched to Claude Code's records more reliably.** A prompt and its record are compared after the same clean-up on both sides and by the start of the text with spacing evened out, so a very long prompt, or one with an image path in it, is recognised as queued and as taken. A prompt handed to the agent under either of the reasons Claude Code records counts as delivered.
+- **A prompt can no longer be stuck on "Queued".** Once the agent has been idle for five seconds, any prompt still shown as queued is settled as sent: an agent with something in its queue starts on it at once, so by then it was taken. A record omux fails to match now costs a short delay, not a label that stays until restart.
+- **A pasted prompt no longer stays "Queued" after the agent takes it.** A prompt that was pasted, sent while the agent worked and picked up mid-turn kept its Queued label for good, because Claude Code records pasted text in a wrapper omux mistook for a system message.
+
+## [0.11.2] - 2026-11-13
+
+### Changed
+- **Pages open in the Browser tab.** Choosing an `.html` file in Files, or a page the agent mentions, shows it rendered in the session's browser, with the project folder readable so its stylesheets, scripts and images load, instead of as markup in the editor.
+- **A project moves to the top of the sidebar when it is activated.** That is when an agent starts in it, or starts a turn after an hour without one; the active projects then sit in the order they were activated, the latest first. Prompting a project at work doesn't move it, so the list holds still through a conversation. Move to Active puts a project at the top too.
+- **The sidebar closes.** A button at the left of the session header, Sidebar in the View menu, or ⌃⌘S hides the project list and brings it back, like the right panel; it stays as you left it across launches.
+- **Agents have their own tab.** The right panel gains Agents (⌥⌘4), beside Files, Changes and Browser: the session's subagents with what each is doing, a count of those still running on the tab, and the transcript of the one you pick. Clicking an agent anywhere opens it there; Files keeps the file you were looking at.
+- **A Neutral accent.** Settings › Appearance › Accent has a Neutral choice: the send button, the compose box's focus ring, pickers, prominent buttons, selection and links go grey, links told apart by an underline, while the sidebar keeps the system's colour.
+- **Your prompts sit in a neutral bubble in dark themes.** The blue-grey tint is gone; the bubble is a plain lighter shade of the background.
+- **Less redrawing while agents work.** A session's status line used to redraw every view of every session each time it changed, many times a turn; now it redraws that session's row, header and transcript only, and the rest of the window hears just what matters to it, such as a session starting work or asking for you. The question card parses the terminal only when its screen changes, the scan for mentioned files runs only while the Files list is in view, and the count on the Agents tab no longer redraws the whole right panel.
+- **Smoother motion in the transcript.** The Working card updates in place as the reply streams, so its dots and pulse keep their beat instead of restarting with every line. New messages, new tool rows and the Done row ease in, and a project moving to the top of the sidebar slides there.
+
+### Fixed
+- **Done no longer shows before the reply.** Claude Code reports a turn over a moment before it writes the reply to the transcript, so Done appeared over a blank and the text landed after it. The card now stays on Working, with the last of the reply read off the screen, until the reply is in; then Done and the message arrive together.
+- **The question card reads as a choice list.** Options are rows with a radio mark for a one-answer question or a box for a many-answer one, the title says "choose one" or "choose any", a click shows at once, and the row the dialog's highlight is on is tinted. A many-answer question's confirm button carries the dialog's own wording, Next or Submit; it was missing when more questions followed, so the card couldn't move on. The question is found on screen with or without the bar Claude Code sometimes draws before it.
+
+## [0.11.1] - 2026-11-11
+
+### Added
+- **The model chip lists what Claude Code knows.** The Claude Code models in the compose box come from the installed Claude Code itself, which carries every model id it knows: the newest Fable, Opus, Sonnet and Haiku are offered, so a new model is listed the day Claude Code learns of it, with no omux update. Read again whenever Claude Code updates itself. A model not in the list can still be set with `/model <id>` and shows in the chip once the session reports it.
+
+### Changed
+- **Building from source no longer re-asks permissions.** `./build.sh` signs the app with the Developer ID certificate when the keychain has one, the same identity releases carry, so a dev build and a release can replace each other in /Applications without macOS starting the Accessibility, Screen Recording and folder grants over. Without that certificate it falls back to Apple Development, then an ad-hoc signature, as before.
+- **A prompt just sent looks like any other prompt.** The dashed "Sending" bubble is gone; the prompt shows as sent and its record takes its place when it lands. Queued prompts still say so.
+
+### Fixed
+- **Done no longer shows over a blank before the reply.** The reply omux reads off the screen while the agent writes used to vanish the moment the status turned to Done, and the text came back a beat later when its record was read and rendered. It now stays under Done until the record takes its place.
+
+## [0.11.0] - 2026-11-09
+
+### Added
+- **Pin a project to the top.** Pin to Top in a project's right-click menu keeps it above the projects at work, in the order pinned, and out of the idle stack however long it's quiet; a small pin marks it. Unpin puts it back among the others.
+
+### Changed
+- **Questions are answered the way the terminal asks them.** When Claude Code asks several questions at once, the card shows the one the dialog is on, with its tabs along the top, and moves on as you answer, then shows the review page with Submit answers. Multi-select questions get ticks and a Done button instead of "pick more in the terminal", a typed answer goes through "Type something", and "Chat about this" hands the questions back so you can reply below. The card reads the dialog off the screen and drives it with the arrow keys and Return, so it never answers the wrong question.
+- **The conversation and subagents follow their files instead of a clock.** omux already woke on appends to the transcript; it now also watches the project folder, so a new session's first record and the new conversation after /clear show the moment they are written rather than on the next two or ten second tick. Subagent rows and their progress follow the subagent folders and files the same way, and a subagent's own transcript follows its file. The timers behind all of these are a once-in-ten-seconds safety net now, so the app sits quiet between writes. A change that arrives while a read is in flight is read as soon as that read lands, where it used to wait for the next tick.
+- **Active projects sit in the order they were started, and stay put.** A project coming out of the idle stack joins the active block after the projects already at work; prompting a project that is already there no longer moves it to the top. Dragging a project or Move Up/Down holds. Move to Active puts the project after the ones at work too.
+
+### Fixed
+- **omux no longer spends a fifth of a core while an agent works.** The breathing status dots were SwiftUI animations, which re-rendered the whole window at the display's refresh rate for as long as any agent was working. They are Core Animation layer animations now, played by the render server, so the main thread does nothing per frame.
+
 ## [0.10.1] - 2026-11-07
 
 ### Changed

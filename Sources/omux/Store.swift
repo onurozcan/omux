@@ -1,9 +1,33 @@
 import AppKit
 import Combine
+import OmuxHostKit
 import SwiftUI
 
 extension UUID: Identifiable {
     public var id: UUID { self }
+}
+
+/// One session's live state, published to the views that show that session and to no others.
+@MainActor
+final class SessionState: ObservableObject {
+    @Published fileprivate(set) var runtime: TabRuntime
+    init(_ runtime: TabRuntime) { self.runtime = runtime }
+    /// Stands in where no session is selected.
+    static let none = SessionState(TabRuntime())
+}
+
+/// Draws its content again when one session's live state changes. The content reads the state
+/// as before, from `store.runtime`; this only says when to look again.
+struct WithRuntime<Content: View>: View {
+    @ObservedObject private var session: SessionState
+    private let content: (TabRuntime) -> Content
+
+    init(_ id: UUID?, @ViewBuilder content: @escaping (TabRuntime) -> Content) {
+        session = Store.shared.session(id)
+        self.content = content
+    }
+
+    var body: some View { content(session.runtime) }
 }
 
 @MainActor
@@ -15,6 +39,8 @@ final class Store: ObservableObject {
         didSet {
             // Deferred: this fires inside the List's selection update.
             guard let id = selectedTabID else { return }
+            // Going to a session leaves Home, also when it is the session that was selected already.
+            if HomeState.shared.shown { HomeState.shared.shown = false }
             if let maximized = maximizedID, maximized != id { maximizedID = nil }
             DispatchQueue.main.async { [weak self] in
                 self?.clearAttention(id)
@@ -22,17 +48,41 @@ final class Store: ObservableObject {
             }
         }
     }
-    @Published private(set) var runtime: [UUID: TabRuntime] = [:] {
+    /// Every session's live state. Not published: a status line changes many times a turn, and
+    /// publishing it here redrew every view of every session. A session's own views watch its
+    /// `SessionState` (through `WithRuntime`); the store announces only the changes that matter
+    /// beyond the session, such as it starting to work or asking for attention. See `update`.
+    private(set) var runtime: [UUID: TabRuntime] = [:] {
         didSet {
+            runtimeChanged.send(runtime)
             let count = runtime.values.filter(\.needsAttention).count
+            guard count != attentionCount else { return }
+            attentionCount = count
             NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
         }
+    }
+    /// Every change to any session's live state, for what watches all sessions at once without
+    /// drawing anything (Keep Awake counts the agents at work, subagents included).
+    let runtimeChanged = PassthroughSubject<[UUID: TabRuntime], Never>()
+    private var attentionCount = 0
+    private var sessions: [UUID: SessionState] = [:]
+
+    /// The observable state of one session, for the views that show it.
+    func session(_ id: UUID?) -> SessionState {
+        guard let id else { return SessionState.none }
+        if let state = sessions[id] { return state }
+        let state = SessionState(runtime[id] ?? TabRuntime())
+        sessions[id] = state
+        return state
     }
     @Published var renamingID: UUID?
     @Published var editingTabID: UUID?
     @Published var editingGroupID: UUID?
     @Published var showQuickSwitcher = false
     @Published var showRecentSessions = false
+    @Published var showRemoteProject = false
+    /// What the New Remote Project sheet starts with, when asked for with a machine and folder.
+    var remoteDraft: (host: String, folder: String) = ("", "")
     @Published var showWelcome = false
     /// A file the user ⌘-clicked in a terminal; the files panel shows it.
     @Published var previewRequest: String?
@@ -400,6 +450,7 @@ final class Store: ObservableObject {
     }
 
     private func launch(_ view: TermView, tab: TabItem, group: TabGroup, command: String?) {
+        if let host = group.host, group.isRemote { launchRemote(view, tab: tab, group: group, host: host, command: command); return }
         let home = NSHomeDirectory()
         var dir = ((tab.directory ?? group.directory) as NSString?)?.expandingTildeInPath ?? home
         var isDir: ObjCBool = false
@@ -468,8 +519,63 @@ final class Store: ObservableObject {
         }
     }
 
+    /// A session of a project on another machine: the terminal runs SSH attached to the session
+    /// there. The host starts the agent, once, when it starts the session; attached again after
+    /// a restart of omux or a dropped connection, the session is as it was left.
+    private func launchRemote(_ view: TermView, tab: TabItem, group: TabGroup, host: String, command: String?) {
+        let inherited = ProcessInfo.processInfo.environment
+        let home = NSHomeDirectory()
+        var env: [String: String] = [
+            "HOME": home, "USER": inherited["USER"] ?? NSUserName(), "LOGNAME": inherited["LOGNAME"] ?? NSUserName(),
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+            "LANG": inherited["LANG"] ?? "en_US.UTF-8", "TERM": "xterm-256color", "COLORTERM": "truecolor", "TERM_PROGRAM": "omux",
+        ]
+        // The user's keys, and whatever asks for a passphrase in a window.
+        for key in ["SSH_AUTH_SOCK", "SSH_ASKPASS", "DISPLAY"] { if let value = inherited[key] { env[key] = value } }
+        let directory = tab.directory ?? group.directory
+        let provider = tab.resolvedProvider(in: group)
+        let run = command ?? remoteStartupCommand(tab: tab, group: group)
+        let script = RemoteHost.script(host: host, tab: tab.id, name: tab.name, directory: directory, run: run)
+        view.startProcess(executable: "/bin/sh", args: ["-c", script], environment: env.map { "\($0.key)=\($0.value)" },
+                          execName: "sh", currentDirectory: home)
+        update(tab.id) {
+            $0.provider = provider; $0.agentConnected = false; $0.agentConnectedAt = nil; $0.tuiReady = false
+            $0.exited = false; $0.cwd = directory; $0.title = ""
+            $0.statusState = nil; $0.statusKind = nil; $0.statusDetail = nil; $0.statusChildren = []
+        }
+        if provider == .claude {
+            RemoteMirrors.shared.follow(tab: tab.id, host: host, directory: directory ?? "~", session: tab.claudeSessionID.uuidString.lowercased())
+        }
+        // Codex is driven through its app-server, started on the machine and reached through a
+        // tunnel; its TUI is then typed into the session's shell, as it is locally.
+        if provider == .codex, command == nil { startCodex(view, tab: tab, cwd: directory ?? "~") }
+    }
+
+    /// What the host types into a new remote session's shell. For Claude Code, the session's
+    /// own conversation: resumed when its copy here shows it exists, and when there is no copy
+    /// to tell by, resumed if it can be and started if it can't.
+    private func remoteStartupCommand(tab: TabItem, group: TabGroup) -> String? {
+        let provider = tab.resolvedProvider(in: group)
+        let raw = (tab.command ?? group.command ?? "").trimmingCharacters(in: .whitespaces)
+        // Codex is started through its app-server, not by typing its name.
+        guard provider != .shell, provider != .codex, !raw.isEmpty else { return nil }
+        guard provider == .claude else { return raw }
+        var flags = ""
+        if let model = (tab.model ?? group.model)?.trimmingCharacters(in: .whitespaces), !model.isEmpty, model != "default", !raw.contains("--model") {
+            flags += " --model \(Git.quote(model))"
+        }
+        if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
+            flags += " --effort \(effort)"
+        }
+        let resume = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: true) + flags
+        let fresh = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: false) + flags
+        if RemoteHost.mirroredTranscript(tab.claudeSessionID.uuidString.lowercased()) != nil || resume == fresh { return resume }
+        return "\(resume) || \(fresh)"
+    }
+
     private func startCodex(_ view: TermView, tab: TabItem, cwd: String) {
         guard codexStarts[tab.id] == nil else { return }
+        let host = group(containing: tab.id).flatMap { $0.isRemote ? $0.host : nil }
         update(tab.id) { $0.busy = true; $0.statusState = .working; $0.statusDetail = "Connecting to Codex…" }
         codexStarts[tab.id] = Task { [weak self, weak view] in
             defer {
@@ -477,7 +583,10 @@ final class Store: ObservableObject {
             }
             do {
                 let choice = self?.codexChoice(tabID: tab.id) ?? (model: nil, effort: nil)
-                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name, model: choice.model, effort: choice.effort)
+                var cwd = cwd
+                // Codex wants the folder's real path: on another machine, "~" is worked out there.
+                if let host, let resolved = try? await RemoteMachines.folders(on: host, in: cwd).get().path { cwd = resolved }
+                let launch = try await CodexManager.shared.prepare(tabID: tab.id, threadID: tab.codexThreadID, cwd: cwd, name: tab.name, model: choice.model, effort: choice.effort, host: host)
                 try Task.checkCancellation()
                 guard let self, let view, self.terminals[tab.id] === view else { return }
                 self.updateTab(tab.id) { $0.codexThreadID = launch.threadID }
@@ -564,7 +673,7 @@ final class Store: ObservableObject {
         view.paste(text)
         if submit {
             // A beat later, so the program has taken the paste before Return arrives.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { view.send(txt: "\r") }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { view.send(txt: "\r"); Timing.mark("return", id) }
             // An agent's TUI that was busy and read the paste and the Return together takes the
             // Return as a line break inside the paste, and the prompt sits in its input box; the
             // next prompt would then be typed onto it. If it's still there a moment later, press
@@ -629,7 +738,18 @@ final class Store: ObservableObject {
             return
         }
         guard let view = terminals[id], runtime[id]?.awaitsPermission == true else { return }
-        view.send(txt: allow ? "1" : "\u{1b}")
+        view.send(txt: allow ? Self.allowKeys(for: view.lastLines(24)) : "\u{1b}")
+    }
+
+    /// The keys that pick "Yes" on the permission prompt on screen. Most prompts number their
+    /// options and take "1"; one that lists a bare Yes and No (publishing an artifact) ignores
+    /// digits and takes Return on the highlighted row, or "y".
+    nonisolated static func allowKeys(for lines: [String]) -> String {
+        let numbered = lines.contains { $0.range(of: #"^[\s│]*(❯\s*)?1\.\s"#, options: .regularExpression) != nil }
+        if numbered { return "1" }
+        let highlighted = lines.last { $0.range(of: #"^[\s│]*❯\s*\S"#, options: .regularExpression) != nil }
+        if let highlighted, highlighted.range(of: #"\b(yes|allow)\b"#, options: [.regularExpression, .caseInsensitive]) != nil { return "\r" }
+        return "y"
     }
 
     /// Shows the right panel on the given tab.
@@ -641,7 +761,48 @@ final class Store: ObservableObject {
     func openAgentTranscript(_ agent: SubAgent, in tabID: UUID) {
         openCodexAgent = nil
         openAgent = AgentRef(tabID: tabID, agent: agent)
-        showPanel(.files)
+        showPanel(.agents)
+    }
+
+    /// Shows a file in the right panel: a web page in the Browser tab, anything else in Files.
+    func preview(_ path: String) {
+        let url = URL(fileURLWithPath: path)
+        if Self.opensInBrowser(url) { showInBrowser(url) } else { previewRequest = path }
+    }
+
+    /// Pages belong in the browser, rendered, not in the editor as markup.
+    nonisolated static func opensInBrowser(_ url: URL) -> Bool {
+        ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Opens a local page in the selected session's browser. The project folder is readable to
+    /// it, so the page's own stylesheets, scripts and images load; a page outside the project
+    /// gets its own folder.
+    func showInBrowser(_ url: URL) {
+        guard let id = selectedTabID else { return }
+        var folder = url.deletingLastPathComponent()
+        if let dir = group(containing: id)?.directory.map({ URL(fileURLWithPath: $0) }),
+           url.standardizedFileURL.path.hasPrefix(dir.standardizedFileURL.path + "/") {
+            folder = dir
+        }
+        browser(for: id).load(file: url, within: folder)
+        showPanel(.browser)
+    }
+
+    /// Opens a link from a session, clicked in its terminal or its transcript. A web address
+    /// shows in that session's own browser, beside the conversation it came from; the Browser
+    /// tab has a button to take the page to the default browser. Anything else, such as a
+    /// mail address, is the system's to open, and so is every link when Settings says so.
+    func openLink(_ url: URL, in id: UUID?) {
+        guard UserDefaults.standard.string(forKey: Prefs.openLinksIn) != "system",
+              let id = id ?? selectedTabID, TermView.webURL(from: url.absoluteString) != nil else {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        browser(for: id).load(url.absoluteString)
+        // The panel shows the selected session's browser: bring the link's session forward.
+        if selectedTabID != id { selectedTabID = id }
+        showPanel(.browser)
     }
 
     func browser(for id: UUID) -> BrowserSession {
@@ -654,6 +815,11 @@ final class Store: ObservableObject {
     /// Re-checks whether the shell has a child process (claude, a build, …).
     func refreshBusy(_ id: UUID) {
         guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return }
+        // A remote session's shell isn't a process here: its agent says so itself when it runs.
+        if group(containing: id)?.isRemote == true {
+            update(id) { $0.busy = $0.statusState != nil }
+            return
+        }
         let pid = view.process.shellPid
         let busy = pid > 0 && Self.hasChildProcess(of: pid)
         if runtime[id]?.provider == .codex {
@@ -786,6 +952,16 @@ final class Store: ObservableObject {
     /// The transcript of the session's Claude Code conversation. The tab's own session id first;
     /// else the id of the `claude` running in the terminal, which Claude Code records per process in
     /// ~/.claude/sessions/<pid>.json. That covers a `claude` typed into a shell, or `claude --continue`.
+    /// The ~/.claude/projects folder for the session's working directory, where its transcript
+    /// and subagent folders appear. nil for a session without a folder.
+    func claudeProjectFolderURL(for id: UUID) -> URL? {
+        guard let tab = tab(id) else { return nil }
+        // A remote session's files are copied to a folder of its own here.
+        if let host = group(containing: id)?.host, !host.isEmpty { return RemoteHost.mirrorFolder(host: host, tab: id) }
+        guard let folder = runtime[id]?.cwd ?? directory(of: tab) else { return nil }
+        return URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects/" + Self.claudeProjectFolder(for: folder))
+    }
+
     func claudeTranscriptURL(for id: UUID) -> URL? {
         guard let tab = tab(id) else { return nil }
         if let url = Self.claudeTranscriptURL(tab.claudeSessionID.uuidString.lowercased()) { return url }
@@ -802,6 +978,8 @@ final class Store: ObservableObject {
 
     /// Starts the selected provider in an idle shell or resumes its exact saved chat.
     func start(_ id: UUID) {
+        // Claude Code updates itself in place: a start is a good moment to learn its new models.
+        ClaudeModels.shared.refresh()
         guard let loc = location(of: id), pendingCommands[id] == nil else { return }
         // ▶ brings the session forward; what it starts should be what you're looking at.
         selectedTabID = id
@@ -828,7 +1006,9 @@ final class Store: ObservableObject {
                 restart(id)
                 return
             }
-            guard !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil else { return }
+            let remote = groups[loc.group].isRemote
+            guard remote || !Self.hasChildProcess(of: view.process.shellPid), codexStarts[id] == nil else { return }
+            if remote, runtime[id]?.statusState != nil { return }
             if runtime[id]?.provider != tab.resolvedProvider(in: groups[loc.group]) { restart(id); return }
         }
         if tab.resolvedProvider(in: groups[loc.group]) != .claude {
@@ -847,6 +1027,9 @@ final class Store: ObservableObject {
         let session = tab.claudeSessionID.uuidString.lowercased()
         let command = startupCommand(tab: tab, group: groups[loc.group]) ?? "claude --session-id \(session)"
         if let view = terminals[id], !(runtime[id]?.exited ?? true) {
+            // Asked now, not remembered: the flag is last set while the login shell was still
+            // running its start-up helpers, and nothing refreshes it once the shell is idle.
+            refreshBusy(id)
             guard !(runtime[id]?.busy ?? false) else { return }
             view.send(txt: command + "\n")
         } else {
@@ -903,8 +1086,7 @@ final class Store: ObservableObject {
     /// Claude Code's folder name for a project: its path with everything but ASCII letters
     /// and digits turned into "-".
     nonisolated static func claudeProjectFolder(for directory: String) -> String {
-        let path = ((directory as NSString).expandingTildeInPath as NSString).standardizingPath
-        return String(path.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+        ClaudePaths.projectFolder(for: ((directory as NSString).expandingTildeInPath as NSString).standardizingPath)
     }
 
     /// The folder's newest Claude conversation that has something in it, skipping the ones
@@ -938,7 +1120,7 @@ final class Store: ObservableObject {
             let path = "\(projects)/\(dir)/\(session).jsonl"
             if FileManager.default.fileExists(atPath: path) { return URL(fileURLWithPath: path) }
         }
-        return nil
+        return RemoteHost.mirroredTranscript(session)
     }
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
@@ -1040,7 +1222,9 @@ final class Store: ObservableObject {
         case .exited:
             update(id) { $0.exited = true; $0.statusState = nil; $0.statusKind = nil; $0.statusChildren = []; $0.busy = false }
         case .openPath(let path):
-            previewRequest = path
+            preview(path)
+        case .openLink(let url):
+            openLink(url, in: id)
         case .status(let state, let kind, let message, let children):
             // Codex also emits terminal OSC status. Its protocol is authoritative, particularly
             // for approval IDs; mixing both can revive stale buttons. Its first idle does say
@@ -1060,16 +1244,95 @@ final class Store: ObservableObject {
         }
     }
 
-    /// Marks the session's project as worked in: an agent reported status. Opening a session or
-    /// using its shell doesn't count. When the agent starts a turn, the project moves to the top
-    /// of the sidebar: the projects sit in the order they were last put to work, the latest first.
-    /// Status ticks during the turn, or a second project working alongside, don't reorder them.
-    private func touchProject(of id: UUID, activated: Bool) {
-        guard let group = group(containing: id), let index = groups.firstIndex(where: { $0.id == group.id }) else { return }
+    /// Marks a project as in use: an agent reported status. Opening a session or using its shell
+    /// doesn't count. The project moves to the top of the sidebar when it is activated: an agent
+    /// starts a turn in it while no agent was up in the project, or after an hour without a turn.
+    /// So the projects sit in the order they were activated, the latest first. Prompts while the
+    /// project is at work don't move it, nor do status ticks during a turn, so the list holds still.
+    private func touchProject(of id: UUID, activated: Bool, agentWasUp: Bool) {
+        guard let group = group(containing: id) else { return }
+        let wasActive = isActive(group, ignoring: id)
         if group.forcedIdle { updateGroup(group.id) { $0.forcedIdle = false } }
-        guard activated else { return }
-        updateGroup(group.id) { $0.lastActive = Date() }
-        if index > 0 { groups.move(fromOffsets: [index], toOffset: 0) }
+        var moves = !wasActive
+        if activated {
+            moves = moves || Self.activates(agentUp: agentWasUp || hasAgentUp(group, ignoring: id), lastTurn: group.lastActive)
+            updateGroup(group.id) { $0.lastActive = Date() }
+        }
+        if moves { moveToTop(group.id) }
+    }
+
+    /// A project with no turn for this long counts as activated again by its next one.
+    nonisolated static let reactivateAfter: TimeInterval = 3600
+
+    /// Whether a turn starting now activates the project: nothing of the agent was up in it, or
+    /// its last turn started over `reactivateAfter` ago (or never).
+    nonisolated static func activates(agentUp: Bool, lastTurn: Date?, now: Date = Date()) -> Bool {
+        guard let lastTurn else { return true }
+        return !agentUp || now.timeIntervalSince(lastTurn) > reactivateAfter
+    }
+
+    /// Whether an agent is up in any session of the project other than `ignored`.
+    private func hasAgentUp(_ group: TabGroup, ignoring ignored: UUID?) -> Bool {
+        group.tabs.contains { tab in
+            guard tab.id != ignored, let rt = runtime[tab.id], !rt.exited else { return false }
+            return rt.statusState != nil
+        }
+    }
+
+    /// Pin to Top in a project's menu: the project sits above the projects at work, after any
+    /// pinned before it, and never folds into the idle stack. Unpinning leaves it where it is,
+    /// counted as just used so it doesn't drop straight into the stack.
+    func pin(_ groupID: UUID, _ pinned: Bool) {
+        updateGroup(groupID) { $0.pinned = pinned; if !pinned { $0.lastActive = Date() } else { $0.forcedIdle = false } }
+        guard pinned, let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        let last = groups.indices.last { $0 != index && groups[$0].pinned }
+        if let offset = Self.offsetJoiningActive(from: index, afterLastActive: last) {
+            groups.move(fromOffsets: [index], toOffset: offset)
+        }
+    }
+
+    /// Move to Active in a project's menu: out of the idle stack, to the top of the projects at work.
+    func wake(_ groupID: UUID) {
+        updateGroup(groupID) { $0.forcedIdle = false; $0.lastActive = Date() }
+        moveToTop(groupID)
+    }
+
+    /// Puts an active project first in the sidebar; pinned projects are listed ahead of it regardless.
+    private func moveToTop(_ groupID: UUID) {
+        guard let index = groups.firstIndex(where: { $0.id == groupID }), index > 0, isActive(groups[index]) else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { groups.move(fromOffsets: [index], toOffset: 0) }
+    }
+
+    /// Where a project at `index` goes to sit right after the last active project (nil when none
+    /// is active: the top), as an offset for `move(fromOffsets:toOffset:)`; nil when it is there already.
+    nonisolated static func offsetJoiningActive(from index: Int, afterLastActive last: Int?) -> Int? {
+        guard let last else { return index == 0 ? nil : 0 }
+        if index == last + 1 { return nil }
+        return last + 1
+    }
+
+    /// When an agent last worked in the project: status events while the app runs, and the
+    /// transcripts' modification dates for what happened before. Opening a session doesn't count.
+    func lastActivity(_ group: TabGroup) -> Date {
+        let files = group.tabs.map { TranscriptDates.shared.date(for: $0) }.compactMap { $0 }.max() ?? .distantPast
+        return max(files, group.lastActive ?? .distantPast)
+    }
+
+    /// Projects quiet for this long fold into the idle stack.
+    static let idleAfter: TimeInterval = 3 * 24 * 3600
+
+    /// A project with something going on, or anything in the last three days: an agent running
+    /// or waiting, a program in a shell, a session asking for attention, or recent use.
+    /// Selection alone doesn't count, so clicks don't reorder. `ignoring` leaves one session's
+    /// runtime out, to ask what the project was before that session's agent spoke up.
+    func isActive(_ group: TabGroup, ignoring ignored: UUID? = nil) -> Bool {
+        if group.pinned { return true }
+        if group.forcedIdle { return false }
+        if Date().timeIntervalSince(lastActivity(group)) < Self.idleAfter { return true }
+        return group.tabs.contains { tab in
+            guard tab.id != ignored, let rt = runtime[tab.id], !rt.exited else { return false }
+            return rt.busy || rt.statusState == .working || rt.statusState == .blocked || rt.needsAttention
+        }
     }
 
     /// Whether a status change is the agent starting a turn: from nothing, as it comes up, or
@@ -1082,7 +1345,9 @@ final class Store: ObservableObject {
 
     private func applyStatus(_ state: TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild], for id: UUID) {
         let previous = runtime[id]?.statusState
-        if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state)) }
+        if state != nil { touchProject(of: id, activated: Self.startsTurn(from: previous, to: state), agentWasUp: previous != nil) }
+        // Subagent rows follow the session's turns: a child listed or a turn ended is worth a look.
+        if previous != state || (runtime[id]?.statusChildren ?? []) != children { AgentMonitor.shared.schedulePoll() }
         update(id) {
             if $0.statusState != state || $0.statusDetail != message { $0.lastActivity = Date() }
             $0.statusState = state; $0.statusKind = kind; $0.statusDetail = message; $0.statusChildren = children
@@ -1140,7 +1405,11 @@ final class Store: ObservableObject {
         var value = runtime[id] ?? TabRuntime()
         let before = value
         mutate(&value)
-        if value != before { runtime[id] = value }
+        guard value != before else { return }
+        // The sidebar's order, the panes and the dock care about the coarse state only.
+        if value.coarse != before.coarse || runtime[id] == nil { objectWillChange.send() }
+        runtime[id] = value
+        sessions[id]?.runtime = value
     }
 
     // MARK: Tabs
@@ -1200,11 +1469,18 @@ final class Store: ObservableObject {
     func closeTab(_ id: UUID) {
         closeCodex(id)
         guard let loc = location(of: id) else { return }
+        // Closed here, a remote session is closed there: without this it would run on unseen.
+        if let host = groups[loc.group].host, groups[loc.group].isRemote {
+            RemoteHost.run("\(RemoteHost.remoteBinary) close \(id.uuidString.lowercased())", on: host)
+            RemoteMirrors.shared.forget(tab: id, host: host)
+        }
         if let view = terminals.removeValue(forKey: id) {
             killTree(view)
             view.removeFromSuperview()
         }
+        objectWillChange.send()
         runtime[id] = nil
+        sessions[id] = nil
         // Only the closed pane goes; its neighbours fill the space and one of them takes the selection.
         let wasOnCanvas = layout(near: id)?.contains(id) == true
         removeFromSplit(id)
@@ -1291,6 +1567,50 @@ final class Store: ObservableObject {
     }
 
     // MARK: Groups
+
+    /// Where a session's folder is, for what looks at its Git state: the folder itself, or for a
+    /// project on another machine, that folder there.
+    func gitLocation(of tab: TabItem) -> String? {
+        guard let group = group(containing: tab.id), group.isRemote, let host = group.host else { return directory(of: tab) }
+        return RemotePath.make(host: host, path: tab.directory ?? group.directory ?? "~")
+    }
+
+    /// A project on another machine, with its first session, which sets the machine up if
+    /// it isn't and starts the agent there.
+    func newRemoteGroup(name: String, host: String, directory: String?, provider: SessionProvider) {
+        guard RemoteMachines.isValid(host) else { return }
+        var group = TabGroup(name: name.isEmpty ? host : name, directory: directory, tabs: [TabItem(name: "Session 1")])
+        group.host = host
+        group.provider = provider
+        group.command = provider.command
+        groups.append(group)
+        RemoteMachines.shared.remember(host)
+        makeTerminal(tab: group.tabs[0], group: group)
+        selectedTabID = group.tabs[0].id
+    }
+
+    /// Shows here a session that runs on a machine but isn't open in this omux: one started
+    /// by omux on another Mac, say. It goes into a project of that machine and folder, made
+    /// if there is none, as a plain terminal on the session as it is.
+    func adoptRemoteSession(_ session: SessionInfo, on host: String) {
+        guard let id = UUID(uuidString: session.id), tab(id) == nil, RemoteMachines.isValid(host) else { return }
+        var item = TabItem(name: session.name, command: "")
+        item.id = id
+        item.provider = .shell
+        item.autoName = false
+        if let index = groups.firstIndex(where: { $0.host == host && $0.directory == session.directory }) ?? groups.firstIndex(where: { $0.host == host }) {
+            groups[index].tabs.append(item)
+            makeTerminal(tab: item, group: groups[index])
+        } else {
+            var group = TabGroup(name: (session.directory as NSString).lastPathComponent, directory: session.directory, tabs: [item])
+            group.host = host
+            group.provider = .shell
+            group.command = ""
+            groups.append(group)
+            makeTerminal(tab: item, group: group)
+        }
+        selectedTabID = id
+    }
 
     func newGroup() {
         // A project is a folder first; cancelling still makes one, named by hand, with no agent yet.

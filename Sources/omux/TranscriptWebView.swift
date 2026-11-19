@@ -227,10 +227,10 @@ struct TranscriptWebView: NSViewRepresentable {
             let font = Fonts.terminal()
             let object: [String: Any] = [
                 "bg": hex(theme.background), "fg": hex(theme.foreground), "accent": hex(accent), "accentSoft": soft,
-                "dark": luminance(theme.background) < 0.5,
+                "dark": luminance(theme.background) < 0.5, "neutral": style.accent == "neutral",
                 "mono": "'\(font.familyName ?? "Menlo")', ui-monospace, Menlo, monospace",
                 "font": style.fontStack, "size": style.size, "width": style.width, "density": style.density,
-                "bubbles": style.bubbles, "timestamps": style.timestamps,
+                "bubbles": style.bubbles, "timestamps": style.timestamps, "cards": style.layout == "cards",
             ]
             let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
             return String(decoding: data, as: UTF8.self)
@@ -256,7 +256,7 @@ struct TranscriptWebView: NSViewRepresentable {
             Task { @MainActor in
                 guard let url = action.request.url else { decisionHandler(.cancel); return }
                 if url.isFileURL { decisionHandler(.allow); return }
-                if ["http", "https", "mailto"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
+                if ["http", "https", "mailto"].contains(url.scheme ?? "") { Store.shared.openLink(url, in: self.page?.session) }
                 decisionHandler(.cancel)
             }
         }
@@ -269,7 +269,7 @@ struct TranscriptWebView: NSViewRepresentable {
                 case "open":
                     if let href = body["href"] as? String, let url = URL(string: href),
                        ["http", "https", "mailto"].contains(url.scheme ?? "") {
-                        NSWorkspace.shared.open(url)
+                        Store.shared.openLink(url, in: page?.session)
                     }
                 case "copy":
                     if let text = body["text"] as? String {

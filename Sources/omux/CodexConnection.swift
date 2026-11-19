@@ -47,8 +47,70 @@ final class CodexConnection {
     private var deadlines: [Int: Task<Void, Never>] = [:]
     private var retiring: [Process] = []
     private let environment: [String: String]?
+    /// The machine Codex runs on, when it isn't this Mac, and a name for what is kept there.
+    let remote: (host: String, name: String)?
+    /// Where the TUI, running where Codex does, reaches the app-server: the same address as
+    /// `endpoint` on this Mac, the far end of the tunnel on another machine.
+    private(set) var tuiEndpoint: String?
+    /// The tunnel to cancel when the connection closes: it rides the shared SSH connection,
+    /// which would otherwise keep it.
+    private var forward: String?
+    /// Held open for as long as the app-server there should live: its closing is what stops it.
+    private var lifeline: Pipe?
 
-    init(environment: [String: String]? = nil) { self.environment = environment }
+    init(environment: [String: String]? = nil, remote: (host: String, name: String)? = nil) {
+        self.environment = environment
+        self.remote = remote
+    }
+
+    /// What starts the app-server on another machine: in the user's login shell there, for
+    /// its PATH, and stopped when this command's standard input closes, which it does when the
+    /// connection to this Mac goes for any reason. An app-server left behind would hold its
+    /// thread's writer lock, and the next omux couldn't resume the conversation.
+    nonisolated static func remoteServerScript(port: UInt16, digest: String) -> String {
+        """
+        "${SHELL:-/bin/sh}" -lc 'exec codex app-server --listen ws://127.0.0.1:\(port) --ws-auth capability-token --ws-token-sha256 \(digest) -c analytics.enabled=false' </dev/null >/dev/null 2>&1 &
+        child=$!
+        trap 'kill $child 2>/dev/null; exit' TERM INT HUP
+        cat >/dev/null
+        kill $child 2>/dev/null
+        """
+    }
+
+    /// Where the session's token is kept on the machine, readable by its owner only, so the
+    /// TUI's command can take it from there instead of having it typed into a terminal.
+    nonisolated static func remoteTokenPath(name: String) -> String { "$HOME/.omux/codex/\(name).token" }
+
+    /// The app-server on another machine, with a tunnel to it. Returns the port on this Mac.
+    private func startRemote(host: String, name: String, digest: String) async throws -> (process: Process, port: UInt16) {
+        let local = try Self.availablePort()
+        let far = UInt16.random(in: 49152...64999)
+        // The token goes over as a file's contents, never as an argument.
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("omux-codex-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: file.path, contents: Data(token.utf8), attributes: [.posixPermissions: 0o600])
+        defer { try? FileManager.default.removeItem(at: file) }
+        let path = Self.remoteTokenPath(name: name)
+        let stored = await Task.detached {
+            RemotePath.run("umask 077; mkdir -p \"$HOME/.omux/codex\" && cat > \"\(path)\"", on: host, input: file)
+        }.value
+        guard stored.status == 0 else { throw CodexError.server(RemoteMachines.explain(stored.error, host: host)) }
+
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        let spec = "\(local):127.0.0.1:\(far)"
+        child.arguments = RemotePath.options + ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-L", spec, host,
+                                                "sh -c " + Git.quote(Self.remoteServerScript(port: far, digest: digest))]
+        let lifeline = Pipe()
+        child.standardInput = lifeline
+        child.standardOutput = FileHandle.nullDevice
+        child.standardError = FileHandle.nullDevice
+        do { try child.run() } catch { throw CodexError.unavailable }
+        self.lifeline = lifeline
+        self.forward = spec
+        self.endpoint = "ws://127.0.0.1:\(local)"
+        self.tuiEndpoint = "ws://127.0.0.1:\(far)"
+        return (child, local)
+    }
 
     func connect() async throws {
         if let connecting { return try await connecting.value }
@@ -61,10 +123,24 @@ final class CodexConnection {
 
     private func open() async throws {
         try await waitForShutdown()
+        let digest = SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
+        if let remote {
+            let started = try await startRemote(host: remote.host, name: remote.name, digest: digest)
+            started.process.terminationHandler = { [weak self] child in
+                Task { @MainActor in
+                    guard let self, self.process === child, self.isReady else { return }
+                    self.close(notify: true)
+                }
+            }
+            process = started.process
+            // Through the tunnel, the machine and Codex's own start: a little longer than here.
+            try await openSocket(port: started.port, child: started.process, endpoint: "ws://127.0.0.1:\(started.port)", attempts: 200)
+            return
+        }
         let port = try Self.availablePort()
         let endpoint = "ws://127.0.0.1:\(port)"
         self.endpoint = endpoint
-        let digest = SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
+        self.tuiEndpoint = endpoint
         let child = Process()
         child.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
         // Under a shell that watches omux: an app-server left behind by a crash or a kill would
@@ -88,12 +164,15 @@ final class CodexConnection {
         }
         do { try child.run() } catch { throw CodexError.unavailable }
         process = child
+        try await openSocket(port: port, child: child, endpoint: endpoint, attempts: 80)
+    }
 
+    private func openSocket(port: UInt16, child: Process, endpoint: String, attempts: Int) async throws {
         // Probe readiness before opening the authenticated WebSocket. Never send a
         // model prompt, create a thread, or alter authentication during connection.
         do {
             var ready = false
-            for _ in 0..<80 {
+            for _ in 0..<attempts {
                 try Task.checkCancellation()
                 guard child.isRunning else { throw CodexError.unavailable }
                 var probe = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/readyz")!)
@@ -192,6 +271,18 @@ final class CodexConnection {
         let child = process
         process = nil
         if let child, child.isRunning { retiring.append(child); child.terminate() }
+        // The far app-server stops when its standard input closes; the tunnel is taken down too.
+        try? lifeline?.fileHandleForWriting.close()
+        lifeline = nil
+        if let forward, let host = remote?.host {
+            let cancel = Process()
+            cancel.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+            cancel.arguments = RemotePath.options + ["-O", "cancel", "-L", forward, host]
+            cancel.standardOutput = FileHandle.nullDevice; cancel.standardError = FileHandle.nullDevice
+            try? cancel.run()
+        }
+        forward = nil
+        tuiEndpoint = nil
         endpoint = nil
         isReady = false
         for id in Array(pending.keys) { finish(id, result: .failure(CodexError.disconnected)) }
