@@ -3,6 +3,31 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.12.4</title>
+            <pubDate>Thu, 19 Nov 2026 22:27:16 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>0.12.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Added</h3>
+<ul>
+<li><strong>Home is a bento box.</strong> Its cards are tiles of different sizes on a grid: two large figures for today's prompts and tokens, the week's bars, models and projects in tiles of their own, beside the sessions that need you, the to-dos, limits and pull requests. Four columns on a wide window, two on a narrow one.</li>
+<li><strong>Tools on Home.</strong> A card lists what your agents have on this Mac: MCP servers, plugins, skills, subagents, commands and hooks, each with a count, a filter for long lists, and a switch between Claude Code's and Codex's. It shows what is set up for you, so there in every session.</li>
+<li><strong>Statistics.</strong> A page on your work with Claude Code, from the chart button on the rail or ⇧⌘Y: active time, days, sessions, tokens and commits for a month, a calendar of the last year by time or tokens, a bubble per project and session sized by its tokens, hours per day, and a log of each day's sessions with what was asked and what was committed. Click a day, a project or a session to narrow the whole page to it. Thanks to Hasan Emir Yıldırım (#61).</li>
+<li><strong>Project icons.</strong> Edit Project… takes a picture for the project; it shows on its rail tile in place of the initials. omux keeps its own small square copy, so the original can move. Thanks to Mücahit ŞEN (#62).</li>
+<li><strong>Skip permission prompts.</strong> Claude Code can start without asking before commands and edits, for every project (Settings › Sessions › "Start Claude Code in bypass permissions mode", #62) or for one (Edit Project… › "Skip permission prompts"; such a project carries a crossed shield next to its name). Both are off unless you turn them on, apply to sessions started afterwards, and leave alone a command that names its own permission mode.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>Claude's limits on Home.</strong> Home's card and the rail's ring each asked for the limits, and the second was turned away with "Usage unavailable"; they now share one reading.</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.4/omux-0.12.4.zip" length="34804810" type="application/octet-stream" sparkle:edSignature="3o3Wo50+N9q2ynQcTlIebfeQ7B6xlZaefXBQNgXv+xioFnhIzdzaLydHft6mj1Am561w+PLX/vuevSIm7X6gBw=="/>
+        </item>
+        <item>
             <title>0.12.3</title>
             <pubDate>Wed, 18 Nov 2026 19:42:14 +0300</pubDate>
             <link>https://omux.app</link>
@@ -55,29 +80,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.2/omux-0.12.2.zip" length="34065998" type="application/octet-stream" sparkle:edSignature="LZZOv1uUnkDV+V9PYdwkxSw2HDRJ6uEtHGKIUOyyeplYvUnbdK+1l+S5Gn0cNBELQbS4cZKRaECvqIwWzZx2AQ=="/>
-        </item>
-        <item>
-            <title>0.12.1</title>
-            <pubDate>Mon, 16 Nov 2026 12:18:42 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>19</sparkle:version>
-            <sparkle:shortVersionString>0.12.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Changed</h3>
-<ul>
-<li><strong>The rail has colour of its own.</strong> Each project's tile is dark with a faint sheen, and its initials are in a colour that belongs to the project, taken from its name so it is the same on every launch. The project on show fills softly with that colour. What needs you is a dot on the tile's corner again: amber for a session that waits, red for one that failed, blue for one at work.</li>
-<li><strong>A project click goes back to where you were in it.</strong> Picking a project on the rail switches the window to it, on the session that was open when you last left that project; it is remembered across launches. A project not visited yet shows the session that waits for you, else the one worked in last.</li>
-<li><strong>The rail opens after a good second.</strong> Resting the pointer on it for 1.2 seconds shows the names, where a third of a second did; a click on a tile is still immediate.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li><strong>A working card keeps its outline.</strong> Beside a Thinking row the outline of the turn at work fell back to the fainter colour, and every block that joined the card slid in from below, opening a gap in the outline for a moment each time the Working line changed. Blocks of a card now arrive in place and share one outline.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.1/omux-0.12.1.zip" length="34054639" type="application/octet-stream" sparkle:edSignature="jew8w+Ohydd/CYU3rX/7wgeghrxNr94Whxgn0/Ch76uGx+aSqbqx3pkqfJmsBbYaiOkt8TjoovSRWHaX/3PSBw=="/>
         </item>
     </channel>
 </rss>
