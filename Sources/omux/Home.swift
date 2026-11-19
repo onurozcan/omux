@@ -27,6 +27,7 @@ final class HomeState: ObservableObject {
     @Published private(set) var sending: Set<UUID> = []
     @Published var notice: String?
     @Published private(set) var stats: HomeStats?
+    @Published var setup: HomeSetup?
 
     private static let key = "homeTodos"
     private var statsRead: Date?
@@ -79,6 +80,10 @@ final class HomeState: ObservableObject {
 
     /// Reads the week's conversations again, at most once a minute.
     func refreshStats(store: Store) {
+        Task.detached(priority: .utility) {
+            let setup = HomeSetup.read()
+            await MainActor.run { self.setup = setup }
+        }
         if let statsRead, Date().timeIntervalSince(statsRead) < 60 { return }
         statsRead = Date()
         let folders = store.groups.compactMap { group in
@@ -386,29 +391,56 @@ struct HomeView: View {
         sessions.filter { $0.rt.statusState == .working }
     }
 
+    /// A bento box: tiles of different widths on a grid of four columns, two on a narrow window
+    /// and one in a sliver, each row as tall as its tallest tile.
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                if let notice = home.notice {
-                    Text(notice).font(.system(size: 11.5)).foregroundStyle(Palette.needs)
-                }
-                // Two columns with room for them, one under the other without.
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 14) {
-                        VStack(spacing: 14) { needsYou; todo; workingNow }.frame(minWidth: 380, maxWidth: .infinity)
-                        VStack(spacing: 14) { stats; limits; pullRequests }.frame(width: 360)
+        GeometryReader { geo in
+            let inner = max(min(geo.size.width, 1296) - 56, 240)
+            let columns = inner >= 880 ? 4 : inner >= 520 ? 2 : 1
+            let unit = (inner - Bento.gap * CGFloat(columns - 1)) / CGFloat(columns)
+            let wide = { (count: Int) in unit * CGFloat(count) + Bento.gap * CGFloat(count - 1) }
+            ScrollView {
+                VStack(alignment: .leading, spacing: Bento.gap) {
+                    header.padding(.bottom, 4)
+                    if let notice = home.notice {
+                        Text(notice).font(.system(size: 11.5)).foregroundStyle(Palette.needs)
                     }
-                    VStack(spacing: 14) { needsYou; todo; workingNow; stats; limits; pullRequests }
+                    switch columns {
+                    case 4:
+                        row {
+                            needsYou.frame(width: wide(2))
+                            VStack(spacing: Bento.gap) {
+                                row { promptsTile.frame(width: unit); tokensTile.frame(width: unit) }
+                                weekTile
+                            }
+                            .frame(width: wide(2))
+                        }
+                        row { todo.frame(width: wide(2)); limits.frame(width: unit); modelsTile.frame(width: unit) }
+                        row { workingNow.frame(width: unit); pullRequests.frame(width: unit); projectsTile.frame(width: wide(2)) }
+                        tools
+                    case 2:
+                        row { promptsTile.frame(width: unit); tokensTile.frame(width: unit) }
+                        needsYou; weekTile; todo
+                        row { limits.frame(width: unit); modelsTile.frame(width: unit) }
+                        row { workingNow.frame(width: unit); pullRequests.frame(width: unit) }
+                        projectsTile; tools
+                    default:
+                        promptsTile; tokensTile; needsYou; todo; workingNow; weekTile; modelsTile; projectsTile; limits; pullRequests; tools
+                    }
                 }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 22)
+                .frame(width: inner + 56, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 22)
-            .frame(maxWidth: 1180, alignment: .leading)
-            .frame(maxWidth: .infinity)
         }
         .background(Color(nsColor: theme.background))
         .onAppear { home.refreshStats(store: store) }
+    }
+
+    /// Tiles side by side, all as tall as the tallest.
+    private func row<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: Bento.gap) { content() }.fixedSize(horizontal: false, vertical: true)
     }
 
     private var header: some View {
@@ -434,9 +466,16 @@ struct HomeView: View {
             if waiting.isEmpty {
                 HomeEmpty(text: "No session is waiting. A permission, a question or a finished turn shows here.")
             } else {
-                ForEach(waiting, id: \.tab.id) { item in
-                    HomeSessionRow(tab: item.tab, group: item.group, buttons: true)
+                // Past six sessions the list scrolls in its tile, so one busy morning doesn't push the rest off the page.
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(waiting, id: \.tab.id) { item in
+                            HomeSessionRow(tab: item.tab, group: item.group, buttons: true)
+                        }
+                    }
                 }
+                .frame(maxHeight: 300)
+                .scrollBounceBehavior(.basedOnSize)
             }
         }
     }
@@ -485,77 +524,38 @@ struct HomeView: View {
 
     // MARK: Stats
 
-    private var stats: some View {
+    private var promptsTile: some View {
+        HomeNumberTile(value: home.stats.map { "\($0.today.prompts)" }, label: "prompts today",
+                       foot: home.stats.map { "\($0.weekPrompts) in 7 days" }, icon: "text.bubble", tint: Palette.working)
+    }
+
+    private var tokensTile: some View {
+        HomeNumberTile(value: home.stats.map { HomeStats.compact($0.today.tokens) }, label: "tokens written today",
+                       foot: home.stats.map { HomeStats.compact($0.weekTokens) + " in 7 days" }, icon: "bolt.horizontal", tint: Palette.agent)
+    }
+
+    private var weekTile: some View {
         HomeCard(title: "This week", icon: "chart.bar", count: 0, tint: .secondary) {
             if let stats = home.stats {
-                HStack(spacing: 0) {
-                    HomeFigure(value: "\(stats.today.prompts)", label: "prompts today")
-                    HomeFigure(value: HomeStats.compact(stats.today.tokens), label: "tokens today")
-                    HomeFigure(value: "\(stats.weekPrompts)", label: "prompts · 7d")
-                    HomeFigure(value: HomeStats.compact(stats.weekTokens), label: "tokens · 7d")
-                }
                 let top = max(stats.days.map(\.tokens).max() ?? 0, 1)
-                HStack(alignment: .bottom, spacing: 6) {
+                HStack(alignment: .bottom, spacing: 8) {
                     ForEach(stats.days) { day in
-                        VStack(spacing: 4) {
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(Calendar.current.isDateInToday(day.date) ? Palette.working : Color.primary.opacity(0.22))
-                                .frame(height: max(2, 54 * CGFloat(day.tokens) / CGFloat(top)))
-                            Text(day.date.formatted(.dateTime.weekday(.narrow))).font(.system(size: 9.5)).foregroundStyle(.tertiary)
+                        let today = Calendar.current.isDateInToday(day.date)
+                        VStack(spacing: 5) {
+                            Text(HomeStats.compact(day.tokens)).font(.system(size: 9.5).monospacedDigit()).foregroundStyle(today ? .secondary : .tertiary)
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(today ? AnyShapeStyle(LinearGradient(colors: [Palette.working, Palette.working.opacity(0.55)], startPoint: .top, endPoint: .bottom))
+                                            : AnyShapeStyle(Color.primary.opacity(0.16)))
+                                .frame(height: max(3, 70 * CGFloat(day.tokens) / CGFloat(top)))
+                            Text(day.date.formatted(.dateTime.weekday(.abbreviated))).font(.system(size: 10, weight: today ? .semibold : .regular))
+                                .foregroundStyle(today ? .primary : .tertiary)
                         }
                         .frame(maxWidth: .infinity)
-                        .help("\(day.date.formatted(.dateTime.weekday(.wide).day().month())): \(day.prompts) prompts, \(HomeStats.compact(day.tokens)) tokens out, \(day.conversations) conversations")
+                        .help("\(day.date.formatted(.dateTime.weekday(.wide).day().month())): \(day.prompts) prompts, \(HomeStats.compact(day.tokens)) tokens written, \(day.conversations) conversations")
                     }
                 }
-                .frame(height: 72, alignment: .bottom)
-                .padding(.top, 6)
-                if !stats.projects.isEmpty {
-                    let most = max(stats.projects.first?.tokens ?? 0, 1)
-                    VStack(spacing: 5) {
-                        ForEach(stats.projects.prefix(6)) { project in
-                            HStack(spacing: 8) {
-                                Text(project.name).font(.system(size: 11.5)).lineLimit(1).frame(width: 110, alignment: .leading)
-                                GeometryReader { geo in
-                                    Capsule().fill(.primary.opacity(0.2)).frame(width: max(2, geo.size.width * CGFloat(project.tokens) / CGFloat(most)))
-                                        .frame(maxHeight: .infinity, alignment: .center)
-                                }
-                                .frame(height: 5)
-                                Text("\(project.prompts) · \(HomeStats.compact(project.tokens))")
-                                    .font(.system(size: 10.5).monospacedDigit()).foregroundStyle(.secondary)
-                                    .frame(width: 78, alignment: .trailing)
-                            }
-                        }
-                    }
-                    .padding(.top, 8)
-                }
-                let models = stats.weekModels
-                if !models.isEmpty {
-                    let most = max(models.first?.tokens ?? 0, 1)
-                    let all = max(models.reduce(0) { $0 + $1.tokens }, 1)
-                    VStack(spacing: 5) {
-                        ForEach(models.prefix(5)) { model in
-                            HStack(spacing: 8) {
-                                HStack(spacing: 5) {
-                                    ProviderLogo(provider: model.codex ? .codex : .claude, size: 10).foregroundStyle(.secondary)
-                                    Text(model.name).font(.system(size: 11.5)).lineLimit(1)
-                                }
-                                .frame(width: 110, alignment: .leading)
-                                GeometryReader { geo in
-                                    Capsule().fill(.primary.opacity(0.2)).frame(width: max(2, geo.size.width * CGFloat(model.tokens) / CGFloat(most)))
-                                        .frame(maxHeight: .infinity, alignment: .center)
-                                }
-                                .frame(height: 5)
-                                Text((model.tokens * 100 / all < 1 ? "<1" : "\(model.tokens * 100 / all)") + "% · \(HomeStats.compact(model.tokens))")
-                                    .font(.system(size: 10.5).monospacedDigit()).foregroundStyle(.secondary)
-                                    .frame(width: 78, alignment: .trailing)
-                            }
-                            .help("\(model.id): \(model.tokens.formatted()) tokens written in the last 7 days")
-                        }
-                    }
-                    .padding(.top, 8)
-                }
-                Text("Claude Code and Codex conversations on this Mac. Prompts and tokens written, by project and by model.")
-                    .font(.system(size: 10.5)).foregroundStyle(.tertiary).padding(.top, 4)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .frame(minHeight: 112)
             } else {
                 HomeEmpty(text: "Reading this week's conversations…")
             }
@@ -565,9 +565,65 @@ struct HomeView: View {
                 Button { sharing = true } label: { Image(systemName: "square.and.arrow.up").font(.system(size: 11.5, weight: .medium)) }
                     .buttonStyle(IconButtonStyle(size: 24))
                     .help("Share today's or this week's figures as a picture")
-                    .padding(9)
+                    .padding(10)
                     .popover(isPresented: $sharing, arrowEdge: .bottom) { ShareCardPanel(stats: stats) }
             }
+        }
+    }
+
+    private var modelsTile: some View {
+        HomeCard(title: "Models", icon: "cpu", count: 0, tint: .secondary) {
+            let models = home.stats?.weekModels ?? []
+            if models.isEmpty {
+                HomeEmpty(text: home.stats == nil ? "Reading…" : "No model has written this week.")
+            } else {
+                let all = max(models.reduce(0) { $0 + $1.tokens }, 1)
+                VStack(spacing: 9) {
+                    ForEach(models.prefix(5)) { model in
+                        let share = model.tokens * 100 / all
+                        VStack(spacing: 4) {
+                            HStack(spacing: 5) {
+                                ProviderLogo(provider: model.codex ? .codex : .claude, size: 10).foregroundStyle(.secondary)
+                                Text(model.name).font(.system(size: 11.5, weight: .medium)).lineLimit(1)
+                                Spacer(minLength: 4)
+                                Text((share < 1 ? "<1" : "\(share)") + "%").font(.system(size: 10.5).monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                            HomeBar(share: CGFloat(model.tokens) / CGFloat(all), tint: model.codex ? Palette.done : Palette.agent)
+                        }
+                        .help("\(model.id): \(model.tokens.formatted()) tokens written in the last 7 days")
+                    }
+                }
+            }
+        }
+    }
+
+    private var projectsTile: some View {
+        HomeCard(title: "Projects", icon: "folder", count: 0, tint: .secondary) {
+            let projects = home.stats?.projects ?? []
+            if projects.isEmpty {
+                HomeEmpty(text: home.stats == nil ? "Reading…" : "No prompts in the last 7 days.")
+            } else {
+                let most = max(projects.first?.tokens ?? 0, 1)
+                VStack(spacing: 7) {
+                    ForEach(projects.prefix(5)) { project in
+                        HStack(spacing: 10) {
+                            Text(project.name).font(.system(size: 11.5, weight: .medium)).lineLimit(1).frame(width: 120, alignment: .leading)
+                            HomeBar(share: CGFloat(project.tokens) / CGFloat(most), tint: Palette.working)
+                            Text("\(project.prompts) · \(HomeStats.compact(project.tokens))")
+                                .font(.system(size: 10.5).monospacedDigit()).foregroundStyle(.secondary)
+                                .frame(width: 80, alignment: .trailing)
+                        }
+                    }
+                }
+                Text("Prompts and tokens written in the last 7 days, from Claude Code's and Codex's conversations on this Mac.")
+                    .font(.system(size: 10.5)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+            }
+        }
+    }
+
+    @ViewBuilder private var tools: some View {
+        if let setup = home.setup {
+            HomeCard(title: "Tools", icon: "wrench.and.screwdriver", count: 0, tint: .secondary) { HomeSetupCard(setup: setup) }
         }
     }
 
@@ -708,7 +764,12 @@ private struct HomeTodoRow: View {
 }
 
 /// A titled sheet on Home, in the cards' own style.
-private struct HomeCard<Content: View>: View {
+enum Bento {
+    static let gap: CGFloat = 12
+    static let radius: CGFloat = 16
+}
+
+struct HomeCard<Content: View>: View {
     let title: String
     let icon: String
     let count: Int
@@ -727,13 +788,65 @@ private struct HomeCard<Content: View>: View {
                 }
                 Spacer()
             }
-            .padding(.bottom, 2)
+            .padding(.bottom, 4)
             content()
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(.primary.opacity(0.1)))
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .bentoTile()
+    }
+}
+
+extension View {
+    /// A tile's surface: a faint fill, lighter at its top, inside a hairline.
+    func bentoTile(tint: Color? = nil) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Bento.radius, style: .continuous)
+        return background {
+            ZStack {
+                shape.fill(.primary.opacity(0.045))
+                if let tint { shape.fill(LinearGradient(colors: [tint.opacity(0.2), tint.opacity(0.03)], startPoint: .topLeading, endPoint: .bottomTrailing)) }
+                shape.fill(LinearGradient(colors: [.white.opacity(0.035), .clear], startPoint: .top, endPoint: .center))
+            }
+        }
+        .overlay(shape.strokeBorder((tint ?? .primary).opacity(tint == nil ? 0.09 : 0.22)))
+    }
+}
+
+/// One large figure with what it counts: the small tiles of the box.
+private struct HomeNumberTile: View {
+    let value: String?
+    let label: String
+    let foot: String?
+    let icon: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundStyle(tint)
+                .frame(width: 26, height: 26).background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Spacer(minLength: 12)
+            Text(value ?? "–").font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.6)
+            Text(label).font(.system(size: 11.5)).foregroundStyle(.secondary).lineLimit(1)
+            Text(foot ?? " ").font(.system(size: 10.5).monospacedDigit()).foregroundStyle(.tertiary).lineLimit(1).padding(.top, 2)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .bentoTile(tint: tint)
+    }
+}
+
+/// A thin bar filled to a share of its width.
+private struct HomeBar: View {
+    let share: CGFloat
+    let tint: Color
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.primary.opacity(0.08))
+                Capsule().fill(tint.opacity(0.75)).frame(width: max(3, geo.size.width * min(max(share, 0), 1)))
+            }
+        }
+        .frame(height: 4)
     }
 }
 
@@ -744,14 +857,3 @@ private struct HomeEmpty: View {
     }
 }
 
-private struct HomeFigure: View {
-    let value: String
-    let label: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value).font(.system(size: 18, weight: .semibold).monospacedDigit())
-            Text(label).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}

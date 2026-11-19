@@ -565,6 +565,8 @@ final class Store: ObservableObject {
         if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
             flags += " --effort \(effort)"
         }
+        // The project's own switch first; Settings' switch then leaves a command that has a mode alone.
+        if tab.skipsPermissions(in: group) { flags += " --dangerously-skip-permissions" }
         let resume = Self.bypassIfEnabled(SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: true) + flags)
         let fresh = Self.bypassIfEnabled(SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: false) + flags)
         if RemoteHost.mirroredTranscript(tab.claudeSessionID.uuidString.lowercased()) != nil || resume == fresh { return resume }
@@ -1057,6 +1059,7 @@ final class Store: ObservableObject {
         if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
             command += " --effort \(effort)"
         }
+        if tab.skipsPermissions(in: group) { command += " --dangerously-skip-permissions" }
         return Self.bypassIfEnabled(command)
     }
 

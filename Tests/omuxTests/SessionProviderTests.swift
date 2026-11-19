@@ -44,6 +44,21 @@ final class SessionProviderTests: XCTestCase {
         XCTAssertEqual(restored.tabs[0].codexThreadID, tab.codexThreadID)
     }
 
+    func testSkipPermissionsIsForClaudeAndYieldsToTheCommandsOwnMode() throws {
+        var group = TabGroup(name: "P")
+        var tab = TabItem(name: "S")
+        XCTAssertFalse(tab.skipsPermissions(in: group))
+        group.skipPermissions = true
+        XCTAssertTrue(tab.skipsPermissions(in: group))
+        tab.command = "claude --permission-mode plan"
+        XCTAssertFalse(tab.skipsPermissions(in: group))
+        tab.command = "codex"
+        XCTAssertFalse(tab.skipsPermissions(in: group))
+        let saved = try JSONDecoder().decode(TabGroup.self, from: JSONEncoder().encode(group))
+        XCTAssertTrue(saved.skipPermissions)
+        XCTAssertFalse(try JSONDecoder().decode(TabGroup.self, from: Data(#"{"name":"Old"}"#.utf8)).skipPermissions)
+    }
+
     func testCustomCommandsRemainCustom() {
         for command in ["env codex", "codex exec task", "npm run dev", "/path/to/wrapper"] {
             XCTAssertEqual(SessionProvider.infer(command: command), .custom)

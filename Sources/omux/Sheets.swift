@@ -205,6 +205,7 @@ struct GroupEditSheet: View {
     @State private var sessionView = ""
     @State private var model = ""
     @State private var effort = ""
+    @State private var skipPermissions = false
     @State private var host = ""
     /// The icon on file, a newly chosen one not yet saved, and whether the picture is to go.
     @State private var iconFile: String?
@@ -281,6 +282,12 @@ struct GroupEditSheet: View {
                     ForEach(provider == .codex ? ["low", "medium", "high", "xhigh"] : ["auto", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0).tag($0) }
                 }
             }
+            if provider == .claude {
+                Toggle("Skip permission prompts", isOn: $skipPermissions)
+                Text("Starts Claude Code with --dangerously-skip-permissions: it runs every command and edit without asking. Use it only where a mistake costs little, such as a worktree or a machine you can throw away.")
+                    .font(.caption).foregroundStyle(skipPermissions ? AnyShapeStyle(Palette.needs) : AnyShapeStyle(.secondary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Picker("Show sessions as", selection: $sessionView) {
                 Text("Settings' choice").tag("")
                 Text("Terminal").tag("terminal")
@@ -313,6 +320,7 @@ struct GroupEditSheet: View {
             sessionView = group.sessionView ?? ""
             model = group.model ?? ""
             effort = group.effort ?? ""
+            skipPermissions = group.skipPermissions
             host = group.host ?? ""
             iconFile = group.icon
         }
@@ -338,6 +346,7 @@ struct GroupEditSheet: View {
             let trimmedModel = model.trimmingCharacters(in: .whitespaces)
             group.model = trimmedModel.isEmpty ? nil : trimmedModel
             group.effort = effort.isEmpty ? nil : effort
+            group.skipPermissions = skipPermissions && group.provider == .claude
         }
         dismiss()
     }

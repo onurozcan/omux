@@ -11,6 +11,7 @@ Local files omux touches:
 
 - `~/Library/Application Support/omux/workspace.json`: your projects and sessions (plus a `.bak` copy).
 - `~/.claude/projects`: read to list recent conversations, to check whether a session's conversation exists, and to show a running session's subagents and their transcripts.
+- Statistics reads the Claude Code transcripts in `~/.claude/projects`, for every project on the Mac, and runs `git log` in the folders they were in to list your commits. What it read is kept in `~/Library/Application Support/omux/work-stats-v3.json`, which holds session titles, your requests and transcript paths. Nothing of it is sent anywhere. Project icons are copies kept in `~/Library/Application Support/omux/project-icons`.
 - Home reads `~/.claude/projects` and `~/.codex/sessions` to count the last seven days' prompts and tokens, and keeps the counts per file in `~/Library/Caches/net.pf1.omux/home-stats-2.json`. Your to-dos are stored with the settings. A share card is made on your Mac and goes nowhere unless you copy or save it.
 - Worktree sessions run `git` in your repository, and creating a pull request runs `git push` through your login shell. Nothing else is pushed or committed unless you confirm it.
 - Elements picked in the browser are saved under your temporary folder (`omux-picks`) so Claude can read them.

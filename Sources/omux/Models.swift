@@ -97,6 +97,14 @@ struct TabItem: Identifiable, Codable, Hashable {
     func resolvedProvider(in group: TabGroup) -> SessionProvider {
         provider ?? command.map { SessionProvider.infer(command: $0) } ?? group.provider
     }
+
+    /// Whether this session's Claude Code is started without permission prompts: the project
+    /// says so and the session's own command doesn't choose a permission mode itself.
+    func skipsPermissions(in group: TabGroup) -> Bool {
+        guard group.skipPermissions, resolvedProvider(in: group) == .claude else { return false }
+        let raw = command ?? group.command ?? ""
+        return !raw.contains("--dangerously-skip-permissions") && !raw.contains("--permission-mode")
+    }
 }
 
 struct TabGroup: Identifiable, Codable, Hashable {
@@ -116,6 +124,8 @@ struct TabGroup: Identifiable, Codable, Hashable {
     /// Model and effort new sessions start with; nil leaves the agent's default.
     var model: String?
     var effort: String?
+    /// Claude Code starts with --dangerously-skip-permissions: it never asks before a command or an edit.
+    var skipPermissions = false
     /// When something last happened in the project; projects quiet for days fold into the idle stack.
     var lastActive: Date?
     /// Put in the idle stack by hand; cleared when an agent works in the project again.
@@ -150,6 +160,7 @@ struct TabGroup: Identifiable, Codable, Hashable {
         sessionView = try c.decodeIfPresent(String.self, forKey: .sessionView)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        skipPermissions = try c.decodeIfPresent(Bool.self, forKey: .skipPermissions) ?? false
         lastActive = try c.decodeIfPresent(Date.self, forKey: .lastActive)
         forcedIdle = try c.decodeIfPresent(Bool.self, forKey: .forcedIdle) ?? false
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false

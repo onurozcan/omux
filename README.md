@@ -67,7 +67,7 @@ omux turns that into a dashboard.
 | **Panes** | Sessions of a project arranged in the window: a shell beside or below from a session's menu, or drag from the sidebar onto an edge; resize, move, maximize. One message box under them all writes to the active pane. One arrangement per project, saved. |
 | **The `omux` command** | Programs in a session can list the project's sessions, read their screens, and start sessions of their own to send text to. Scoped to the project, children only, every action shown as a banner. [docs/cli.md](docs/cli.md) |
 | **Subagents** | Every subagent of Claude Code or Codex listed with its current tool. Click one to read its transcript. |
-| **Project defaults** | Each project can choose Terminal or Transcript for its sessions, and the model and effort new sessions start with. |
+| **Project defaults** | Each project can choose Terminal or Transcript for its sessions, and the model and effort new sessions start with. A project can also start Claude Code without permission prompts (`--dangerously-skip-permissions`), off by default. |
 | **Worktree sessions** (⌥⌘T) | A session on its own branch and folder, so parallel agents never touch each other's files. A per-project setup command runs first, like `cp "$OMUX_REPO/.env" . && npm install`. |
 | **Pull request status** | With the [GitHub CLI](https://cli.github.com): checks, reviews and merges next to the session. Failing checks' logs sent to the agent in one click. Merged pull requests offer to clean up the worktree. |
 | **Changes** (⌥⌘2) | The session's diff against its base branch. Click a line to leave a note, then send all notes to the agent in one message. |

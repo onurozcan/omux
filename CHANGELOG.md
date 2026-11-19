@@ -4,6 +4,18 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-11-19
+
+### Added
+- **Home is a bento box.** Its cards are tiles of different sizes on a grid: two large figures for today's prompts and tokens, the week's bars, models and projects in tiles of their own, beside the sessions that need you, the to-dos, limits and pull requests. Four columns on a wide window, two on a narrow one.
+- **Tools on Home.** A card lists what your agents have on this Mac: MCP servers, plugins, skills, subagents, commands and hooks, each with a count, a filter for long lists, and a switch between Claude Code's and Codex's. It shows what is set up for you, so there in every session.
+- **Statistics.** A page on your work with Claude Code, from the chart button on the rail or ⇧⌘Y: active time, days, sessions, tokens and commits for a month, a calendar of the last year by time or tokens, a bubble per project and session sized by its tokens, hours per day, and a log of each day's sessions with what was asked and what was committed. Click a day, a project or a session to narrow the whole page to it. Thanks to Hasan Emir Yıldırım (#61).
+- **Project icons.** Edit Project… takes a picture for the project; it shows on its rail tile in place of the initials. omux keeps its own small square copy, so the original can move. Thanks to Mücahit ŞEN (#62).
+- **Skip permission prompts.** Claude Code can start without asking before commands and edits, for every project (Settings › Sessions › "Start Claude Code in bypass permissions mode", #62) or for one (Edit Project… › "Skip permission prompts"; such a project carries a crossed shield next to its name). Both are off unless you turn them on, apply to sessions started afterwards, and leave alone a command that names its own permission mode.
+
+### Fixed
+- **Claude's limits on Home.** Home's card and the rail's ring each asked for the limits, and the second was turned away with "Usage unavailable"; they now share one reading.
+
 ## [0.12.3] - 2026-11-18
 
 ### Added

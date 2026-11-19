@@ -40,6 +40,23 @@ final class UsageMonitor: ObservableObject {
     private var timer: Timer?
 
     /// Polls at the interval chosen in Settings (seconds); re-arms when it changes.
+    /// The one the limits views share: the rail's ring and Home's card show the same reading, and
+    /// the usage endpoint is asked once, not once a view (it turns a second caller away).
+    static let shared = UsageMonitor()
+    private var users = 0
+
+    /// A view that shows the limits came on screen.
+    func retain() {
+        users += 1
+        if users == 1 { start() }
+    }
+
+    /// And left: the last one out stops the timer.
+    func release() {
+        users = max(0, users - 1)
+        if users == 0 { stop() }
+    }
+
     func start() {
         let interval = UserDefaults.standard.double(forKey: Prefs.usageInterval)
         schedule(every: interval > 0 ? interval : 300)

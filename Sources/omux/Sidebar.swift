@@ -446,6 +446,10 @@ struct GroupHeader: View {
             if group.pinned {
                 Image(systemName: "pin.fill").font(.system(size: 8)).foregroundStyle(.tertiary).help("Pinned to the top")
             }
+            if group.skipPermissions, group.provider == .claude {
+                Image(systemName: "shield.slash.fill").font(.system(size: 8.5)).foregroundStyle(Palette.needs)
+                    .help("New Claude Code sessions here skip permission prompts")
+            }
             if let host = group.host, group.isRemote { MachineBadge(host: host) }
             Spacer()
             if !hovering { counts }
