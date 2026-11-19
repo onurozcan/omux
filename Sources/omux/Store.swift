@@ -563,8 +563,8 @@ final class Store: ObservableObject {
         if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
             flags += " --effort \(effort)"
         }
-        let resume = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: true) + flags
-        let fresh = SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: false) + flags
+        let resume = Self.bypassIfEnabled(SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: true) + flags)
+        let fresh = Self.bypassIfEnabled(SessionProvider.claudeCommand(raw, sessionID: tab.claudeSessionID, conversationExists: false) + flags)
         if RemoteHost.mirroredTranscript(tab.claudeSessionID.uuidString.lowercased()) != nil || resume == fresh { return resume }
         return "\(resume) || \(fresh)"
     }
@@ -1021,7 +1021,7 @@ final class Store: ObservableObject {
             return
         }
         let session = tab.claudeSessionID.uuidString.lowercased()
-        let command = startupCommand(tab: tab, group: groups[loc.group]) ?? "claude --session-id \(session)"
+        let command = startupCommand(tab: tab, group: groups[loc.group]) ?? Self.bypassIfEnabled("claude --session-id \(session)")
         if let view = terminals[id], !(runtime[id]?.exited ?? true) {
             // Asked now, not remembered: the flag is last set while the login shell was still
             // running its start-up helpers, and nothing refreshes it once the shell is idle.
@@ -1055,7 +1055,12 @@ final class Store: ObservableObject {
         if let effort = tab.effort ?? group.effort, !effort.isEmpty, effort != "default", effort != "auto", !raw.contains("--effort") {
             command += " --effort \(effort)"
         }
-        return command
+        return Self.bypassIfEnabled(command)
+    }
+
+    /// Adds bypass permissions mode to a Claude Code command when Settings ask for it.
+    static func bypassIfEnabled(_ command: String) -> String {
+        UserDefaults.standard.bool(forKey: Prefs.bypassPermissions) ? SessionProvider.withBypassPermissions(command) : command
     }
 
     /// Codex takes the project's model and effort as config overrides on its command line.

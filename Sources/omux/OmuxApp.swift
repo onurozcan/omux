@@ -65,6 +65,8 @@ enum Prefs {
     static let playAgent = "playAgent"
     /// What ▶ does for an agent with no saved conversation: "fresh" or "continue" (the folder's latest).
     static let startWithoutHistory = "startWithoutHistory"
+    /// New Claude Code sessions start in bypass permissions mode. Off by default.
+    static let bypassPermissions = "bypassPermissions"
     /// How agent sessions show in the main panel: "terminal" (default) or "transcript" (beta).
     static let sessionView = "sessionView"
     static let accent = "accent"
@@ -78,7 +80,7 @@ enum Prefs {
 
     static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
-                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, openLinksIn, homeEnabled, playAgent, startWithoutHistory,
+                      notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, openLinksIn, homeEnabled, playAgent, startWithoutHistory, bypassPermissions,
                       sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
 
     /// A beta build (./build.sh --beta) starts out with the release app's settings, such as
@@ -383,6 +385,7 @@ private struct SessionSettings: View {
     @AppStorage(Prefs.playAgent) private var playAgent = "claude"
     @AppStorage(Prefs.startWithoutHistory) private var startWithoutHistory = "fresh"
     @AppStorage(Prefs.autoResume) private var autoResume = false
+    @AppStorage(Prefs.bypassPermissions) private var bypassPermissions = false
     @AppStorage(Prefs.cliEnabled) private var cliEnabled = true
 
     var body: some View {
@@ -409,6 +412,8 @@ private struct SessionSettings: View {
                 SettingNote("Continuing runs claude --continue. Codex always starts fresh. ▶ in a plain shell of a project that has conversations resumes the latest one either way.")
                 Toggle("Resume agent sessions at launch", isOn: $autoResume)
                 SettingNote("Off: restored sessions stay stopped until you press ▶. Clicking one only opens its shell.")
+                Toggle("Start Claude Code in bypass permissions mode", isOn: $bypassPermissions)
+                SettingNote("Runs claude --permission-mode bypassPermissions, so Claude Code never asks before it edits files or runs commands. Use it only in folders you trust. A command that sets its own permission mode keeps it. Applies to sessions started after the change.")
             }
             Section("Integration") {
                 Toggle("Give sessions the omux command", isOn: $cliEnabled)

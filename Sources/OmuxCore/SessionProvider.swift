@@ -51,4 +51,13 @@ public enum SessionProvider: String, Codable, CaseIterable, Identifiable {
         let flag = conversationExists ? "--resume \(session)" : (continueLatest ? "--continue" : "--session-id \(session)")
         return ["claude", flag, rest].filter { !$0.isEmpty }.joined(separator: " ")
     }
+
+    /// Starts Claude Code with every permission prompt skipped, unless the command already
+    /// chooses a permission mode itself. Other programs are left alone.
+    public static func withBypassPermissions(_ command: String) -> String {
+        let words = command.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard words.first == "claude" else { return command }
+        let own = words.contains { $0 == "--dangerously-skip-permissions" || $0 == "--permission-mode" || $0.hasPrefix("--permission-mode=") }
+        return own ? command : command + " --permission-mode bypassPermissions"
+    }
 }

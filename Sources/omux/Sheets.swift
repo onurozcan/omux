@@ -206,12 +206,42 @@ struct GroupEditSheet: View {
     @State private var model = ""
     @State private var effort = ""
     @State private var host = ""
+    /// The icon on file, a newly chosen one not yet saved, and whether the picture is to go.
+    @State private var iconFile: String?
+    @State private var pickedIcon: Data?
+    @State private var removeIcon = false
 
     private var remote: Bool { !host.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    private var iconPreview: NSImage? {
+        if removeIcon { return nil }
+        return pickedIcon.flatMap(NSImage.init(data:)) ?? ProjectIcons.image(named: iconFile)
+    }
 
     var body: some View {
         Form {
             TextField("Name", text: $name)
+            LabeledContent("Icon") {
+                HStack(spacing: 10) {
+                    Group {
+                        if let preview = iconPreview {
+                            Image(nsImage: preview).resizable().scaledToFill()
+                        } else {
+                            Text(name.isEmpty ? "·" : String(name.prefix(1)).uppercased()).font(.system(size: 13, weight: .bold)).foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    Button("Choose…") {
+                        if let data = ProjectIcons.choose() { pickedIcon = data; removeIcon = false }
+                    }
+                    if iconPreview != nil {
+                        Button("Remove") { pickedIcon = nil; removeIcon = true }
+                    }
+                    Spacer()
+                }
+            }
             MachineField(host: $host)
             Text(remote ? "Sessions run on \(host.trimmingCharacters(in: .whitespaces)) over SSH and keep running there when omux is closed. omux sets itself up on the machine the first time. The folder below is a folder there."
                         : "Leave empty for this Mac. To run this project on another machine, enter how you reach it with ssh: a name from ~/.ssh/config, or user@address.")
@@ -284,11 +314,17 @@ struct GroupEditSheet: View {
             model = group.model ?? ""
             effort = group.effort ?? ""
             host = group.host ?? ""
+            iconFile = group.icon
         }
     }
 
     private func save() {
+        let previousIcon = iconFile
+        var newIcon = iconFile
+        if let pickedIcon, let file = ProjectIcons.save(pickedIcon) { newIcon = file } else if removeIcon { newIcon = nil }
+        if newIcon != previousIcon { ProjectIcons.remove(previousIcon) }
         store.updateGroup(groupID) { group in
+            group.icon = newIcon
             let machine = host.trimmingCharacters(in: .whitespaces)
             // Only what ssh takes as a destination: never something it would read as an option.
             if machine.isEmpty { group.host = nil } else if RemoteMachines.isValid(machine) { group.host = machine; RemoteMachines.shared.remember(machine) }

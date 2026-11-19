@@ -95,4 +95,25 @@ final class SessionProviderTests: XCTestCase {
         // Flags the user wrote win.
         XCTAssertEqual(SessionProvider.claudeCommand("claude -c", sessionID: id, conversationExists: false, continueLatest: true), "claude -c")
     }
+
+    func testBypassPermissionsIsAddedToClaudeOnly() {
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claude --session-id abc"), "claude --session-id abc --permission-mode bypassPermissions")
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claude"), "claude --permission-mode bypassPermissions")
+        XCTAssertEqual(SessionProvider.withBypassPermissions("codex"), "codex")
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claudette --x"), "claudette --x")
+    }
+
+    func testBypassPermissionsKeepsACommandsOwnMode() {
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claude --permission-mode plan"), "claude --permission-mode plan")
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claude --permission-mode=plan"), "claude --permission-mode=plan")
+        XCTAssertEqual(SessionProvider.withBypassPermissions("claude --dangerously-skip-permissions"), "claude --dangerously-skip-permissions")
+    }
+
+    func testProjectIconSurvivesTheWorkspaceRoundTrip() throws {
+        var group = TabGroup(name: "Project")
+        group.icon = "abc.png"
+        let back = try JSONDecoder().decode(TabGroup.self, from: JSONEncoder().encode(group))
+        XCTAssertEqual(back.icon, "abc.png")
+        XCTAssertNil(try JSONDecoder().decode(TabGroup.self, from: Data(#"{"name":"Old"}"#.utf8)).icon)
+    }
 }
