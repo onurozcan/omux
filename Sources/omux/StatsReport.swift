@@ -21,12 +21,14 @@ struct ReportOptions: Codable, Hashable {
     var hideProjects = false
     var hideSessions = false
     var hideCommits = false
-    var dark = false
+    /// A small card to post, or the whole report.
+    var card = true
+    var dark = true
     var wide = true
     /// Projects left out, by folder.
     var excluded: [String] = []
 
-    var width: CGFloat { wide ? 1040 : 760 }
+    var width: CGFloat { card ? ShareCard.size.width : wide ? 1040 : 760 }
 
     static let key = "statsReportOptions"
     static func load() -> ReportOptions {
@@ -390,13 +392,135 @@ struct ReportView: View {
     }
 }
 
+// MARK: - The card
+
+/// The period on one small picture: the hours, the tokens, what they went to, and the days
+/// they were worked; made to be posted.
+struct ShareCard: View {
+    let data: ReportData
+    let options: ReportOptions
+
+    static let size = CGSize(width: 640, height: 360)
+
+    private var dark: Bool { options.dark }
+    private var ink: Color { dark ? .white : Color(red: 0.07, green: 0.08, blue: 0.1) }
+    private var muted: Color { ink.opacity(0.58) }
+    private var faint: Color { ink.opacity(0.36) }
+    private var green: Color { ContributionCalendar.greens(dark ? .dark : .light)[dark ? 3 : 1] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(data.range.uppercased()).font(.system(size: 11, weight: .bold)).tracking(1.4).foregroundStyle(green)
+                Text(data.dates).font(.system(size: 11).monospacedDigit()).foregroundStyle(faint)
+                Spacer()
+                if !options.author.isEmpty { Text(options.author).font(.system(size: 12, weight: .semibold)).foregroundStyle(muted) }
+            }
+            HStack(alignment: .lastTextBaseline, spacing: 10) {
+                Text(StatsStyle.duration(data.time)).font(.system(size: 56, weight: .heavy).monospacedDigit()).foregroundStyle(ink)
+                Text("with Claude Code").font(.system(size: 17, weight: .medium)).foregroundStyle(muted)
+            }
+            .padding(.top, 14)
+            HStack(spacing: 22) {
+                stat(StatsStyle.tokens(data.tokens.total), "tokens")
+                stat("\(data.sessionCount)", "sessions")
+                stat("\(data.projects.count)", "projects")
+                stat("\(data.commitCount)", "commits")
+                if !data.hourly { stat("\(data.activeDays)", data.activeDays == 1 ? "day" : "days") }
+            }
+            .padding(.top, 8)
+            Spacer(minLength: 16)
+            HStack(alignment: .bottom, spacing: 28) {
+                bars.frame(maxWidth: .infinity)
+                projects.frame(width: 230)
+            }
+            .frame(height: 96)
+            HStack {
+                Label("omux", systemImage: "chart.bar.xaxis").font(.system(size: 11, weight: .bold)).foregroundStyle(muted)
+                Spacer()
+                Text(data.hourly ? "active minutes, hour by hour" : "hours worked, day by day")
+                    .font(.system(size: 10)).foregroundStyle(faint)
+            }
+            .padding(.top, 14)
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 26)
+        .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+        .background(background)
+        .environment(\.colorScheme, dark ? .dark : .light)
+    }
+
+    private var background: some View {
+        ZStack {
+            LinearGradient(colors: dark ? [Color(red: 0.05, green: 0.07, blue: 0.09), Color(red: 0.09, green: 0.11, blue: 0.14)]
+                                        : [Color(red: 1, green: 1, blue: 1), Color(red: 0.94, green: 0.95, blue: 0.96)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            RadialGradient(colors: [green.opacity(dark ? 0.16 : 0.12), .clear], center: .topTrailing, startRadius: 10, endRadius: 360)
+        }
+    }
+
+    private func stat(_ value: String, _ label: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value).font(.system(size: 17, weight: .bold).monospacedDigit()).foregroundStyle(ink)
+            Text(label).font(.system(size: 12)).foregroundStyle(muted)
+        }
+    }
+
+    /// A bar a day (an hour for the last day), as tall as its time.
+    private var bars: some View {
+        let values = data.buckets.map { data.perBucket[$0] ?? 0 }
+        let top = max(values.max() ?? 0, 1)
+        let green = green, empty = ink.opacity(dark ? 0.08 : 0.07)
+        return Canvas { context, size in
+            let count = max(values.count, 1)
+            let step = size.width / CGFloat(count)
+            let width = max(2, step * (count > 14 ? 0.68 : 0.56))
+            for (i, value) in values.enumerated() {
+                let height = value > 0 ? max(4, size.height * CGFloat(value / top)) : 3
+                let rect = CGRect(x: CGFloat(i) * step + (step - width) / 2, y: size.height - height, width: width, height: height)
+                context.fill(Path(roundedRect: rect, cornerRadius: min(3, width / 2)),
+                             with: .color(value > 0 ? green.opacity(0.35 + 0.65 * value / top) : empty))
+            }
+        }
+    }
+
+    /// The three projects with the most time, and how much of it each took.
+    private var projects: some View {
+        let top = Array(data.projects.prefix(3))
+        let total = max(data.projects.reduce(0) { $0 + $1.time }, 1)
+        return VStack(alignment: .leading, spacing: 9) {
+            ForEach(top) { project in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Circle().fill(project.color).frame(width: 7, height: 7)
+                        Text(project.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(ink).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text("\(Int((project.time / total * 100).rounded()))%").font(.system(size: 11).monospacedDigit()).foregroundStyle(muted)
+                    }
+                    GeometryReader { geo in
+                        Capsule().fill(ink.opacity(0.08))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(project.color).frame(width: max(4, geo.size.width * project.time / total))
+                            }
+                    }
+                    .frame(height: 4)
+                }
+            }
+            if data.projects.count > 3 {
+                Text("+ \(data.projects.count - 3) more").font(.system(size: 10.5)).foregroundStyle(faint)
+            }
+        }
+    }
+}
+
 // MARK: - Making files
 
 @MainActor
 enum ReportExport {
-    private static func renderer(_ data: ReportData, _ options: ReportOptions) -> ImageRenderer<ReportView> {
-        let renderer = ImageRenderer(content: ReportView(data: data, options: options))
-        renderer.proposedSize = ProposedViewSize(width: options.width, height: nil)
+    private static func renderer(_ data: ReportData, _ options: ReportOptions) -> ImageRenderer<AnyView> {
+        let page = options.card ? AnyView(ShareCard(data: data, options: options)) : AnyView(ReportView(data: data, options: options))
+        let renderer = ImageRenderer(content: page)
+        renderer.proposedSize = ProposedViewSize(width: options.width, height: options.card ? ShareCard.size.height : nil)
         renderer.scale = 2
         return renderer
     }
@@ -508,10 +632,52 @@ struct ShareReportSheet: View {
                 }
                 .buttonStyle(.borderless)
             }
-            group("Title") {
-                TextField("Title", text: $options.title).textFieldStyle(.roundedBorder)
-                TextField("Your name (optional)", text: $options.author).textFieldStyle(.roundedBorder)
+            group("Format") {
+                Picker("", selection: $options.card) {
+                    Text("Card").tag(true)
+                    Text("Full report").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Text(options.card ? "One picture, 1280 × 720, to post on X, LinkedIn or Slack." : "Every part, one long page, for a time sheet or a client.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
             }
+            group(options.card ? "Name" : "Title") {
+                if !options.card { TextField("Title", text: $options.title).textFieldStyle(.roundedBorder) }
+                TextField(options.card ? "Name or @handle (optional)" : "Your name (optional)", text: $options.author).textFieldStyle(.roundedBorder)
+            }
+            if !options.card { sections }
+            projectList
+            group("Privacy") {
+                Toggle("Hide project names", isOn: $options.hideProjects)
+                if !options.card {
+                    Toggle("Hide session titles", isOn: $options.hideSessions)
+                    Toggle("Hide commit messages", isOn: $options.hideCommits)
+                }
+            }
+            group("Look") {
+                Picker("", selection: $options.dark) {
+                    Text("Dark").tag(true)
+                    Text("Light").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                if !options.card {
+                    Picker("", selection: $options.wide) {
+                        Text("Wide").tag(true)
+                        Text("Narrow").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+            }
+        }
+        .toggleStyle(.checkbox)
+        .font(.system(size: 12))
+    }
+
+    private var sections: some View {
             group("Sections") {
                 Toggle("Summary numbers", isOn: $options.summary)
                 Toggle("Year calendar", isOn: $options.calendar)
@@ -532,29 +698,6 @@ struct ShareReportSheet: View {
                 Toggle("Longest sessions", isOn: $options.sessions)
                 Toggle("Commits", isOn: $options.commits)
             }
-            projectList
-            group("Privacy") {
-                Toggle("Hide project names", isOn: $options.hideProjects)
-                Toggle("Hide session titles", isOn: $options.hideSessions)
-                Toggle("Hide commit messages", isOn: $options.hideCommits)
-            }
-            group("Look") {
-                Picker("", selection: $options.dark) {
-                    Text("Light").tag(false)
-                    Text("Dark").tag(true)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                Picker("", selection: $options.wide) {
-                    Text("Wide").tag(true)
-                    Text("Narrow").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-        }
-        .toggleStyle(.checkbox)
-        .font(.system(size: 12))
     }
 
     private var projectList: some View {
@@ -605,7 +748,7 @@ struct ShareReportSheet: View {
                         .resizable()
                         .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: options.width)
+                        .frame(maxWidth: options.card ? 760 : options.width)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
                 } else {
