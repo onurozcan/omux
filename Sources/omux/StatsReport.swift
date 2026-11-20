@@ -30,7 +30,7 @@ struct ReportOptions: Codable, Hashable {
     /// Projects left out, by folder.
     var excluded: [String] = []
 
-    var width: CGFloat { card ? ShareCard.size.width : wide ? 1040 : 760 }
+    var width: CGFloat { card ? StatsShareCard.size.width : wide ? 1040 : 760 }
 
     static let key = "statsReportOptions"
     static func load() -> ReportOptions {
@@ -407,7 +407,7 @@ struct ReportView: View {
 
 /// The period on one small picture: the hours, the tokens, what they went to, and the days
 /// they were worked; made to be posted.
-struct ShareCard: View {
+struct StatsShareCard: View {
     let data: ReportData
     let options: ReportOptions
 
@@ -534,9 +534,9 @@ struct ShareCard: View {
 @MainActor
 enum ReportExport {
     private static func renderer(_ data: ReportData, _ options: ReportOptions) -> ImageRenderer<AnyView> {
-        let page = options.card ? AnyView(ShareCard(data: data, options: options)) : AnyView(ReportView(data: data, options: options))
+        let page = options.card ? AnyView(StatsShareCard(data: data, options: options)) : AnyView(ReportView(data: data, options: options))
         let renderer = ImageRenderer(content: page)
-        renderer.proposedSize = ProposedViewSize(width: options.width, height: options.card ? ShareCard.size.height : nil)
+        renderer.proposedSize = ProposedViewSize(width: options.width, height: options.card ? StatsShareCard.size.height : nil)
         renderer.scale = 2
         return renderer
     }
