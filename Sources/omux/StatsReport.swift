@@ -23,6 +23,8 @@ struct ReportOptions: Codable, Hashable {
     var hideCommits = false
     /// A small card to post, or the whole report.
     var card = true
+    /// The card leads with tokens instead of time.
+    var cardTokens = false
     var dark = true
     var wide = true
     /// Projects left out, by folder.
@@ -82,6 +84,7 @@ struct ReportData {
     var bars: [StatsBar] = []
     var buckets: [Date] = []
     var perBucket: [Date: TimeInterval] = [:]
+    var tokensPerBucket: [Date: Int] = [:]
     var hourly = false
     var year: [Date: StatsDayTotal] = [:]
     var packing = TokenBubbles.Packing()
@@ -120,6 +123,14 @@ struct ReportData {
         for bar in bars { perBucket[bar.day, default: 0] += bar.seconds }
         buckets = snapshot.buckets
         hourly = snapshot.hourly
+        let calendar = Calendar.current
+        for project in included {
+            for slice in project.sessions {
+                for hour in slice.session.tokenHours where hour.day >= model.from && hour.day < model.to {
+                    tokensPerBucket[hourly ? hour.day : calendar.startOfDay(for: hour.day), default: 0] += hour.tokens.total
+                }
+            }
+        }
         year = model.yearTotals(excluding: excluded)
         packing = TokenBubbles.packing(included, name: { names[$0.id] ?? $0.name }, title: title)
         sessions = included.flatMap { project in
@@ -403,6 +414,9 @@ struct ShareCard: View {
     static let size = CGSize(width: 640, height: 360)
 
     private var dark: Bool { options.dark }
+    private var byTokens: Bool { options.cardTokens }
+    /// What a project's share is of: its time or its tokens.
+    private func amount(_ project: ReportData.Project) -> Double { byTokens ? Double(project.tokens) : project.time }
     private var ink: Color { dark ? .white : Color(red: 0.07, green: 0.08, blue: 0.1) }
     private var muted: Color { ink.opacity(0.58) }
     private var faint: Color { ink.opacity(0.36) }
@@ -417,12 +431,13 @@ struct ShareCard: View {
                 if !options.author.isEmpty { Text(options.author).font(.system(size: 12, weight: .semibold)).foregroundStyle(muted) }
             }
             HStack(alignment: .lastTextBaseline, spacing: 10) {
-                Text(StatsStyle.duration(data.time)).font(.system(size: 56, weight: .heavy).monospacedDigit()).foregroundStyle(ink)
-                Text("with Claude Code").font(.system(size: 17, weight: .medium)).foregroundStyle(muted)
+                Text(byTokens ? StatsStyle.tokens(data.tokens.total) : StatsStyle.duration(data.time))
+                    .font(.system(size: 56, weight: .heavy).monospacedDigit()).foregroundStyle(ink)
+                Text(byTokens ? "tokens with Claude Code" : "with Claude Code").font(.system(size: 17, weight: .medium)).foregroundStyle(muted)
             }
             .padding(.top, 14)
             HStack(spacing: 22) {
-                stat(StatsStyle.tokens(data.tokens.total), "tokens")
+                if byTokens { stat(StatsStyle.duration(data.time), "active") } else { stat(StatsStyle.tokens(data.tokens.total), "tokens") }
                 stat("\(data.sessionCount)", "sessions")
                 stat("\(data.projects.count)", "projects")
                 stat("\(data.commitCount)", "commits")
@@ -438,7 +453,8 @@ struct ShareCard: View {
             HStack {
                 Label("omux", systemImage: "chart.bar.xaxis").font(.system(size: 11, weight: .bold)).foregroundStyle(muted)
                 Spacer()
-                Text(data.hourly ? "active minutes, hour by hour" : "hours worked, day by day")
+                Text(byTokens ? (data.hourly ? "tokens, hour by hour" : "tokens, day by day")
+                              : (data.hourly ? "active minutes, hour by hour" : "hours worked, day by day"))
                     .font(.system(size: 10)).foregroundStyle(faint)
             }
             .padding(.top, 14)
@@ -468,7 +484,7 @@ struct ShareCard: View {
 
     /// A bar a day (an hour for the last day), as tall as its time.
     private var bars: some View {
-        let values = data.buckets.map { data.perBucket[$0] ?? 0 }
+        let values = data.buckets.map { byTokens ? Double(data.tokensPerBucket[$0] ?? 0) : data.perBucket[$0] ?? 0 }
         let top = max(values.max() ?? 0, 1)
         let green = green, empty = ink.opacity(dark ? 0.08 : 0.07)
         return Canvas { context, size in
@@ -486,8 +502,8 @@ struct ShareCard: View {
 
     /// The three projects with the most time, and how much of it each took.
     private var projects: some View {
-        let top = Array(data.projects.prefix(3))
-        let total = max(data.projects.reduce(0) { $0 + $1.time }, 1)
+        let top = Array(data.projects.sorted { amount($0) > amount($1) }.prefix(3))
+        let total = max(data.projects.reduce(0) { $0 + amount($1) }, 1)
         return VStack(alignment: .leading, spacing: 9) {
             ForEach(top) { project in
                 VStack(alignment: .leading, spacing: 4) {
@@ -495,12 +511,12 @@ struct ShareCard: View {
                         Circle().fill(project.color).frame(width: 7, height: 7)
                         Text(project.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(ink).lineLimit(1)
                         Spacer(minLength: 4)
-                        Text("\(Int((project.time / total * 100).rounded()))%").font(.system(size: 11).monospacedDigit()).foregroundStyle(muted)
+                        Text("\(Int((amount(project) / total * 100).rounded()))%").font(.system(size: 11).monospacedDigit()).foregroundStyle(muted)
                     }
                     GeometryReader { geo in
                         Capsule().fill(ink.opacity(0.08))
                             .overlay(alignment: .leading) {
-                                Capsule().fill(project.color).frame(width: max(4, geo.size.width * project.time / total))
+                                Capsule().fill(project.color).frame(width: max(4, geo.size.width * amount(project) / total))
                             }
                     }
                     .frame(height: 4)
@@ -642,6 +658,18 @@ struct ShareReportSheet: View {
                 Text(options.card ? "One picture, 1280 × 720, to post on X, LinkedIn or Slack." : "Every part, one long page, for a time sheet or a client.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                if options.card {
+                    HStack(spacing: 8) {
+                        Text("Lead with").foregroundStyle(.secondary)
+                        Picker("", selection: $options.cardTokens) {
+                            Text("Time").tag(false)
+                            Text("Tokens").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
             }
             group(options.card ? "Name" : "Title") {
                 if !options.card { TextField("Title", text: $options.title).textFieldStyle(.roundedBorder) }
