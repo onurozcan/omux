@@ -41,7 +41,76 @@ struct StatsDayTotal: Equatable {
     var tokens = 0
 }
 
-/// One project's share of one day in the hours chart.
+/// The stretch of time the page shows.
+enum StatsRange: Hashable {
+    case last24Hours, last7Days, last30Days
+    case month(Date)
+
+    enum Kind: String, CaseIterable { case hours = "24h", week = "7 days", days30 = "30 days", month = "Month" }
+    var kind: Kind {
+        switch self {
+        case .last24Hours: return .hours
+        case .last7Days: return .week
+        case .last30Days: return .days30
+        case .month: return .month
+        }
+    }
+    static func of(_ kind: Kind) -> StatsRange {
+        switch kind {
+        case .hours: return .last24Hours
+        case .week: return .last7Days
+        case .days30: return .last30Days
+        case .month: return .month(StatsModel.startOfMonth(Date()))
+        }
+    }
+
+    /// [from, to) as of `now`: whole hours for the last day, whole days otherwise.
+    func interval(now: Date = Date()) -> (from: Date, to: Date) {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? now
+        switch self {
+        case .last24Hours:
+            let hour = calendar.dateInterval(of: .hour, for: now)?.start ?? now
+            return (hour.addingTimeInterval(-23 * 3600), hour.addingTimeInterval(3600))
+        case .last7Days: return (calendar.date(byAdding: .day, value: -6, to: today) ?? today, tomorrow)
+        case .last30Days: return (calendar.date(byAdding: .day, value: -29, to: today) ?? today, tomorrow)
+        case .month(let month): return (month, calendar.date(byAdding: .month, value: 1, to: month) ?? month)
+        }
+    }
+
+    /// "in the last 7 days", "in November 2026".
+    var phrase: String {
+        switch self {
+        case .last24Hours: return "in the last 24 hours"
+        case .last7Days: return "in the last 7 days"
+        case .last30Days: return "in the last 30 days"
+        case .month(let month): return "in " + month.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
+    /// "Last 7 days", "November 2026".
+    var title: String {
+        switch self {
+        case .last24Hours: return "Last 24 hours"
+        case .last7Days: return "Last 7 days"
+        case .last30Days: return "Last 30 days"
+        case .month(let month): return month.formatted(.dateTime.month(.wide).year())
+        }
+    }
+
+    /// The dates it covers: "14 – 20 Nov 2026", "20 Nov 2026, 09:00 – 21 Nov, 09:00".
+    func dates(now: Date = Date()) -> String {
+        let (from, to) = interval(now: now)
+        if self == .last24Hours {
+            return "\(from.formatted(.dateTime.day().month(.abbreviated).hour().minute())) – \(to.formatted(.dateTime.day().month(.abbreviated).hour().minute()))"
+        }
+        let last = to.addingTimeInterval(-1)
+        return "\(from.formatted(.dateTime.day().month(.abbreviated))) – \(last.formatted(.dateTime.day().month(.abbreviated).year()))"
+    }
+}
+
+/// One project's share of one day (or hour) in the hours chart.
 struct StatsBar: Equatable {
     let day: Date
     let project: String
@@ -56,6 +125,10 @@ struct StatsSnapshot {
     var total: TimeInterval = 0
     var tokens = WorkTokens()
     var days: [Date] = []
+    /// The chart's columns: the days, or for the last 24 hours its hours.
+    var buckets: [Date] = []
+    var perBucket: [Date: TimeInterval] = [:]
+    var hourly = false
 
     func project(_ id: String) -> StatsProject? { projects.first { $0.id == id } }
     func slice(_ id: String) -> (StatsProject, StatsSessionSlice)? {
@@ -71,7 +144,10 @@ final class StatsModel: ObservableObject {
     @Published private(set) var sessions: [WorkSession] = []
     @Published private(set) var loading = false
     @Published private(set) var loaded = false
-    @Published var month: Date = StatsModel.startOfMonth(Date()) { didSet { if month != oldValue { day = nil; rebuild(); loadCommits() } } }
+    @Published var range: StatsRange = .month(StatsModel.startOfMonth(Date())) { didSet { if range != oldValue { day = nil; rebuild(); loadCommits() } } }
+    /// The range's bounds as of the last rebuild.
+    private(set) var from = Date()
+    private(set) var to = Date()
     @Published var selection: StatsSelection? { didSet { if selection != oldValue { updateYear() } } }
     /// The last 53 weeks day by day, for the picked project or for all: the year calendar.
     @Published private(set) var year: [Date: StatsDayTotal] = [:]
@@ -88,11 +164,12 @@ final class StatsModel: ObservableObject {
     private var lastLoad: Date?
     private var commitTask: Task<Void, Never>?
 
-    static func startOfMonth(_ date: Date) -> Date {
+    nonisolated static func startOfMonth(_ date: Date) -> Date {
         Calendar.current.dateInterval(of: .month, for: date)?.start ?? Calendar.current.startOfDay(for: date)
     }
 
-    var monthEnd: Date { Calendar.current.date(byAdding: .month, value: 1, to: month) ?? month }
+    /// The month in view, when the range is one.
+    var month: Date? { if case .month(let month) = range { return month } else { return nil } }
     var isCurrentMonth: Bool { month == Self.startOfMonth(Date()) }
 
     /// The project the selection is in, if any.
@@ -126,11 +203,15 @@ final class StatsModel: ObservableObject {
     }
 
     func step(_ months: Int) {
-        if let date = Calendar.current.date(byAdding: .month, value: months, to: month) { month = date }
+        if let month, let date = Calendar.current.date(byAdding: .month, value: months, to: month) { range = .month(date) }
     }
 
+    /// Whether the day is in the range in view.
+    func covers(_ day: Date) -> Bool { day >= Calendar.current.startOfDay(for: from) && day < to }
+
     private func rebuild() {
-        let from = month, to = monthEnd
+        (from, to) = range.interval()
+        let from = from, to = to
         let calendar = Calendar.current
         var byFolder: [String: [StatsSessionSlice]] = [:]
         for session in sessions {
@@ -156,7 +237,9 @@ final class StatsModel: ObservableObject {
                 ?? (folder == NSHomeDirectory() ? "Home" : (folder as NSString).lastPathComponent)
             var tokensPerDay: [Date: Int] = [:]
             for slice in slices {
-                for day in slice.session.tokenDays where day.day >= from && day.day < to { tokensPerDay[day.day, default: 0] += day.tokens.total }
+                for hour in slice.session.tokenHours where hour.day >= from && hour.day < to {
+                    tokensPerDay[calendar.startOfDay(for: hour.day), default: 0] += hour.tokens.total
+                }
             }
             return StatsProject(id: folder, name: name, color: colors[folder] ?? StatsStyle.color(for: folder),
                                 sessions: slices.sorted { $0.session.end > $1.session.end },
@@ -165,17 +248,25 @@ final class StatsModel: ObservableObject {
                                 tokens: slices.reduce(WorkTokens()) { $0 + $1.tokens }, tokensPerDay: tokensPerDay)
         }.sorted { $0.total > $1.total }
         let all = WorkStats.union(projects.flatMap(\.spans))
-        var days: [Date] = []
-        var day = from
-        while day < to {
-            days.append(day)
-            guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
-            day = next
+        func steps(_ unit: Calendar.Component, from start: Date) -> [Date] {
+            var result: [Date] = []
+            var cursor = start
+            while cursor < to {
+                result.append(cursor)
+                guard let next = calendar.date(byAdding: unit, value: 1, to: cursor) else { break }
+                cursor = next
+            }
+            return result
         }
-        defer { bars = stacked().map { StatsBar(day: $0.day, project: $0.project.id, color: $0.project.color, seconds: $0.seconds) } }
+        let hourly = range == .last24Hours
+        let days = steps(.day, from: calendar.startOfDay(for: from))
+        let unit: Calendar.Component = hourly ? .hour : .day
         snapshot = StatsSnapshot(projects: projects, perDay: WorkStats.perDay(all),
                                  total: all.reduce(0) { $0 + $1.duration },
-                                 tokens: projects.reduce(WorkTokens()) { $0 + $1.tokens }, days: days)
+                                 tokens: projects.reduce(WorkTokens()) { $0 + $1.tokens }, days: days,
+                                 buckets: hourly ? steps(.hour, from: from) : days,
+                                 perBucket: WorkStats.per(unit, all), hourly: hourly)
+        bars = stacked(unit)
         if let selection {
             switch selection {
             case .project(let id) where snapshot.project(id) == nil: self.selection = nil
@@ -223,7 +314,7 @@ final class StatsModel: ObservableObject {
     private func loadCommits() {
         commitTask?.cancel()
         let folders = snapshot.projects.map(\.id).filter { $0 != NSHomeDirectory() }
-        let from = month, to = monthEnd
+        let from = from, to = to
         commitTask = Task.detached(priority: .utility) {
             var found: [WorkCommit] = []
             var seen = Set<String>()
@@ -238,16 +329,32 @@ final class StatsModel: ObservableObject {
         }
     }
 
-    /// Each project's share of each day, scaled so a day's shares add up to its total: sessions
-    /// in two projects at once count once, as the day's total does.
-    func stacked() -> [(day: Date, project: StatsProject, seconds: TimeInterval)] {
-        var result: [(Date, StatsProject, TimeInterval)] = []
-        for day in snapshot.days {
-            let total = snapshot.perDay[day] ?? 0
+    /// Each project's share of each day (or hour), scaled so a column's shares add up to its
+    /// total: sessions in two projects at once count once, as the total does.
+    private func stacked(_ unit: Calendar.Component) -> [StatsBar] {
+        let each = snapshot.projects.map { ($0, unit == .day ? $0.perDay : WorkStats.per(unit, $0.spans)) }
+        var result: [StatsBar] = []
+        for bucket in snapshot.buckets {
+            let total = snapshot.perBucket[bucket] ?? 0
             guard total > 0 else { continue }
-            let raw = snapshot.projects.map { ($0, $0.perDay[day] ?? 0) }.filter { $0.1 > 0 }
+            let raw = each.map { ($0.0, $0.1[bucket] ?? 0) }.filter { $0.1 > 0 }
             let sum = raw.reduce(0) { $0 + $1.1 }
-            for (project, seconds) in raw { result.append((day, project, seconds * total / max(sum, 1))) }
+            for (project, seconds) in raw {
+                result.append(StatsBar(day: bucket, project: project.id, color: project.color, seconds: seconds * total / max(sum, 1)))
+            }
+        }
+        return result
+    }
+
+    /// The year calendar's days for every project but `excluded`.
+    func yearTotals(excluding excluded: Set<String>) -> [Date: StatsDayTotal] {
+        guard !excluded.isEmpty else { return yearAll }
+        var result: [Date: StatsDayTotal] = [:]
+        for (folder, days) in yearByProject where !excluded.contains(folder) {
+            for (day, total) in days {
+                result[day, default: StatsDayTotal()].time += total.time
+                result[day, default: StatsDayTotal()].tokens += total.tokens
+            }
         }
         return result
     }

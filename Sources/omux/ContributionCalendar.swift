@@ -15,16 +15,19 @@ struct ContributionCalendar: View {
         case time = "Time", tokens = "Tokens"
     }
 
-    private static let weeks = 53
-    private let labelWidth: CGFloat = 30
-    private let monthRow: CGFloat = 18
-    private let gap: CGFloat = 3
+    static let weeks = 53
+    private var labelWidth: CGFloat { Self.labelWidth }
+    private var monthRow: CGFloat { Self.monthRow }
 
     /// The width of a week's column: GitHub's squares, grown to fill wide windows.
     private var step: CGFloat { min(24, max(8, ((width - labelWidth) / CGFloat(Self.weeks)).rounded(.down))) }
 
-    private var empty: Color { scheme == .dark ? Color(red: 0.09, green: 0.11, blue: 0.13) : Color(red: 0.92, green: 0.93, blue: 0.94) }
-    private var greens: [Color] {
+    private var empty: Color { Self.empty(scheme) }
+    private var greens: [Color] { Self.greens(scheme) }
+    static func empty(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color(red: 0.09, green: 0.11, blue: 0.13) : Color(red: 0.92, green: 0.93, blue: 0.94)
+    }
+    static func greens(_ scheme: ColorScheme) -> [Color] {
         scheme == .dark
             ? [Color(red: 0.05, green: 0.27, blue: 0.16), Color(red: 0.0, green: 0.43, blue: 0.2), Color(red: 0.15, green: 0.65, blue: 0.25), Color(red: 0.22, green: 0.83, blue: 0.33)]
             : [Color(red: 0.61, green: 0.91, blue: 0.66), Color(red: 0.25, green: 0.77, blue: 0.39), Color(red: 0.19, green: 0.63, blue: 0.31), Color(red: 0.13, green: 0.43, blue: 0.22)]
@@ -100,13 +103,44 @@ struct ContributionCalendar: View {
     }
 
     private func grid(days: [Date], values: [Double], thresholds: [Double]) -> some View {
-        let calendar = Calendar.current
-        let step = step, gap = gap, labelWidth = labelWidth, monthRow = monthRow
-        let empty = empty, greens = greens
+        let step = step, scheme = scheme
         let selected = model.day
         let hover = hover
-        let today = calendar.startOfDay(for: Date())
         return Canvas { context, _ in
+            Self.draw(in: &context, days: days, values: values, thresholds: thresholds, step: step, scheme: scheme,
+                      selected: selected, hover: hover)
+        }
+        .contentShape(Rectangle())
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point): self.hover = self.day(at: point, days: days)
+            case .ended: self.hover = nil
+            }
+        }
+        .onTapGesture { point in
+            guard let day = self.day(at: point, days: days) else { return }
+            withAnimation(.easeOut(duration: 0.15)) {
+                if model.day == day { model.day = nil; return }
+                if !model.covers(day) { model.range = .month(StatsModel.startOfMonth(day)) }
+                model.day = day
+            }
+        }
+    }
+
+    static let labelWidth: CGFloat = 30
+    static let monthRow: CGFloat = 18
+
+    /// The grid's size for a week column `step` wide.
+    static func size(step: CGFloat) -> CGSize { CGSize(width: labelWidth + step * CGFloat(weeks), height: monthRow + step * 7) }
+
+    /// The squares, their months and weekdays.
+    static func draw(in context: inout GraphicsContext, days: [Date], values: [Double], thresholds: [Double], step: CGFloat,
+                     scheme: ColorScheme, selected: Date? = nil, hover: Date? = nil) {
+        let calendar = Calendar.current
+        let gap: CGFloat = 3, labelWidth = labelWidth, monthRow = monthRow
+        let empty = empty(scheme), greens = greens(scheme)
+        let today = calendar.startOfDay(for: Date())
+        do {
             let side = step - gap
             // Weekday names on every other row, as GitHub does.
             for row in [1, 3, 5] {
@@ -141,22 +175,6 @@ struct ContributionCalendar: View {
                 } else if day == today {
                     context.stroke(shape, with: .color(StatsStyle.accent.opacity(0.8)), lineWidth: 1)
                 }
-            }
-        }
-        .contentShape(Rectangle())
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let point): self.hover = self.day(at: point, days: days)
-            case .ended: self.hover = nil
-            }
-        }
-        .onTapGesture { point in
-            guard let day = self.day(at: point, days: days) else { return }
-            withAnimation(.easeOut(duration: 0.15)) {
-                if model.day == day { model.day = nil; return }
-                let start = StatsModel.startOfMonth(day)
-                if model.month != start { model.month = start }
-                model.day = day
             }
         }
     }

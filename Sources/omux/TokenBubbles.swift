@@ -36,11 +36,16 @@ struct TokenBubbles: View {
         VStack(alignment: .leading, spacing: 8) {
             caption
             GeometryReader { geo in
-                let fit = fitting(packing.bounds, in: geo.size)
+                let fit = Self.fitting(packing.bounds, in: geo.size)
                 let quiet = quietSessions()
+                let pickedProject = model.selectedProjectID
+                let pickedSession: String? = { if case .session(let id) = model.selection { return id } else { return nil } }()
                 TimelineView(.animation(minimumInterval: 1 / 30, paused: packing.bubbles.isEmpty)) { timeline in
                     let time = timeline.date.timeIntervalSinceReferenceDate
-                    Canvas { context, _ in draw(in: &context, fit: fit, time: time, quiet: quiet) }
+                    Canvas { context, _ in
+                        Self.draw(packing, in: &context, fit: fit, time: time, hover: hover,
+                                  pickedProject: pickedProject, pickedSession: pickedSession, quiet: quiet)
+                    }
                 }
                 .contentShape(Rectangle())
                 .onContinuousHover { phase in
@@ -62,7 +67,7 @@ struct TokenBubbles: View {
             }
             .overlay {
                 if packing.bubbles.isEmpty {
-                    Text(model.loaded ? "No tokens this month." : "Reading conversations…").font(.system(size: 12)).foregroundStyle(StatsStyle.muted)
+                    Text(model.loaded ? "No tokens \(model.range.phrase)." : "Reading conversations…").font(.system(size: 12)).foregroundStyle(StatsStyle.muted)
                 }
             }
         }
@@ -75,7 +80,7 @@ struct TokenBubbles: View {
     private var caption: some View {
         HStack(spacing: 8) {
             Text("Where the tokens went").font(.system(size: 13, weight: .semibold))
-            Text("\(StatsStyle.tokens(model.snapshot.tokens.total)) this month")
+            Text("\(StatsStyle.tokens(model.snapshot.tokens.total)) \(model.range.phrase)")
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(StatsStyle.muted)
             Spacer(minLength: 8)
@@ -97,9 +102,16 @@ struct TokenBubbles: View {
     // MARK: Packing
 
     private func repack() {
-        let projects = model.snapshot.projects.filter { $0.tokens.total > 0 }
-        let key = "\(model.month.timeIntervalSince1970)|\(model.snapshot.tokens.total)|\(projects.count)"
+        let key = "\(model.from.timeIntervalSince1970)|\(model.to.timeIntervalSince1970)|\(model.snapshot.tokens.total)|\(model.snapshot.projects.count)"
         guard key != packing.key else { return }
+        packing = Self.packing(model.snapshot.projects, key: key)
+    }
+
+    /// The projects' and their sessions' bubbles, packed; `name` and `title` say what they're called.
+    static func packing(_ projects: [StatsProject], key: String = "",
+                        name: (StatsProject) -> String = { $0.name },
+                        title: (StatsSessionSlice) -> String = { $0.session.title }) -> Packing {
+        let projects = projects.filter { $0.tokens.total > 0 }
         var result = Packing(key: key)
         // Each project: its sessions packed together, then the group as one circle.
         var groups: [(StatsProject, [Packing.Bubble], CGFloat)] = []
@@ -108,7 +120,7 @@ struct TokenBubbles: View {
             let radii = sessions.map { CGFloat(pow(Double($0.tokens.total), Self.exponent)) }
             let centers = Self.pack(radii, gap: 0.12 * (radii.first ?? 1) / 4)
             var bubbles = zip(sessions, zip(centers, radii)).map { slice, place in
-                Packing.Bubble(id: "s:" + slice.id, project: project.id, session: slice.id, title: slice.session.title,
+                Packing.Bubble(id: "s:" + slice.id, project: project.id, session: slice.id, title: title(slice),
                                tokens: slice.tokens.total, color: project.color, center: place.0, radius: place.1,
                                phase: Double(abs(slice.id.hashValue % 1000)) / 159)
             }
@@ -124,7 +136,7 @@ struct TokenBubbles: View {
         }
         let centers = Self.pack(groups.map(\.2), gap: (groups.first?.2 ?? 10) * 0.16)
         for ((project, sessions, radius), center) in zip(groups, centers) {
-            result.bubbles.append(Packing.Bubble(id: "p:" + project.id, project: project.id, session: nil, title: project.name,
+            result.bubbles.append(Packing.Bubble(id: "p:" + project.id, project: project.id, session: nil, title: name(project),
                                                  tokens: project.tokens.total, color: project.color, center: center, radius: radius,
                                                  phase: Double(abs(project.id.hashValue % 1000)) / 159))
             let group = Double(abs(project.id.hashValue % 1000)) / 159
@@ -141,7 +153,7 @@ struct TokenBubbles: View {
         let minY = projectBubbles.map { $0.center.y - $0.radius }.min() ?? 0
         let maxY = projectBubbles.map { $0.center.y + $0.radius }.max() ?? 0
         result.bounds = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        packing = result
+        return result
     }
 
     /// Centers for circles of `radii` (biggest first) packed around the origin: each goes to
@@ -171,18 +183,19 @@ struct TokenBubbles: View {
 
     // MARK: Drawing
 
-    private struct Fit { let scale: CGFloat; let offset: CGPoint }
+    struct Fit { let scale: CGFloat; let offset: CGPoint }
 
-    private func fitting(_ bounds: CGRect, in size: CGSize) -> Fit {
+    static func fitting(_ bounds: CGRect, in size: CGSize) -> Fit {
         guard bounds.width > 0, bounds.height > 0 else { return Fit(scale: 1, offset: .zero) }
         // Room for the labels above the top bubbles and for drifting.
         let scale = min((size.width - 40) / bounds.width, (size.height - 44) / bounds.height)
         return Fit(scale: scale, offset: CGPoint(x: size.width / 2 - bounds.midX * scale, y: (size.height + 18) / 2 - bounds.midY * scale))
     }
 
-    /// Where a bubble is now: its place, drifting a little.
-    private func place(_ bubble: Packing.Bubble, fit: Fit, time: Double) -> (CGPoint, CGFloat) {
+    /// Where a bubble is now: its place, drifting a little (unless it is still, `time` nil).
+    private static func place(_ bubble: Packing.Bubble, fit: Fit, time: Double?) -> (CGPoint, CGFloat) {
         let base = CGPoint(x: bubble.center.x * fit.scale + fit.offset.x, y: bubble.center.y * fit.scale + fit.offset.y)
+        guard let time else { return (base, bubble.radius * fit.scale) }
         let phase = bubble.group
         var x = base.x + CGFloat(sin(time * 0.55 + phase)) * 5
         var y = base.y + CGFloat(cos(time * 0.43 + phase * 1.7)) * 5
@@ -207,9 +220,8 @@ struct TokenBubbles: View {
         return Set(model.snapshot.projects.flatMap(\.sessions).filter { $0.tokens(on: day).total == 0 }.map(\.id))
     }
 
-    private func draw(in context: inout GraphicsContext, fit: Fit, time: Double, quiet: Set<String>) {
-        let pickedProject = model.selectedProjectID
-        let pickedSession: String? = { if case .session(let id) = model.selection { return id } else { return nil } }()
+    static func draw(_ packing: Packing, in context: inout GraphicsContext, fit: Fit, time: Double?, hover: String? = nil,
+                     pickedProject: String? = nil, pickedSession: String? = nil, quiet: Set<String> = []) {
         var labels: [(Packing.Bubble, CGPoint, CGFloat, Bool)] = []
         for bubble in packing.bubbles {
             let (center, radius) = place(bubble, fit: fit, time: time)
