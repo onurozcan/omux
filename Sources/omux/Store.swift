@@ -832,7 +832,8 @@ final class Store: ObservableObject {
                 // "Please restart Codex." Do that once, so the session doesn't sit in a shell.
                 if Self.asksForRestart(view.lastLines(8)), !codexRelaunched.contains(id) {
                     codexRelaunched.insert(id)
-                    start(id)
+                    // In the background: the session the user is in keeps the window.
+                    launch(id)
                 }
             }
             return
@@ -976,14 +977,20 @@ final class Store: ObservableObject {
         return nil
     }
 
-    /// Starts the selected provider in an idle shell or resumes its exact saved chat.
+    /// ▶: brings the session forward, so what it starts is what you're looking at, and starts it.
     func start(_ id: UUID) {
+        guard location(of: id) != nil, pendingCommands[id] == nil else { return }
+        selectedTabID = id
+        if let view = terminals[id] { view.window?.makeFirstResponder(view) }
+        launch(id)
+    }
+
+    /// Starts the selected provider in an idle shell or resumes its exact saved chat, leaving
+    /// the selection alone.
+    private func launch(_ id: UUID) {
         // Claude Code updates itself in place: a start is a good moment to learn its new models.
         ClaudeModels.shared.refresh()
         guard let loc = location(of: id), pendingCommands[id] == nil else { return }
-        // ▶ brings the session forward; what it starts should be what you're looking at.
-        selectedTabID = id
-        if let view = terminals[id] { view.window?.makeFirstResponder(view) }
         // ▶ in a plain shell turns it into an agent session, the one chosen in Settings.
         if groups[loc.group].tabs[loc.tab].resolvedProvider(in: groups[loc.group]) == .shell {
             let agent: SessionProvider = UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? .codex : .claude
