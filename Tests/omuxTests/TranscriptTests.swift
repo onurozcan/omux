@@ -268,16 +268,29 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(m.blocks[0].images.count, 1)
         XCTAssertTrue(m.blocks[0].images.first?.hasPrefix("data:image/jpeg;base64,") == true)
         XCTAssertEqual(m.blocks[1].images, [])
-        // Once the agent's record has taken the echo, its images are the record's.
+        // Once the agent's record has taken the echo, its images are the record's: the record
+        // lands before the decode can, and the decode is awaited before looking.
         let r = claude()
         r.echo("look \"\(file.path)\"", queued: false)
         r.ingest([prompt("look")])
-        r.echo("again \"\(file.path)\"", queued: false)
-        for _ in 0..<300 where r.blocks[1].images.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await r.thumbnailWork?.value
         XCTAssertNil(r.blocks[0].pending)
         XCTAssertEqual(r.blocks[0].images, [])
+        r.echo("again \"\(file.path)\"", queued: false)
+        await r.thumbnailWork?.value
         XCTAssertEqual(r.blocks[1].images.count, 1)
+    }
+
+    /// A queued prompt handed to the agent mid-turn has no record coming: absorbed before its
+    /// thumbnails are made, it still gets them.
+    func testAnAbsorbedEchoKeepsItsImages() async throws {
+        let file = try pngFile()
+        let m = claude()
+        m.echo("look \"\(file.path)\"", queued: true)
+        m.ingest([queue("enqueue", "look"), queue("remove", "look", reason: "absorbed_mid_turn")])
+        XCTAssertNil(m.blocks[0].pending)
+        for _ in 0..<300 where m.blocks[0].images.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks[0].images.count, 1)
     }
 
     func testCompactionSummaryFoldsInsteadOfBeingAPrompt() {
