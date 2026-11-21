@@ -4,6 +4,17 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Added
+- **A project's icon from its website.** Edit Project… takes a website next to the icon: "Use Site's Icon" fetches the largest icon the site declares and keeps a copy, like a chosen picture. omux contacts only the site you typed, and only when you press the button.
+
+### Changed
+- **The open tab shows only the session's name.** What the session is doing moved to the tab's tooltip; the dot still shows its state.
+
+### Fixed
+- **A file named by part of its path opens.** A path in a reply like `Store/review-notes.txt` was a link that did nothing unless the file sat right under the session's folder. It is now also looked for under the project's folder, among the files the agent wrote in the conversation, and anywhere in the project; when it can't be found, the compose box says so.
+- **Changing the model or effort keeps what you were writing.** The chips sent their command the way a message is sent, which emptied the box.
+- **↑ brings back your last message.** A slash command sent earlier, the chips' included, counted as the newest entry and came back first.
+
 ## [0.12.4] - 2026-11-19
 
 ### Added

@@ -333,6 +333,13 @@ final class TranscriptTests: XCTestCase {
         m.remember("/model opus")
         m.remember("now the tests")
         XCTAssertEqual(m.history, ["fix the build", "now the tests", "/model opus"])
+        // A message sent after the command is the newest: ↑ brings it back first.
+        m.ingest([object(#"{"type":"user","timestamp":"2026-11-04T10:02:00.000Z","message":{"role":"user","content":"ship it"}}"#)])
+        XCTAssertEqual(m.history, ["fix the build", "now the tests", "/model opus", "ship it"])
+        // What a chip sent is taken back out.
+        m.remember("/effort high")
+        m.forget("/effort high")
+        XCTAssertEqual(m.history.last, "ship it")
     }
 
     func testARefusedRestartAsksOmuxToRestartOnlyWhenItJustHappened() {

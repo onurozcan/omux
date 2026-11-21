@@ -101,7 +101,8 @@ struct SessionTabs: View {
     }
 }
 
-/// An agent's tab: its state and name, and for the open one what it is doing and a way to close it.
+/// An agent's tab: its state and name, and for the open one a way to close it. What it is doing
+/// is in the tab's tooltip.
 private struct SessionTab: View {
     @EnvironmentObject var store: Store
     let tab: TabItem
@@ -122,14 +123,6 @@ private struct SessionTab: View {
                     .lineLimit(1)
                     .frame(maxWidth: open ? 220 : 120, alignment: .leading)
                     .fixedSize()
-                if open, let line = runtime.statusLine(showFolder: false) {
-                    Text("· " + line)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 200, alignment: .leading)
-                        .fixedSize()
-                }
                 if open, hovering {
                     Button { store.requestClose(tab.id) } label: { Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold)) }
                         .buttonStyle(IconButtonStyle(size: 16))
@@ -147,7 +140,7 @@ private struct SessionTab: View {
             .contentShape(Capsule())
             .onTapGesture { store.selectedTabID = tab.id }
             .onHover { hovering = $0 }
-            .help(open ? "" : [tab.name, waiting ? "waiting for you" : nil, runtime.statusLine(showFolder: false)].compactMap { $0 }.joined(separator: " · "))
+            .help([tab.name, waiting ? "waiting for you" : nil, runtime.statusLine(showFolder: false)].compactMap { $0 }.joined(separator: " · "))
             .contextMenu { TabMenu(tab: tab, groupID: groupID) }
         }
     }

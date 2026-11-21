@@ -42,26 +42,45 @@ public final class SessionTranscript {
     public private(set) var totalOut = 0 { willSet { changing() } }
     public private(set) var lastContext: Int? { willSet { changing() } }
     public private(set) var lastModel: String? { willSet { changing() } }
-    /// Prompts sent from the panel this run, newest last; `history` adds the conversation's own.
-    private var sentPrompts: [String] = []
-    /// For ↑ in the compose box: the conversation's prompts in order, so a session that isn't
-    /// running or was opened after a relaunch still recalls its last prompt, then prompts sent
-    /// from the panel that the conversation doesn't hold (slash commands, ones not yet recorded).
-    public var history: [String] {
+    /// Prompts sent from the panel this run, newest last, each with how many prompts the
+    /// conversation held when it went out; `history` puts them in among the conversation's own.
+    private var sentPrompts: [(text: String, after: Int)] = []
+    /// The conversation's prompts in order.
+    private var conversationPrompts: [String] {
         var list: [String] = []
         for block in blocks where block.kind == .user && block.pending != .removed {
             let text = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty, list.last != text { list.append(text) }
         }
-        for text in sentPrompts where !list.contains(text) { list.append(text) }
-        return Array(list.suffix(100))
+        return list
+    }
+    /// For ↑ in the compose box: the conversation's prompts in order, so a session that isn't
+    /// running or was opened after a relaunch still recalls its last prompt, with prompts sent
+    /// from the panel that the conversation doesn't hold (slash commands, ones not yet recorded)
+    /// where they were sent: a command sent before the last message comes before it.
+    public var history: [String] {
+        let list = conversationPrompts
+        let extra = sentPrompts.filter { !list.contains($0.text) }
+        var merged: [String] = []
+        var next = 0
+        for (index, text) in list.enumerated() {
+            while next < extra.count, extra[next].after <= index { merged.append(extra[next].text); next += 1 }
+            merged.append(text)
+        }
+        merged += extra[next...].map(\.text)
+        return Array(merged.suffix(100))
     }
 
     /// A prompt or command sent from the panel, for ↑.
     public func remember(_ text: String) {
-        guard sentPrompts.last != text else { return }
-        sentPrompts.append(text)
+        guard sentPrompts.last?.text != text else { return }
+        sentPrompts.append((text, conversationPrompts.count))
         if sentPrompts.count > 100 { sentPrompts.removeFirst(sentPrompts.count - 100) }
+    }
+
+    /// Takes back the latest `remember`: a command a chip sent isn't something to recall with ↑.
+    public func forget(_ text: String) {
+        if sentPrompts.last?.text == text { sentPrompts.removeLast() }
     }
     /// For the summary strip: prompts so far, when the first one was sent, files edited.
     public private(set) var promptCount = 0 { willSet { changing() } }

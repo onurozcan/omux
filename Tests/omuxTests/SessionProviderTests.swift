@@ -124,6 +124,17 @@ final class SessionProviderTests: XCTestCase {
         XCTAssertEqual(SessionProvider.withBypassPermissions("claude --dangerously-skip-permissions"), "claude --dangerously-skip-permissions")
     }
 
+    func testIconsAPageDeclaresComeLargestFirst() {
+        let html = """
+        <link rel="stylesheet" href="/a.css"><link rel="icon" href="/favicon.ico">
+        <link rel='icon' type="image/png" sizes="96x96" href="img/icon-96.png">
+        <LINK REL="apple-touch-icon" HREF="https://cdn.example.com/touch.png">
+        <link rel="mask-icon" href="/mask.svg"><link rel="icon" href="data:image/png;base64,AAAA">
+        """
+        let urls = ProjectIcons.declared(in: html, base: URL(string: "https://example.com/docs/")!).map(\.absoluteString)
+        XCTAssertEqual(urls, ["https://cdn.example.com/touch.png", "https://example.com/docs/img/icon-96.png", "https://example.com/favicon.ico"])
+    }
+
     func testProjectIconSurvivesTheWorkspaceRoundTrip() throws {
         var group = TabGroup(name: "Project")
         group.icon = "abc.png"

@@ -211,6 +211,9 @@ struct GroupEditSheet: View {
     @State private var iconFile: String?
     @State private var pickedIcon: Data?
     @State private var removeIcon = false
+    @State private var iconSite = ""
+    @State private var fetchingIcon = false
+    @State private var iconNotFound = false
 
     private var remote: Bool { !host.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -241,6 +244,19 @@ struct GroupEditSheet: View {
                         Button("Remove") { pickedIcon = nil; removeIcon = true }
                     }
                     Spacer()
+                }
+            }
+            LabeledContent("") {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        TextField("Website", text: $iconSite, prompt: Text("example.com"))
+                            .labelsHidden().onSubmit(fetchIcon)
+                        Button(fetchingIcon ? "Fetching…" : "Use Site's Icon", action: fetchIcon)
+                            .disabled(fetchingIcon || iconSite.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    if iconNotFound {
+                        Text("No icon found there.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             MachineField(host: $host)
@@ -323,6 +339,18 @@ struct GroupEditSheet: View {
             skipPermissions = group.skipPermissions
             host = group.host ?? ""
             iconFile = group.icon
+        }
+    }
+
+    /// Takes the icon of the website typed in. The only time omux contacts the site.
+    private func fetchIcon() {
+        let site = iconSite.trimmingCharacters(in: .whitespaces)
+        guard !site.isEmpty, !fetchingIcon else { return }
+        fetchingIcon = true; iconNotFound = false
+        Task { @MainActor in
+            let data = await ProjectIcons.fetch(site: site)
+            fetchingIcon = false
+            if let data { pickedIcon = data; removeIcon = false } else { iconNotFound = true }
         }
     }
 

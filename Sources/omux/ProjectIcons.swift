@@ -25,7 +25,12 @@ enum ProjectIcons {
 
     /// A square PNG of the picture at `url`, cropped from the middle, as data. nil when the file is not an image.
     static func squarePNG(from url: URL) -> Data? {
-        guard let source = NSImage(contentsOf: url), let rep = source.representations.max(by: { $0.pixelsWide < $1.pixelsWide }),
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return squarePNG(from: data)
+    }
+
+    static func squarePNG(from data: Data) -> Data? {
+        guard let source = NSImage(data: data), let rep = source.representations.max(by: { $0.pixelsWide < $1.pixelsWide }),
               rep.pixelsWide > 0, rep.pixelsHigh > 0 else { return nil }
         let width = CGFloat(rep.pixelsWide), height = CGFloat(rep.pixelsHigh)
         let edge = min(width, height)
@@ -64,5 +69,64 @@ enum ProjectIcons {
         panel.allowedContentTypes = [.image]
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         return squarePNG(from: url)
+    }
+
+    // MARK: From a website
+
+    /// The icon of a website, cropped and shrunk like a chosen picture; nil when the site has
+    /// none omux can read. Asks only the site named, and only when the user presses Fetch:
+    /// its home page for the icons it declares, then the two usual addresses.
+    static func fetch(site: String) async -> Data? {
+        var text = site.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.contains("://") { text = "https://" + text }
+        guard let base = URL(string: text), let scheme = base.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              base.host?.isEmpty == false else { return nil }
+        var candidates: [URL] = []
+        if let (data, response) = try? await session.data(from: base), data.count <= 2_000_000 {
+            // The page it ended on, after redirects: its links are relative to that.
+            candidates = declared(in: String(decoding: data, as: UTF8.self), base: response.url ?? base)
+        }
+        for path in ["/apple-touch-icon.png", "/favicon.ico"] {
+            if let url = URL(string: path, relativeTo: base)?.absoluteURL { candidates.append(url) }
+        }
+        for url in candidates.prefix(6) {
+            guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+                  let (data, _) = try? await session.data(from: url), data.count <= 2_000_000,
+                  let png = squarePNG(from: data) else { continue }
+            return png
+        }
+        return nil
+    }
+
+    private static let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 8
+        config.timeoutIntervalForResource = 15
+        config.httpCookieStorage = nil
+        return URLSession(configuration: config)
+    }()
+
+    /// The icons a page declares in its `<link rel="…icon…">` tags, the largest first; a touch
+    /// icon counts as 180 pixels when it gives no size, a plain one as 32.
+    static func declared(in html: String, base: URL) -> [URL] {
+        guard let tags = try? NSRegularExpression(pattern: "<link\\b[^>]*>", options: [.caseInsensitive]) else { return [] }
+        func attribute(_ name: String, in tag: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: "\\b\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))", options: [.caseInsensitive]),
+                  let match = regex.firstMatch(in: tag, range: NSRange(tag.startIndex..., in: tag)) else { return nil }
+            for group in 1...3 { if let range = Range(match.range(at: group), in: tag) { return String(tag[range]) } }
+            return nil
+        }
+        var found: [(url: URL, size: Int)] = []
+        let head = String(html.prefix(200_000))
+        for match in tags.matches(in: head, range: NSRange(head.startIndex..., in: head)) {
+            guard let range = Range(match.range, in: head) else { continue }
+            let tag = String(head[range])
+            guard let rel = attribute("rel", in: tag)?.lowercased(), rel.contains("icon"), !rel.contains("mask"),
+                  let href = attribute("href", in: tag), !href.hasPrefix("data:"),
+                  let url = URL(string: href, relativeTo: base)?.absoluteURL else { continue }
+            let stated = attribute("sizes", in: tag).flatMap { Int($0.lowercased().split(separator: "x").first ?? "") }
+            found.append((url, stated ?? (rel.contains("apple") ? 180 : 32)))
+        }
+        return found.sorted { $0.size > $1.size }.map(\.url)
     }
 }

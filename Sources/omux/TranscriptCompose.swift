@@ -345,7 +345,7 @@ struct ComposeBox: View {
             ? "I continued this work with \(from) in this folder since your last turn. Read \(handoff) first: it has what happened meanwhile and the files touched."
             : "Continue my work from a conversation with \(from) in this folder. Read \(handoff) first: it has the conversation so far and the files touched."
         if !lastRequest.isEmpty { prompt += " Then carry on from the last request: " + String(lastRequest.prefix(400)) }
-        send(prompt)
+        sendKeepingDraft(prompt)
     }
 
     private var effortChip: some View {
@@ -367,12 +367,25 @@ struct ComposeBox: View {
     /// Remembered on the session, so it holds across restarts and is passed when the session starts.
     private func pickModel(_ id: String) {
         store.updateTab(tabID) { $0.model = id == "default" ? nil : id }
-        send("/model \(id)")
+        sendKeepingDraft("/model \(id)")
     }
 
     private func pickEffort(_ level: String) {
         store.updateTab(tabID) { $0.effort = level == "auto" ? nil : level }
-        send("/effort \(level)")
+        sendKeepingDraft("/effort \(level)")
+    }
+
+    /// What a chip sends, not the message being written: that stays in the box with its
+    /// attachments, and ↑ doesn't bring the chip's command back.
+    private func sendKeepingDraft(_ text: String) {
+        let kept = (draft, attachments)
+        send(text)
+        model.forget(text)
+        guard !kept.0.isEmpty || !kept.1.isEmpty else { return }
+        ComposeDrafts.text[tabID] = kept.0
+        ComposeDrafts.attachments[tabID] = kept.1.isEmpty ? nil : kept.1
+        ComposeDrafts.version += 1
+        ComposeDrafts.save()
     }
 
     /// "auto" → "Auto effort", "xhigh" → "X-high effort".
@@ -900,6 +913,14 @@ final class FileIndex: @unchecked Sendable {
             if scored.count > 400 { break }
         }
         return scored.sorted { $0.1 == $1.1 ? $0.0.count < $1.0.count : $0.1 < $1.1 }.prefix(limit).map(\.0)
+    }
+
+    /// The full path of the file whose path ends with `tail` ("/Store/notes.txt"), the one
+    /// nearest the top of the folder when several do.
+    func first(endingWith tail: String) -> String? {
+        lock.lock(); let paths = self.paths; lock.unlock()
+        return paths.filter { ("/" + $0).hasSuffix(tail) }.min { $0.count < $1.count }
+            .map { (root as NSString).appendingPathComponent($0) }
     }
 
     private static func subsequence(_ query: String, in text: String) -> Bool {

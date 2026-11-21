@@ -391,9 +391,7 @@ struct TranscriptPanel: View {
                 store.previewRequest = raw.hasPrefix("/") || raw.hasPrefix("~") ? raw : folder + "/" + raw
                 return
             }
-            let path = raw.hasPrefix("/") || raw.hasPrefix("~") ? (raw as NSString).expandingTildeInPath
-                : (baseDirectory as NSString).appendingPathComponent(raw)
-            if FileManager.default.fileExists(atPath: path) { store.preview(path) }
+            if let path = locate(raw) { store.preview(path) } else { sendNotice = "Couldn't find \(raw) in this project." }
         case "agent":
             if let id = message["id"] as? String, let agent = agents.agents[tabID]?.first(where: { $0.id == id }) {
                 store.openAgentTranscript(agent, in: tabID)
@@ -674,6 +672,32 @@ struct TranscriptPanel: View {
 
     private var projectDirectory: String {
         store.tab(tabID)?.directory.map { ($0 as NSString).expandingTildeInPath } ?? store.runtime[tabID]?.cwd ?? NSHomeDirectory()
+    }
+
+    /// The file a path in the conversation means. A full path is taken as it is. A partial one,
+    /// like "Store/notes.txt", is looked for under the folder the session is in and the
+    /// project's folder, then among the files the agent wrote in this conversation, then
+    /// anywhere in the project: agents often name a file from a folder that isn't the session's.
+    private func locate(_ raw: String) -> String? {
+        let files = FileManager.default
+        if raw.hasPrefix("/") || raw.hasPrefix("~") {
+            let path = (raw as NSString).expandingTildeInPath
+            return files.fileExists(atPath: path) ? path : nil
+        }
+        let project = store.group(containing: tabID)?.directory.map { ($0 as NSString).expandingTildeInPath }
+        for root in [baseDirectory, projectDirectory, project].compactMap({ $0 }) {
+            let path = ((root as NSString).appendingPathComponent(raw) as NSString).standardizingPath
+            if files.fileExists(atPath: path) { return path }
+        }
+        let tail = "/" + (raw.hasPrefix("./") ? String(raw.dropFirst(2)) : raw)
+        guard !tail.contains("/../") else { return nil }
+        if let written = model.filesTouched.filter({ $0.hasSuffix(tail) && files.fileExists(atPath: $0) }).min(by: { $0.count < $1.count }) {
+            return written
+        }
+        for root in [projectDirectory, project].compactMap({ $0 }) {
+            if let found = FileIndex.shared(for: root).first(endingWith: tail) { return found }
+        }
+        return nil
     }
 
     private var baseDirectory: String {
