@@ -61,6 +61,7 @@ struct RightPanel: View {
             .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: 28)
+            .actsAsTitleBar()
             // A real gap rather than nothing: the split views below extend into any safe area
             // they touch, and the tab bar sits in the title bar's. The point keeps them apart.
             Color.clear.frame(height: 1)

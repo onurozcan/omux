@@ -87,6 +87,7 @@ struct StatsView: View {
         .padding(.horizontal, 8)
         .padding(.leading, showSidebar ? 0 : sidebarLayout == "rail" ? 68 - ProjectRail.width : 68)
         .frame(height: 28)
+        .actsAsTitleBar()
         .background(Color(nsColor: theme.chrome))
         .overlay(alignment: .bottom) { Hairline() }
     }

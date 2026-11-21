@@ -132,6 +132,8 @@ struct ProjectRail: View {
         .padding(.bottom, 8)
         .frame(width: open ? Self.openWidth : Self.width, alignment: .leading)
         .frame(maxHeight: .infinity)
+        // The space kept clear of those buttons is part of the window's top strip.
+        .background(alignment: .top) { Color.clear.frame(height: 34).actsAsTitleBar() }
         .background(Color.black.opacity(0.18))
         .background(Color(nsColor: theme.chrome))
         // Closed, the strip is the window's own surface and has no edge; open, it lies over the cards.

@@ -14,6 +14,7 @@ import SwiftUI
 //   RowHighlight      a row's selected and hovered background
 //   SoftRow           a list row that selects on a click and draws that highlight
 //   PromptButtonStyle the buttons on a card that asks something
+//   .actsAsTitleBar() a top strip that drags the window and fills the screen, as a title bar would
 
 /// A toolbar glyph that lights up under the pointer and dims when it can't be used.
 struct IconButtonStyle: ButtonStyle {
@@ -107,6 +108,56 @@ extension View {
             .padding(.horizontal, 9)
             .frame(height: height)
             .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    /// For a strip along the window's top. The window has no title bar of its own to click, so
+    /// the strip's empty space does what one would: drag the window, and on a double-click fill
+    /// the screen or minimize it. Buttons and tabs on the strip keep their clicks.
+    func actsAsTitleBar() -> some View { background(TitleBarArea()) }
+}
+
+private struct TitleBarArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> AreaView { AreaView() }
+    func updateNSView(_ view: AreaView, context: Context) {}
+
+    final class AreaView: NSView {
+        /// Where the window was before a double-click filled its screen, to go back to on the next.
+        private static var unfilledFrame: NSRect?
+
+        // The click is handled below, so AppKit shouldn't start a drag of its own as well.
+        override var mouseDownCanMoveWindow: Bool { false }
+        // A title bar drags a window that isn't in front, too.
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window else { return }
+            guard event.clickCount == 2 else { return window.performDrag(with: event) }
+            // In full screen there's nothing to fill or minimize.
+            guard !window.styleMask.contains(.fullScreen) else { return }
+            // What the person picked in System Settings, Desktop & Dock. Older systems kept only
+            // a yes or no for minimizing; with neither set, a double-click fills the screen.
+            let defaults = UserDefaults.standard
+            switch defaults.string(forKey: "AppleActionOnDoubleClick") {
+            case "Minimize": window.performMiniaturize(nil)
+            case "None", "Do Nothing": break
+            case nil where defaults.bool(forKey: "AppleMiniaturizeOnDoubleClick"): window.performMiniaturize(nil)
+            default: Self.toggleFill(window)
+            }
+        }
+
+        /// Fills the screen the window is on, or puts it back where it was. Not performZoom: the
+        /// window's SwiftUI delegate picks the zoomed frame itself (windowWillUseStandardFrame),
+        /// so it isn't certain to be the whole screen.
+        private static func toggleFill(_ window: NSWindow) {
+            guard let visible = (window.screen ?? NSScreen.main)?.visibleFrame else { return }
+            if window.frame == visible, let frame = unfilledFrame {
+                unfilledFrame = nil
+                window.setFrame(frame, display: true, animate: true)
+            } else {
+                unfilledFrame = window.frame
+                window.setFrame(visible, display: true, animate: true)
+            }
+        }
     }
 }
 
