@@ -91,7 +91,7 @@ final class CodexConnection {
         defer { try? FileManager.default.removeItem(at: file) }
         let path = Self.remoteTokenPath(name: name)
         let stored = await Task.detached {
-            RemotePath.run("umask 077; mkdir -p \"$HOME/.omux/codex\" && cat > \"\(path)\"", on: host, input: file)
+            RemotePath.run("umask 077; mkdir -p \"$HOME/.omux/codex\" && cat > \"\(path)\"", on: host, input: file, deadline: 30)
         }.value
         guard stored.status == 0 else { throw CodexError.server(RemoteMachines.explain(stored.error, host: host)) }
 

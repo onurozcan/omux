@@ -271,20 +271,11 @@ public enum AgentConfig {
                 environment["CI"] = "1"
                 environment["PATH"] = ShellPath.current
                 process.environment = environment
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = pipe
                 process.standardInput = FileHandle.nullDevice
-                do { try process.run() } catch {
-                    continuation.resume(returning: (false, "Couldn't run claude: \(error.localizedDescription)")); return
-                }
-                let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                deadline.cancel()
-                let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                continuation.resume(returning: (process.terminationStatus == 0, text))
+                let result = ChildProcess.run(process, timeout: timeout, mergingErrors: true)
+                // Errors are merged into the output; what is left says why it never ran or timed out.
+                let text = String(decoding: result.out + result.err, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                continuation.resume(returning: (result.status == 0, text))
             }
         }
     }
