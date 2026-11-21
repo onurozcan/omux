@@ -14,6 +14,14 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 - **A file named by part of its path opens.** A path in a reply like `Store/review-notes.txt` was a link that did nothing unless the file sat right under the session's folder. It is now also looked for under the project's folder, among the files the agent wrote in the conversation, and anywhere in the project; when it can't be found, the compose box says so.
 - **Changing the model or effort keeps what you were writing.** The chips sent their command the way a message is sent, which emptied the box.
 - **↑ brings back your last message.** A slash command sent earlier, the chips' included, counted as the newest entry and came back first.
+- **A stuck helper command can't freeze omux.** git, gh, ssh and the agent CLIs are waited on until they exit, not until every process they left behind lets go of their output, and what runs in the background has a time limit. A commit hook or dotfile that leaves a process behind no longer freezes the window on ⌘W or stops pull request badges, diff stats and the Changes list from updating. (#66, thanks Anıl Soylu)
+- **The `omux` command can't take the app down.** A tool that hung up before its reply made the app exit, with every session in it. (#66)
+- **Closing a worktree session, committing and sending images don't hold the window.** The git checks before the close and commit questions, and the thumbnails of images in a prompt, are made off the main thread. (#71)
+- **A file from another machine stays in its own folder here.** A path with ".." in it could put the copy anywhere on this Mac. (#70)
+- **Save in the file editor writes what the editor holds.** Save and "Save mine" wrote the text from the last ⌘S, or nothing. (#67)
+- **The conversation follows `/clear`.** The panel stayed on the cleared conversation, or caught up only every ten seconds. (#69)
+- **A Codex that restarts after updating itself stays in the background,** and a slow shutdown blocks one restart, not every one after it. (#68)
+- **Double-clicking the window's top strip fills the screen,** or minimizes, as System Settings says. (#65)
 
 ## [0.12.4] - 2026-11-19
 
