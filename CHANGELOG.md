@@ -2,7 +2,7 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.12.5] - 2026-11-21
 
 ### Added
 - **A project's icon from its website.** Edit Project… takes a website next to the icon: "Use Site's Icon" fetches the largest icon the site declares and keeps a copy, like a chosen picture. omux contacts only the site you typed, and only when you press the button.

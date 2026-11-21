@@ -49,16 +49,29 @@
     <h1>Changelog</h1>
     <p class="lede muted">What changed in each release, newest first. Versions follow <a href="https://semver.org">semantic versioning</a>; the source is <a href="https://github.com/onurozcan/omux/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
 <div class="timeline">
-<article class="release" id="vUnreleased">
+<article class="release" id="v0.12.5">
   <div class="release-rail"><span class="node"></span></div>
   <div class="release-meta">
-    <h2><a href="#vUnreleased">Unreleased</a></h2>
+    <h2><a href="#v0.12.5">0.12.5</a></h2>
     <span class="badge badge-latest">Latest</span>
-    <p></p>
-    <p><a href="https://github.com/onurozcan/omux/releases/tag/vUnreleased">Release on GitHub</a></p>
+    <p><time datetime="2026-11-21">November 21, 2026</time></p>
+    <p><a href="https://github.com/onurozcan/omux/releases/tag/v0.12.5">Release on GitHub</a></p>
   </div>
   <div class="release-body">
 <ul class="entries">
+<li class="entry"><span class="chip chip-added">Added</span><div class="entry-text"><strong>A project's icon from its website.</strong> Edit Project… takes a website next to the icon: "Use Site's Icon" fetches the largest icon the site declares and keeps a copy, like a chosen picture. omux contacts only the site you typed, and only when you press the button.</div></li>
+<li class="entry"><span class="chip chip-changed">Changed</span><div class="entry-text"><strong>The open tab shows only the session's name.</strong> What the session is doing moved to the tab's tooltip; the dot still shows its state.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A file named by part of its path opens.</strong> A path in a reply like <code>Store/review-notes.txt</code> was a link that did nothing unless the file sat right under the session's folder. It is now also looked for under the project's folder, among the files the agent wrote in the conversation, and anywhere in the project; when it can't be found, the compose box says so.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Changing the model or effort keeps what you were writing.</strong> The chips sent their command the way a message is sent, which emptied the box.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>↑ brings back your last message.</strong> A slash command sent earlier, the chips' included, counted as the newest entry and came back first.</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A stuck helper command can't freeze omux.</strong> git, gh, ssh and the agent CLIs are waited on until they exit, not until every process they left behind lets go of their output, and what runs in the background has a time limit. A commit hook or dotfile that leaves a process behind no longer freezes the window on ⌘W or stops pull request badges, diff stats and the Changes list from updating. (#66, thanks Anıl Soylu)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>The <code>omux</code> command can't take the app down.</strong> A tool that hung up before its reply made the app exit, with every session in it. (#66)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Closing a worktree session, committing and sending images don't hold the window.</strong> The git checks before the close and commit questions, and the thumbnails of images in a prompt, are made off the main thread. (#71)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A file from another machine stays in its own folder here.</strong> A path with ".." in it could put the copy anywhere on this Mac. (#70)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Save in the file editor writes what the editor holds.</strong> Save and "Save mine" wrote the text from the last ⌘S, or nothing. (#67)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>The conversation follows <code>/clear</code>.</strong> The panel stayed on the cleared conversation, or caught up only every ten seconds. (#69)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>A Codex that restarts after updating itself stays in the background,</strong> and a slow shutdown blocks one restart, not every one after it. (#68)</div></li>
+<li class="entry"><span class="chip chip-fixed">Fixed</span><div class="entry-text"><strong>Double-clicking the window's top strip fills the screen,</strong> or minimizes, as System Settings says. (#65)</div></li>
 </ul>
   </div>
 </article>
