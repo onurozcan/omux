@@ -950,9 +950,6 @@ final class Store: ObservableObject {
         return found
     }
 
-    /// The transcript of the session's Claude Code conversation. The tab's own session id first;
-    /// else the id of the `claude` running in the terminal, which Claude Code records per process in
-    /// ~/.claude/sessions/<pid>.json. That covers a `claude` typed into a shell, or `claude --continue`.
     /// The ~/.claude/projects folder for the session's working directory, where its transcript
     /// and subagent folders appear. nil for a session without a folder.
     func claudeProjectFolderURL(for id: UUID) -> URL? {
@@ -963,18 +960,27 @@ final class Store: ObservableObject {
         return URL(fileURLWithPath: NSHomeDirectory() + "/.claude/projects/" + Self.claudeProjectFolder(for: folder))
     }
 
+    /// The transcript of the session's Claude Code conversation. The `claude` running in the
+    /// terminal first, which Claude Code records per process in ~/.claude/sessions/<pid>.json: that
+    /// follows a /clear, a `claude` typed into a shell, or `claude --continue`. Else the tab's own id.
     func claudeTranscriptURL(for id: UUID) -> URL? {
         guard let tab = tab(id) else { return nil }
-        if let url = Self.claudeTranscriptURL(tab.claudeSessionID.uuidString.lowercased()) { return url }
-        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return nil }
-        let sessions = NSHomeDirectory() + "/.claude/sessions"
-        for pid in Self.descendants(of: view.process.shellPid) {
-            guard let data = FileManager.default.contents(atPath: "\(sessions)/\(pid).json"),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let session = object["sessionId"] as? String else { continue }
-            if let url = Self.claudeTranscriptURL(session.lowercased()) { return url }
+        var live: [String] = []
+        if let view = terminals[id], !(runtime[id]?.exited ?? true) {
+            let sessions = NSHomeDirectory() + "/.claude/sessions"
+            live = Self.descendants(of: view.process.shellPid).compactMap { pid in
+                guard let data = FileManager.default.contents(atPath: "\(sessions)/\(pid).json"),
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+                return (object["sessionId"] as? String)?.lowercased()
+            }
         }
-        return nil
+        return Self.claudeTranscriptURL(pinned: tab.claudeSessionID.uuidString.lowercased(), live: live, lookup: Self.claudeTranscriptURL)
+    }
+
+    /// The tab's own conversation, unless the running `claude` is on another one with a transcript.
+    static func claudeTranscriptURL(pinned: String, live: [String], lookup: (String) -> URL?) -> URL? {
+        for session in live { if let url = lookup(session) { return url } }
+        return lookup(pinned)
     }
 
     /// ▶: brings the session forward, so what it starts is what you're looking at, and starts it.
