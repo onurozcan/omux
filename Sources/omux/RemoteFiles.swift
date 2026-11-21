@@ -20,10 +20,34 @@ enum RemoteFiles {
     /// Where each local copy came from, and how the original was when it was copied.
     nonisolated(unsafe) private static var origins: [String: (host: String, path: String, stamp: String)] = [:]
 
-    static func localURL(host: String, path: String) -> URL {
+    /// `path` with its "." and ".." worked out, as the shell there would: ".." at "/" stays at
+    /// "/". Nil when a path in the home folder, or a relative one, climbs above where it starts,
+    /// since that file can't be named from here without knowing the folder.
+    static func normalized(_ path: String) -> String? {
+        let home = path == "~" || path.hasPrefix("~/")
+        let absolute = path.hasPrefix("/")
+        var parts: [Substring] = []
+        for part in path.dropFirst(home ? 1 : 0).split(separator: "/") {
+            switch part {
+            case ".": continue
+            case "..":
+                guard parts.popLast() != nil || absolute else { return nil }
+            default: parts.append(part)
+            }
+        }
+        if home && parts.isEmpty { return "~" }
+        return (home ? "~/" : absolute ? "/" : "") + parts.joined(separator: "/")
+    }
+
+    /// Where the copy of `path` is kept here; nil for anything that would land outside the host's folder.
+    static func localURL(host: String, path: String) -> URL? {
         let safe = String(host.map { $0.isLetter || $0.isNumber || $0 == "." || $0 == "-" ? $0 : "_" })
-        return RemoteHost.mirrorRoot.appendingPathComponent(safe, isDirectory: true).appendingPathComponent("files", isDirectory: true)
-            .appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        let root = RemoteHost.mirrorRoot.standardizedFileURL
+        let files = root.appendingPathComponent(safe, isDirectory: true).appendingPathComponent("files", isDirectory: true).standardizedFileURL
+        guard let path = normalized(path) else { return nil }
+        let local = files.appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path).standardizedFileURL
+        guard files.path.hasPrefix(root.path + "/"), local.path.hasPrefix(files.path + "/") else { return nil }
+        return local
     }
 
     static func origin(of local: URL) -> (host: String, path: String, stamp: String)? {
@@ -70,6 +94,11 @@ enum RemoteFiles {
 
     /// Copies the file here to be looked at. `path` is its full path there.
     static func fetch(host: String, path: String) async -> Result<URL, MachineProblem> {
+        // The copy here and the file read there are the same path, with no ".." left to climb out.
+        guard let clean = normalized(path), let local = localURL(host: host, path: clean) else {
+            return .failure(MachineProblem(text: "\(path) climbs out of the folder it starts in: not fetched from \(host)."))
+        }
+        let path = clean
         let script = named(path) + #"""
         [ -f "$F" ] || exit 5
         [ "$(wc -c < "$F")" -le \#(maxBytes) ] || exit 4
@@ -83,7 +112,6 @@ enum RemoteFiles {
         case 5: return .failure(MachineProblem(text: "No file \(path) on \(host)."))
         default: return .failure(MachineProblem(text: RemoteMachines.explain(answer.error, host: host)))
         }
-        let local = localURL(host: host, path: path)
         do {
             try FileManager.default.createDirectory(at: local.deletingLastPathComponent(), withIntermediateDirectories: true)
             // Unchanged, the copy is left alone: an editor open on it isn't disturbed.

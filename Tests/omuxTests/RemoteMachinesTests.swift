@@ -169,7 +169,7 @@ final class RemoteMachinesTests: XCTestCase {
         XCTAssertEqual(there.output, "edited on the Mac\n640\n", "saved back in place, permissions kept")
         if case .success = await RemoteFiles.fetch(host: host, path: work + "/nope.txt") { XCTFail("fetched a file that isn't there") }
         _ = await RemoteMachines.run("rm -rf \(work)", on: host)
-        try? FileManager.default.removeItem(at: RemoteFiles.localURL(host: host, path: work))
+        if let copies = RemoteFiles.localURL(host: host, path: work) { try? FileManager.default.removeItem(at: copies) }
         let nowhere = await machines.check("no-such-machine-omux-test.invalid")
         XCTAssertNotNil(nowhere.problem)
         print("LIVE unreachable:", nowhere.problem ?? "")
