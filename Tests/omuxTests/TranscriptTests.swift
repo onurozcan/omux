@@ -30,6 +30,15 @@ final class TranscriptTests: XCTestCase {
         watching.cancel()
     }
 
+    /// omux pins the session id it starts Claude Code with, and /clear keeps that file on disk, so
+    /// the pinned transcript kept winning and the panel stayed on the cleared conversation.
+    func testTheRunningClaudesConversationWinsOverThePinnedOne() {
+        let files = ["pinned": URL(fileURLWithPath: "/p.jsonl"), "live": URL(fileURLWithPath: "/l.jsonl")]
+        XCTAssertEqual(Store.claudeTranscriptURL(pinned: "pinned", live: ["live"], lookup: { files[$0] }), files["live"])
+        XCTAssertEqual(Store.claudeTranscriptURL(pinned: "pinned", live: ["unwritten"], lookup: { files[$0] }), files["pinned"])
+        XCTAssertEqual(Store.claudeTranscriptURL(pinned: "pinned", live: [], lookup: { files[$0] }), files["pinned"])
+    }
+
     /// Claude Code wraps a pasted prompt in a tag in its queue records. Read as an injected
     /// record and dropped, the prompt stayed "Queued" after the agent had taken it mid-turn.
     func testAPastedPromptLeavesTheQueueWhenTakenMidTurn() {

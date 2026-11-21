@@ -295,7 +295,11 @@ public final class SessionTranscript {
     private func followNewConversation() {
         guard url != nil, let now = claudeFile(), now != url else { return }
         stopReading()
+        // A read of the old file still in flight is dropped when it lands.
+        generation += 1
+        loading = false
         url = now; offset = 0; remainder = Data()
+        watch(now)
         note("New conversation")
         startReading()
     }

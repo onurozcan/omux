@@ -67,6 +67,31 @@ final class WatchTests: XCTestCase {
         XCTAssertEqual(model.blocks.last?.text, "fresh")
     }
 
+    /// After /clear the new file is followed live too: appends to it show at once, not on the
+    /// ten-second safety tick.
+    @MainActor
+    func testAppendsToTheNewConversationFileAfterClearFollowLive() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = dir.appendingPathComponent("one.jsonl")
+        let second = dir.appendingPathComponent("two.jsonl")
+        try record("old").write(to: first, atomically: true, encoding: .utf8)
+        var current = first
+        let model = SessionTranscript(tab: TabItem(name: "t"), provider: .claude, claudeFile: { current }, claudeFolder: { dir }, codexThread: { nil })
+        try await until { model.blocks.count == 1 }
+        XCTAssertEqual(model.blocks.first?.text, "old")
+
+        current = second
+        try record("fresh").write(to: second, atomically: true, encoding: .utf8)
+        try await until { model.blocks.contains { $0.text == "fresh" } }
+        XCTAssertEqual(model.blocks.last?.text, "fresh")
+
+        let handle = try FileHandle(forWritingTo: second)
+        try handle.seekToEnd(); try handle.write(contentsOf: Data(record("after clear").utf8)); try handle.close()
+        try await until { model.blocks.contains { $0.text == "after clear" } }
+        XCTAssertEqual(model.blocks.last?.text, "after clear", "an append to the new conversation file should show within 3 s")
+    }
+
     /// A subagent's own transcript view follows its file.
     @MainActor
     func testASubagentTranscriptFollowsItsFile() async throws {
