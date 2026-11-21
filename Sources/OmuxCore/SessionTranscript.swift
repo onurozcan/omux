@@ -127,6 +127,10 @@ public final class SessionTranscript {
     private var startAtEnd = false
     private var countedMessages: Set<String> = []
     private var imagesKept = 0
+    /// Echoes whose thumbnails are still being made; a record that takes one sets its own images.
+    private var awaitingThumbnails: Set<Int> = []
+    /// The newest thumbnail decode, so a test can wait for it to land.
+    private(set) var thumbnailWork: Task<Void, Never>?
     /// The note a slash command made, so the command's output can replace its text.
     private var commandNote: Int?
     private var loading = false
@@ -219,7 +223,7 @@ public final class SessionTranscript {
         loading = false
         url = nil; offset = 0; remainder = Data()
         running = []; takenEchoes = []; dequeues = 0; countedMessages = []; commandNote = nil
-        lastPrompt = nil
+        lastPrompt = nil; awaitingThumbnails = []
         var list = blocks
         for index in list.indices where list[index].kind == .user && list[index].pending != nil { list[index].pending = .removed }
         list.append(ChatBlock(id: next, kind: .note, text: "Continued with \(to.label)" + (from == .claude || from == .codex ? ", handed the conversation so far" : ""))); next += 1
@@ -241,7 +245,7 @@ public final class SessionTranscript {
         loading = false
         url = nil; offset = 0; remainder = Data()
         blocks = []; encoded = []; encodedBytes = 0; changeLog = []; trimmedUpTo = 0
-        toolRows = [:]; running = []; takenEchoes = []; dequeues = 0; countedMessages = []; imagesKept = 0; commandNote = nil; next = 0
+        toolRows = [:]; running = []; takenEchoes = []; dequeues = 0; countedMessages = []; imagesKept = 0; awaitingThumbnails = []; commandNote = nil; next = 0
         lastPrompt = nil; lastWrite = nil; totalOut = 0; lastContext = nil; lastModel = nil
         promptCount = 0; firstPrompt = nil; filesTouched = []
         truncated = false; notice = nil; loaded = false
@@ -440,6 +444,7 @@ public final class SessionTranscript {
                     list[first].text = text
                     list[first].time = time
                     list[first].images = keep(images)
+                    awaitingThumbnails.remove(list[first].id)
                     list[first].pending = nil
                     touched.insert(first)
                     lastPrompt = time
@@ -455,6 +460,7 @@ public final class SessionTranscript {
                     list[index].text = text
                     list[index].time = time
                     list[index].images = keep(images)
+                    awaitingThumbnails.remove(list[index].id)
                     list[index].pending = nil
                     touched.insert(index)
                     lastPrompt = time
@@ -742,13 +748,35 @@ public final class SessionTranscript {
             list.append(ChatBlock(id: next, kind: .note, text: "Worked for " + Self.duration(end.timeIntervalSince(start)))); next += 1
             lastPrompt = nil
         }
-        let inline = TranscriptParser.inlineImages(in: text)
-        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date(), images: keep(inline.images))
+        let inline = TranscriptParser.inlineImages(in: text, thumbnails: false)
+        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date())
         // "queuing" until Claude Code's own queue record confirms it; then it can be reordered.
         block.pending = queued ? .queuing : .sent
         list.append(block); next += 1
         commit(list, touched: [])
         Timing.mark("echo", tabID, queued ? "queued" : "sent")
+        // Image paths came out of the text: their thumbnails follow, made off the main thread.
+        if inline.text != text { addThumbnails(of: text, to: block) }
+    }
+
+    /// Decoding a screenshot takes a good part of a second: the bubble shows its text at once
+    /// and its images when they're ready. Once the agent's record has taken the block, its
+    /// images are the record's, as when the thumbnails came with the echo; a prompt absorbed
+    /// mid-turn has no record coming and keeps the echo's.
+    private func addThumbnails(of text: String, to echo: ChatBlock) {
+        let generation = generation, id = echo.id
+        awaitingThumbnails.insert(id)
+        thumbnailWork = Task.detached(priority: .userInitiated) {
+            let images = TranscriptParser.inlineImages(in: text).images
+            guard !images.isEmpty else { return }
+            await MainActor.run {
+                guard self.generation == generation, self.awaitingThumbnails.remove(id) != nil,
+                      self.blocks.indices.contains(id), self.blocks[id].kind == .user else { return }
+                var list = self.blocks
+                list[id].images = self.keep(images)
+                self.commit(list, touched: [id])
+            }
+        }
     }
 
     /// The waiting prompt a queue record names: the one with that text, newest first.

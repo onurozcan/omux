@@ -1,6 +1,9 @@
 import AppKit
 import SwiftUI
 
+/// Sessions whose close or clean-up alert is on its way, so a second ⌘W doesn't ask twice.
+@MainActor private var asking: Set<UUID> = []
+
 // MARK: - Actions
 
 extension Store {
@@ -42,38 +45,49 @@ extension Store {
             closeTab(id)
             return
         }
-        let dirty = Git.uncommittedFileCount(path)
-        // nil when git can't compare, e.g. the base branch was deleted or renamed: unknown, not zero.
-        let ahead = Int(Git.run(["rev-list", "--count", "\(worktree.base)..\(worktree.branch)"], in: worktree.repo).out
-            .trimmingCharacters(in: .whitespacesAndNewlines))
-        var facts: [String] = []
-        if dirty > 0 { facts.append("\(dirty) uncommitted file\(dirty == 1 ? "" : "s")") }
-        if let ahead, ahead > 0 { facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") not in \(worktree.base)") }
-        if ahead == nil { facts.append("commits that couldn't be compared with \(worktree.base)") }
+        guard asking.insert(id).inserted else { return }
+        let merged = PullRequestMonitor.shared.requests[id].flatMap { $0.state == .merged ? $0 : nil }
+        Task {
+            defer { asking.remove(id) }
+            // git status takes a while in a big repo or on a slow disk: the window stays live meanwhile.
+            let (dirty, ahead, afterMerge) = await Task.detached {
+                // nil when git can't compare, e.g. the base branch was deleted or renamed: unknown, not zero.
+                (Git.uncommittedFileCount(path),
+                 Int(Git.run(["rev-list", "--count", "\(worktree.base)..\(worktree.branch)"], in: worktree.repo).out
+                    .trimmingCharacters(in: .whitespacesAndNewlines)),
+                 merged.map { Self.commitsAfterMerge(worktree, pr: $0) })
+            }.value
+            // Closed some other way meanwhile.
+            guard let tab = self.tab(id) else { return }
+            var facts: [String] = []
+            if dirty > 0 { facts.append("\(dirty) uncommitted file\(dirty == 1 ? "" : "s")") }
+            if let ahead, ahead > 0 { facts.append("\(ahead) commit\(ahead == 1 ? "" : "s") not in \(worktree.base)") }
+            if ahead == nil { facts.append("commits that couldn't be compared with \(worktree.base)") }
 
-        let alert = NSAlert()
-        alert.messageText = "Close “\(tab.name)”?"
-        if let pr = PullRequestMonitor.shared.requests[id], pr.state == .merged {
-            // A squash or rebase merge leaves the branch's commits "not in" the base.
-            alert.informativeText = "Its pull request #\(pr.number) was merged."
-                + commitsAfterMerge(worktree, pr: pr)
-                + (dirty > 0 ? " The worktree has \(dirty) uncommitted file\(dirty == 1 ? "" : "s")." : "")
-        } else {
-            alert.informativeText = facts.isEmpty
-                ? "Its worktree on “\(worktree.branch)” has nothing that isn't already in \(worktree.base)."
-                : "Its worktree on “\(worktree.branch)” has \(facts.joined(separator: " and "))."
-        }
-        alert.addButton(withTitle: "Keep Worktree")
-        let delete = alert.addButton(withTitle: "Delete Worktree and Branch")
-        delete.hasDestructiveAction = true
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            closeTab(id)
-        case .alertSecondButtonReturn:
-            closeAndDeleteWorktree(id, worktree: worktree, path: path)
-        default:
-            break
+            let alert = NSAlert()
+            alert.messageText = "Close “\(tab.name)”?"
+            if let pr = merged, let afterMerge {
+                // A squash or rebase merge leaves the branch's commits "not in" the base.
+                alert.informativeText = "Its pull request #\(pr.number) was merged."
+                    + afterMerge
+                    + (dirty > 0 ? " The worktree has \(dirty) uncommitted file\(dirty == 1 ? "" : "s")." : "")
+            } else {
+                alert.informativeText = facts.isEmpty
+                    ? "Its worktree on “\(worktree.branch)” has nothing that isn't already in \(worktree.base)."
+                    : "Its worktree on “\(worktree.branch)” has \(facts.joined(separator: " and "))."
+            }
+            alert.addButton(withTitle: "Keep Worktree")
+            let delete = alert.addButton(withTitle: "Delete Worktree and Branch")
+            delete.hasDestructiveAction = true
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                closeTab(id)
+            case .alertSecondButtonReturn:
+                closeAndDeleteWorktree(id, worktree: worktree, path: path)
+            default:
+                break
+            }
         }
     }
 
@@ -81,25 +95,33 @@ extension Store {
     /// its worktree and local branch.
     func cleanUpMergedWorktree(_ id: UUID) {
         guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab),
-              FileManager.default.fileExists(atPath: path) else { return }
-        let dirty = Git.uncommittedFileCount(path)
-        let number = PullRequestMonitor.shared.requests[id].map { " in #\($0.number)" } ?? ""
+              FileManager.default.fileExists(atPath: path), asking.insert(id).inserted else { return }
+        let pr = PullRequestMonitor.shared.requests[id]
+        Task {
+            defer { asking.remove(id) }
+            let (dirty, afterMerge) = await Task.detached {
+                (Git.uncommittedFileCount(path), pr.map { Self.commitsAfterMerge(worktree, pr: $0) } ?? "")
+            }.value
+            guard let tab = self.tab(id) else { return }
+            let number = pr.map { " in #\($0.number)" } ?? ""
 
-        let alert = NSAlert()
-        alert.messageText = "Delete the worktree for “\(tab.name)”?"
-        alert.informativeText = "“\(worktree.branch)” was merged\(number). This closes the session and deletes its worktree and local branch."
-            + (PullRequestMonitor.shared.requests[id].map { commitsAfterMerge(worktree, pr: $0) } ?? "")
-            + (dirty > 0 ? " \(dirty) uncommitted file\(dirty == 1 ? "" : "s") will be lost." : "")
-        let delete = alert.addButton(withTitle: "Delete Worktree and Branch")
-        delete.hasDestructiveAction = true
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        closeAndDeleteWorktree(id, worktree: worktree, path: path)
+            let alert = NSAlert()
+            alert.messageText = "Delete the worktree for “\(tab.name)”?"
+            alert.informativeText = "“\(worktree.branch)” was merged\(number). This closes the session and deletes its worktree and local branch."
+                + afterMerge
+                + (dirty > 0 ? " \(dirty) uncommitted file\(dirty == 1 ? "" : "s") will be lost." : "")
+            let delete = alert.addButton(withTitle: "Delete Worktree and Branch")
+            delete.hasDestructiveAction = true
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            closeAndDeleteWorktree(id, worktree: worktree, path: path)
+        }
     }
 
     /// Commits on the branch that the merged pull request doesn't hold, e.g. made after the
     /// merge, which deleting the branch would lose. Unknown when git doesn't have its last commit.
-    private func commitsAfterMerge(_ worktree: Worktree, pr: PullRequest) -> String {
+    /// Runs git: call it off the main thread.
+    nonisolated private static func commitsAfterMerge(_ worktree: Worktree, pr: PullRequest) -> String {
         switch pr.head.flatMap({ Git.commitCount(after: $0, on: worktree.branch, in: worktree.repo) }) {
         case 0: return ""
         case let count?: return " “\(worktree.branch)” has \(count) commit\(count == 1 ? "" : "s") that \(count == 1 ? "isn't" : "aren't") in it."
@@ -130,19 +152,21 @@ extension Store {
 
     /// Commits, pushes the branch and opens GitHub's pull request page.
     func createPullRequest(_ id: UUID) {
-        guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab),
-              commitIfNeeded(path: path, branch: worktree.branch, suggestion: tab.name) else { return }
-        gitActivity[id] = "Pushing \(worktree.branch)…"
-        Task.detached {
-            let (result, url) = Git.pushForPullRequest(worktree, path: path)
-            await MainActor.run {
-                self.gitActivity[id] = nil
-                if !result.ok {
-                    Self.showError("Couldn't push “\(worktree.branch)”", result.message)
-                } else if let url {
-                    NSWorkspace.shared.open(url)
-                } else {
-                    Self.showInfo("Pushed “\(worktree.branch)”", "The remote isn't on GitHub, so open the pull request on your host.")
+        guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab), gitActivity[id] == nil else { return }
+        Task {
+            guard await commitIfNeeded(id, path: path, branch: worktree.branch, suggestion: tab.name) else { return }
+            gitActivity[id] = "Pushing \(worktree.branch)…"
+            Task.detached {
+                let (result, url) = Git.pushForPullRequest(worktree, path: path)
+                await MainActor.run {
+                    self.gitActivity[id] = nil
+                    if !result.ok {
+                        Self.showError("Couldn't push “\(worktree.branch)”", result.message)
+                    } else if let url {
+                        NSWorkspace.shared.open(url)
+                    } else {
+                        Self.showInfo("Pushed “\(worktree.branch)”", "The remote isn't on GitHub, so open the pull request on your host.")
+                    }
                 }
             }
         }
@@ -150,26 +174,31 @@ extension Store {
 
     /// Merges the session's branch into its base branch in the main checkout.
     func mergeWorktree(_ id: UUID) {
-        guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab),
-              commitIfNeeded(path: path, branch: worktree.branch, suggestion: tab.name) else { return }
-        gitActivity[id] = "Merging into \(worktree.base)…"
-        Task.detached {
-            let result = Git.merge(worktree)
-            await MainActor.run {
-                self.gitActivity[id] = nil
-                if result.ok {
-                    Self.showInfo("Merged “\(worktree.branch)” into “\(worktree.base)”", result.out.trimmingCharacters(in: .whitespacesAndNewlines))
-                } else {
-                    Self.showError("Couldn't merge “\(worktree.branch)”", result.message)
+        guard let tab = tab(id), let worktree = tab.worktree, let path = directory(of: tab), gitActivity[id] == nil else { return }
+        Task {
+            guard await commitIfNeeded(id, path: path, branch: worktree.branch, suggestion: tab.name) else { return }
+            gitActivity[id] = "Merging into \(worktree.base)…"
+            Task.detached {
+                let result = Git.merge(worktree)
+                await MainActor.run {
+                    self.gitActivity[id] = nil
+                    if result.ok {
+                        Self.showInfo("Merged “\(worktree.branch)” into “\(worktree.base)”", result.out.trimmingCharacters(in: .whitespacesAndNewlines))
+                    } else {
+                        Self.showError("Couldn't merge “\(worktree.branch)”", result.message)
+                    }
                 }
             }
         }
     }
 
     /// Offers to commit uncommitted work first. Returns false when the user cancels or the
-    /// commit fails.
-    private func commitIfNeeded(path: String, branch: String, suggestion: String) -> Bool {
-        let dirty = Git.uncommittedFileCount(path)
+    /// commit fails. Git runs off the main thread, shown in the footer meanwhile: the commit
+    /// runs the user's hooks, which can take minutes.
+    private func commitIfNeeded(_ id: UUID, path: String, branch: String, suggestion: String) async -> Bool {
+        gitActivity[id] = "Checking for changes…"
+        let dirty = await Task.detached { Git.uncommittedFileCount(path) }.value
+        gitActivity[id] = nil
         guard dirty > 0 else { return true }
         let alert = NSAlert()
         alert.messageText = "Commit \(dirty) changed file\(dirty == 1 ? "" : "s") first?"
@@ -183,7 +212,9 @@ extension Store {
         alert.window.initialFirstResponder = field
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
         let message = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let result = Git.commitAll(in: path, message: message.isEmpty ? suggestion : message)
+        gitActivity[id] = "Committing to \(branch)…"
+        let result = await Task.detached { Git.commitAll(in: path, message: message.isEmpty ? suggestion : message) }.value
+        gitActivity[id] = nil
         if !result.ok { Self.showError("Couldn't commit", result.message) }
         return result.ok
     }
