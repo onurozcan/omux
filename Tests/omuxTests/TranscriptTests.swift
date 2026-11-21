@@ -302,6 +302,38 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(m.blocks[0].images.count, 1)
     }
 
+    /// A Codex thread whose items the test sets.
+    private final class FakeCodex: CodexThreads {
+        var items: [[String: Any]] = []
+        var handler: ((CodexTranscriptEvent) -> Void)?
+        func listen(_ tabID: UUID, _ handler: ((CodexTranscriptEvent) -> Void)?) { self.handler = handler }
+        func transcriptItems(threadID: String, tabID: UUID) async throws -> [[String: Any]] { items }
+    }
+
+    private func codexItem(_ type: String, _ text: String) -> [String: Any] {
+        type == "userMessage" ? ["type": type, "content": [["text": text]]] : ["type": type, "text": text]
+    }
+
+    /// A Codex read rebuilds the list and moves the echoes it keeps to new places: thumbnails
+    /// still being made follow their echo there, not the item that took its old place.
+    func testCodexEchoThumbnailsFollowTheEchoWhenTheListIsRebuilt() async throws {
+        let file = try pngFile()
+        let codex = FakeCodex()
+        codex.items = [codexItem("userMessage", "hi"), codexItem("agentMessage", "hello")]
+        let m = SessionTranscript(tabID: UUID(), provider: .codex, claudeFile: { nil }, codexThread: { "t" }, codex: codex)
+        for _ in 0..<300 where m.blocks.count < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        m.echo("plain", queued: false)
+        m.echo("look \"\(file.path)\"", queued: true)
+        // The thread takes the first echo and replies before the thumbnail is made.
+        codex.items += [codexItem("userMessage", "plain"), codexItem("agentMessage", "ok")]
+        codex.handler?(.turn(completed: false))
+        await m.thumbnailWork?.value
+        for _ in 0..<300 where m.blocks.count < 5 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks.map(\.text), ["hi", "hello", "plain", "ok", "look"])
+        XCTAssertEqual(m.blocks[4].images.count, 1)
+        XCTAssertEqual(m.blocks[..<4].map(\.images.count), [0, 0, 0, 0])
+    }
+
     func testCompactionSummaryFoldsInsteadOfBeingAPrompt() {
         let m = model()
         m.ingest([
