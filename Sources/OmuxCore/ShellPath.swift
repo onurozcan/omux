@@ -49,18 +49,10 @@ public enum ShellPath {
         process.executableURL = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
         process.arguments = ["-ilc", "printf '\\n%s' \"$PATH\""]
         process.standardInput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        do { try process.run() } catch { return nil }
-        let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 8, execute: deadline)
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        deadline.cancel()
+        let result = ChildProcess.run(process, timeout: 8)
         // Dotfiles may print first; the PATH is the last line.
-        let text = String(decoding: data, as: UTF8.self)
-        guard process.terminationStatus == 0, let last = text.split(separator: "\n").last?.trimmingCharacters(in: .whitespaces), last.contains("/") else { return nil }
+        let text = String(decoding: result.out, as: UTF8.self)
+        guard result.status == 0, let last = text.split(separator: "\n").last?.trimmingCharacters(in: .whitespaces), last.contains("/") else { return nil }
         return last
     }
 }

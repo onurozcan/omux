@@ -15,38 +15,47 @@ public enum Git {
     }
 
     /// Runs git directly. `GIT_OPTIONAL_LOCKS=0` keeps status checks from fighting
-    /// with whatever git the session itself is running.
+    /// with whatever git the session itself is running. `timeout` is for what polls in the
+    /// background; what the user started (a commit with hooks, a merge) gets all the time it needs.
     @discardableResult
-    public static func run(_ args: [String], in dir: String) -> Result {
+    public static func run(_ args: [String], in dir: String, timeout: TimeInterval? = nil) -> Result {
         // A folder on another machine: the same command, run there, over the connection the
         // session already holds.
         if let remote = RemotePath.parse(dir) {
             let script = RemotePath.entering(remote.path) + "GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 exec git " + args.map(quote).joined(separator: " ")
-            let answer = RemotePath.run(script, on: remote.host)
+            let answer = RemotePath.run(script, on: remote.host, deadline: timeout)
             return Result(status: answer.status, out: answer.text, err: answer.error)
         }
-        return exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath])
+        return exec("/usr/bin/git", args, in: dir, env: ["GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "PATH": loginPath], timeout: timeout)
     }
 
     /// The login shell's PATH, looked up once. Opened from Finder, omux only has
     /// /usr/bin:/bin, where hooks, signing and LFS filters can't find npx, gpg or git-lfs.
     public static let loginPath: String = {
-        let out = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory()).out
-        let path = out.components(separatedBy: "\n").last ?? ""
+        // A lookup that timed out may have stopped partway through a line; don't trust it.
+        let r = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory(), timeout: lookupLimit)
+        let path = r.ok ? r.out.components(separatedBy: "\n").last ?? "" : ""
         return path.contains("/") ? path : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     }()
 
     /// Runs a command through the user's login shell, so PATH and credential helpers
     /// match their terminal (needed for push and anything that may call gh).
     @discardableResult
-    public static func login(_ command: String, in dir: String) -> Result {
+    public static func login(_ command: String, in dir: String, timeout: TimeInterval? = nil) -> Result {
         // Pushing and pull requests from another machine aren't done from here.
         if RemotePath.isRemote(dir) { return Result(status: -1, out: "", err: "Not available for a project on another machine") }
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        return exec(shell, ["-lc", command], in: dir, env: ["GIT_TERMINAL_PROMPT": "0"])
+        return exec(shell, ["-lc", command], in: dir, env: ["GIT_TERMINAL_PROMPT": "0"], timeout: timeout)
     }
 
-    private static func exec(_ path: String, _ args: [String], in dir: String, env extra: [String: String]) -> Result {
+    /// For looking up where things are through the login shell: as long as ShellPath waits for it.
+    private static let lookupLimit: TimeInterval = 8
+
+    /// For what the Changes panel and the sidebar read in the background: a stuck git leaves
+    /// the numbers stale for a while instead of stopping their refreshes for good.
+    private static let readLimit: TimeInterval = 30
+
+    private static func exec(_ path: String, _ args: [String], in dir: String, env extra: [String: String], timeout: TimeInterval?) -> Result {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args
@@ -54,24 +63,11 @@ public enum Git {
         var env = ProcessInfo.processInfo.environment
         extra.forEach { env[$0.key] = $0.value }
         process.environment = env
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
         process.standardInput = FileHandle.nullDevice
-        do { try process.run() } catch { return Result(status: -1, out: "", err: error.localizedDescription) }
-        // Read both pipes before waiting, stderr on its own thread: a full pipe would
-        // otherwise block the child forever (a chatty commit hook fills 64 KB fast).
-        var errData = Data()
-        let errRead = DispatchGroup()
-        DispatchQueue.global(qos: .utility).async(group: errRead) {
-            errData = err.fileHandleForReading.readDataToEndOfFile()
-        }
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        errRead.wait()
-        process.waitUntilExit()
-        return Result(status: process.terminationStatus,
-                      out: String(decoding: outData, as: UTF8.self),
-                      err: String(decoding: errData, as: UTF8.self))
+        let output = ChildProcess.run(process, timeout: timeout)
+        return Result(status: output.status,
+                      out: String(decoding: output.out, as: UTF8.self),
+                      err: String(decoding: output.err, as: UTF8.self))
     }
 
     public static func quote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
@@ -79,14 +75,15 @@ public enum Git {
     /// Where the login shell finds gh, looked up once so polling doesn't start a shell
     /// each time. nil when gh isn't installed.
     public static let ghPath: String? = {
-        let path = login("command -v gh", in: NSHomeDirectory()).out.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.hasPrefix("/") ? path : nil
+        let r = login("command -v gh", in: NSHomeDirectory(), timeout: lookupLimit)
+        let path = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.ok && path.hasPrefix("/") ? path : nil
     }()
 
     /// Runs the GitHub CLI, or returns nil when it isn't installed.
-    public static func gh(_ args: [String], in dir: String) -> Result? {
+    public static func gh(_ args: [String], in dir: String, timeout: TimeInterval? = nil) -> Result? {
         guard let ghPath else { return nil }
-        return exec(ghPath, args, in: dir, env: ["GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0"])
+        return exec(ghPath, args, in: dir, env: ["GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0"], timeout: timeout)
     }
 
     // MARK: Repository facts
@@ -219,10 +216,10 @@ public enum Git {
     /// base branch, or HEAD for an ordinary checkout. nil when there is no commit yet.
     public static func diffBase(dir: String, worktree: Worktree?) -> String? {
         if let worktree {
-            let r = run(["merge-base", "HEAD", worktree.base], in: dir)
+            let r = run(["merge-base", "HEAD", worktree.base], in: dir, timeout: readLimit)
             if r.ok { return r.out.trimmingCharacters(in: .whitespacesAndNewlines) }
         }
-        return run(["rev-parse", "--verify", "--quiet", "HEAD"], in: dir).ok ? "HEAD" : nil
+        return run(["rev-parse", "--verify", "--quiet", "HEAD"], in: dir, timeout: readLimit).ok ? "HEAD" : nil
     }
 
     /// Changed and untracked files, compared with `base` (working tree included).
@@ -231,8 +228,8 @@ public enum Git {
         // Before the first commit, staged files are measured against the empty tree.
         if let base = base ?? emptyTree(dir) {
             // --relative: paths from `dir`, as ls-files and the diff below take them.
-            let numstat = run(["diff", "--numstat", "-z", "--no-renames", "--relative", base], in: dir).out
-            let status = run(["diff", "--name-status", "-z", "--no-renames", "--relative", base], in: dir).out
+            let numstat = run(["diff", "--numstat", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit).out
+            let status = run(["diff", "--name-status", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit).out
             var kinds: [String: ChangedFile.Status] = [:]
             let parts = status.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
             var i = 0
@@ -254,7 +251,7 @@ public enum Git {
               n=$(wc -l < "$f" 2>/dev/null | tr -d ' '); printf '%s\t%s\n' "$n" "$f"
             done
             """#
-            for line in RemotePath.run(script, on: remote.host).text.split(whereSeparator: \.isNewline) {
+            for line in RemotePath.run(script, on: remote.host, deadline: readLimit).text.split(whereSeparator: \.isNewline) {
                 let fields = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
                 guard fields.count == 2, !fields[1].isEmpty else { continue }
                 let lines = Int(fields[0])
@@ -262,7 +259,7 @@ public enum Git {
             }
             return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         }
-        let untracked = run(["ls-files", "--others", "--exclude-standard", "-z"], in: dir).out
+        let untracked = run(["ls-files", "--others", "--exclude-standard", "-z"], in: dir, timeout: readLimit).out
         for path in untracked.split(separator: "\0").map(String.init).prefix(300) {
             let full = (dir as NSString).appendingPathComponent(path)
             let lines = textLines(atPath: full)?.count
@@ -272,7 +269,7 @@ public enum Git {
     }
 
     private static func emptyTree(_ dir: String) -> String? {
-        let r = run(["hash-object", "-t", "tree", "/dev/null"], in: dir)
+        let r = run(["hash-object", "-t", "tree", "/dev/null"], in: dir, timeout: readLimit)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
     }
 
@@ -281,7 +278,7 @@ public enum Git {
     public static func fileLines(dir: String, path: String) -> [String]? {
         guard let remote = RemotePath.parse(dir) else { return textLines(atPath: (dir as NSString).appendingPathComponent(path)) }
         let script = RemotePath.entering(remote.path) + "F=" + quote(path) + #"; [ "$(wc -c < "$F" 2>/dev/null || echo 9999999)" -lt 1000000 ] && cat -- "$F""#
-        let answer = RemotePath.run(script, on: remote.host)
+        let answer = RemotePath.run(script, on: remote.host, deadline: readLimit)
         guard answer.status == 0, !answer.output.prefix(8000).contains(0), let text = String(data: answer.output, encoding: .utf8) else { return nil }
         var lines = text.components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
@@ -310,7 +307,7 @@ public enum Git {
                 lines.prefix(3000).enumerated().map { DiffLine(index: $0.offset + 1, kind: .added, oldNumber: nil, newNumber: $0.offset + 1, text: $0.element) }
         }
         // Literal, so a name like "a*" or ":x" isn't read as a pattern.
-        let out = run(["--literal-pathspecs", "diff", "--no-color", "--no-ext-diff", "--no-renames", base!, "--", file.path], in: dir).out
+        let out = run(["--literal-pathspecs", "diff", "--no-color", "--no-ext-diff", "--no-renames", base!, "--", file.path], in: dir, timeout: readLimit).out
         return parseDiff(out)
     }
 

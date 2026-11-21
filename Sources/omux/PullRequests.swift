@@ -150,7 +150,8 @@ final class PullRequestMonitor: ObservableObject {
     /// Asks about the branch checked out in `dir` rather than naming it, so gh can follow
     /// the branch's upstream to a pull request opened from a fork.
     nonisolated private static func lookup(in dir: String) -> Lookup {
-        guard let result = Git.gh(["pr", "view", "--json", fields], in: dir) else { return .none }
+        // Bounded: a gh that never answers would otherwise stop the polling until relaunch.
+        guard let result = Git.gh(["pr", "view", "--json", fields], in: dir, timeout: 30) else { return .none }
         guard result.ok else {
             return result.err.contains("no pull requests found") ? .none : .unknown
         }
