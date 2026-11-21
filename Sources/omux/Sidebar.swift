@@ -187,6 +187,7 @@ struct Sidebar: View {
             .foregroundStyle(.secondary)
             .padding(.trailing, 8)
             .frame(height: 28)
+            .actsAsTitleBar()
             // The list grows into the title bar's safe area when it touches it, which would put it
             // over the buttons and take their clicks. A 1pt gap keeps it below them.
             Spacer(minLength: 0).frame(height: 1)

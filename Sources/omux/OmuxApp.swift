@@ -788,6 +788,7 @@ struct SessionHeader: View {
         .padding(.leading, showSidebar ? 0 : sidebarLayout == "rail" ? 68 - ProjectRail.width : 68)
         // On the window's own surface, level with its buttons: the card under it is the session.
         .frame(height: 28)
+        .actsAsTitleBar()
     }
 }
 
