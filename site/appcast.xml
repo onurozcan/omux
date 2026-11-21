@@ -3,6 +3,41 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.12.5</title>
+            <pubDate>Sat, 21 Nov 2026 21:06:37 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>23</sparkle:version>
+            <sparkle:shortVersionString>0.12.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Added</h3>
+<ul>
+<li><strong>A project's icon from its website.</strong> Edit Project… takes a website next to the icon: "Use Site's Icon" fetches the largest icon the site declares and keeps a copy, like a chosen picture. omux contacts only the site you typed, and only when you press the button.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><strong>The open tab shows only the session's name.</strong> What the session is doing moved to the tab's tooltip; the dot still shows its state.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><strong>A file named by part of its path opens.</strong> A path in a reply like <code>Store/review-notes.txt</code> was a link that did nothing unless the file sat right under the session's folder. It is now also looked for under the project's folder, among the files the agent wrote in the conversation, and anywhere in the project; when it can't be found, the compose box says so.</li>
+<li><strong>Changing the model or effort keeps what you were writing.</strong> The chips sent their command the way a message is sent, which emptied the box.</li>
+<li><strong>↑ brings back your last message.</strong> A slash command sent earlier, the chips' included, counted as the newest entry and came back first.</li>
+<li><strong>A stuck helper command can't freeze omux.</strong> git, gh, ssh and the agent CLIs are waited on until they exit, not until every process they left behind lets go of their output, and what runs in the background has a time limit. A commit hook or dotfile that leaves a process behind no longer freezes the window on ⌘W or stops pull request badges, diff stats and the Changes list from updating. (#66, thanks Anıl Soylu)</li>
+<li><strong>The <code>omux</code> command can't take the app down.</strong> A tool that hung up before its reply made the app exit, with every session in it. (#66)</li>
+<li><strong>Closing a worktree session, committing and sending images don't hold the window.</strong> The git checks before the close and commit questions, and the thumbnails of images in a prompt, are made off the main thread. (#71)</li>
+<li><strong>A file from another machine stays in its own folder here.</strong> A path with ".." in it could put the copy anywhere on this Mac. (#70)</li>
+<li><strong>Save in the file editor writes what the editor holds.</strong> Save and "Save mine" wrote the text from the last ⌘S, or nothing. (#67)</li>
+<li><strong>The conversation follows <code>/clear</code>.</strong> The panel stayed on the cleared conversation, or caught up only every ten seconds. (#69)</li>
+<li><strong>A Codex that restarts after updating itself stays in the background,</strong> and a slow shutdown blocks one restart, not every one after it. (#68)</li>
+<li><strong>Double-clicking the window's top strip fills the screen,</strong> or minimizes, as System Settings says. (#65)</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.5/omux-0.12.5.zip" length="34850563" type="application/octet-stream" sparkle:edSignature="+jup/fEm8cM8Or2avaROdBPgj4rY1/T9Lqtin20g8RrLPzA2LTvb3SInDGjEYYgAwiSq7IBUOlGRIkTFnAOtDw=="/>
+        </item>
+        <item>
             <title>0.12.4</title>
             <pubDate>Thu, 19 Nov 2026 22:27:16 +0300</pubDate>
             <link>https://omux.app</link>
@@ -57,29 +92,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.3/omux-0.12.3.zip" length="34323710" type="application/octet-stream" sparkle:edSignature="clgLP9yyITp14grNYDEP1yPv9/kgluhzdtzEok9wtNDwDiOVl+PN4XQd96YM1dnKnMld3hYOo8cDo6aSs8F6BA=="/>
-        </item>
-        <item>
-            <title>0.12.2</title>
-            <pubDate>Mon, 16 Nov 2026 13:56:45 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>20</sparkle:version>
-            <sparkle:shortVersionString>0.12.2</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Added</h3>
-<ul>
-<li><strong>A split button in the session header.</strong> One button opens a menu: a new shell to the right or below, or another session of the project beside this one. The same choices stay in a session's own menu, and each pane keeps its buttons.</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li><strong>The message box is as wide as the conversation.</strong> The cards and the box under them share their edges, and with the transcript set to Wide or Narrow the box and the cards that ask something narrow with it. The band behind the box and the line over it are gone: it stands on the panel itself.</li>
-<li><strong>No scroll bar and no dots beside the conversation.</strong> The row of dots that jumped between prompts and the scroll bar are gone, and the cards take the room. Folded turns and ⌘F find an earlier prompt.</li>
-<li><strong>The right panel is one surface.</strong> Files, Changes, Browser and Agents sit on the conversation's own background, where the file tree and the list of changes were a lighter grey. Its tabs are drawn as the session header draws its sessions, on the same strip at the same height.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.2/omux-0.12.2.zip" length="34065998" type="application/octet-stream" sparkle:edSignature="LZZOv1uUnkDV+V9PYdwkxSw2HDRJ6uEtHGKIUOyyeplYvUnbdK+1l+S5Gn0cNBELQbS4cZKRaECvqIwWzZx2AQ=="/>
         </item>
     </channel>
 </rss>
