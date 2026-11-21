@@ -7,7 +7,8 @@ enum TermEvent {
     case bell
     case title(String)
     case directory(String?)
-    case exited
+    /// The shell ended: its exit status, or nil when a signal ended it or it never started.
+    case exited(code: Int32?)
     /// OSC 7501: the root record's state, kind and message, plus every other record.
     case status(TabRuntime.StatusState?, kind: String?, message: String?, children: [TabRuntime.StatusChild])
     /// ⌘-click on a file path in the output.
@@ -36,12 +37,12 @@ private final class ProcessEvents: LocalProcessTerminalViewDelegate {
     }
 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
-        owner?.emit(.exited)
+        owner?.emit(.exited(code: exitCode))
         owner?.releaseAfterExit()
     }
 
     func processFailedToStart(source: TerminalView, error: LocalProcessError) {
-        owner?.emit(.exited)
+        owner?.emit(.exited(code: nil))
     }
 
     func programStatusChanged(source: TerminalView, records: [TerminalProgramStatus]) {
