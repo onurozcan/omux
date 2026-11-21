@@ -32,8 +32,9 @@ public enum Git {
     /// The login shell's PATH, looked up once. Opened from Finder, omux only has
     /// /usr/bin:/bin, where hooks, signing and LFS filters can't find npx, gpg or git-lfs.
     public static let loginPath: String = {
-        let out = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory(), timeout: lookupLimit).out
-        let path = out.components(separatedBy: "\n").last ?? ""
+        // A lookup that timed out may have stopped partway through a line; don't trust it.
+        let r = login(#"printf '\n%s' "$PATH""#, in: NSHomeDirectory(), timeout: lookupLimit)
+        let path = r.ok ? r.out.components(separatedBy: "\n").last ?? "" : ""
         return path.contains("/") ? path : "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     }()
 
@@ -74,8 +75,9 @@ public enum Git {
     /// Where the login shell finds gh, looked up once so polling doesn't start a shell
     /// each time. nil when gh isn't installed.
     public static let ghPath: String? = {
-        let path = login("command -v gh", in: NSHomeDirectory(), timeout: lookupLimit).out.trimmingCharacters(in: .whitespacesAndNewlines)
-        return path.hasPrefix("/") ? path : nil
+        let r = login("command -v gh", in: NSHomeDirectory(), timeout: lookupLimit)
+        let path = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return r.ok && path.hasPrefix("/") ? path : nil
     }()
 
     /// Runs the GitHub CLI, or returns nil when it isn't installed.
