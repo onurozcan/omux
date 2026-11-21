@@ -60,10 +60,27 @@ public enum TranscriptParser {
         return fractionalDates.date(from: stamp) ?? wholeDates.date(from: stamp)
     }
 
+    /// The image types Claude Code records, which are also all the page draws.
+    static let imageTypes: Set<String> = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+
+    /// An image block as a data URL for the page. Its type and its bytes end up inside an
+    /// attribute there, and a record holds whatever its writer put in it: a tool's result, or a
+    /// transcript copied from another machine. So only an image type by name, and only base64;
+    /// a block that is anything else isn't a picture.
     public static func dataURL(of item: [String: Any]) -> String? {
         guard let source = item["source"] as? [String: Any], source["type"] as? String == "base64",
-              let data = source["data"] as? String, data.count < maxImageChars else { return nil }
-        return "data:\(source["media_type"] as? String ?? "image/png");base64,\(data)"
+              let data = source["data"] as? String, !data.isEmpty, data.utf8.count < maxImageChars else { return nil }
+        let type = source["media_type"] as? String ?? "image/png"
+        guard imageTypes.contains(type), data.utf8.allSatisfy(isBase64) else { return nil }
+        return "data:\(type);base64,\(data)"
+    }
+
+    private static func isBase64(_ byte: UInt8) -> Bool {
+        switch byte {
+        case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "0")...UInt8(ascii: "9"),
+             UInt8(ascii: "+"), UInt8(ascii: "/"), UInt8(ascii: "="): return true
+        default: return false
+        }
     }
 
     /// Claude Code writes one JSON object per line: user turns (prompts and tool results),
