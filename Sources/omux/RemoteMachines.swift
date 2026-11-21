@@ -118,11 +118,13 @@ final class RemoteMachines: ObservableObject {
     struct Answer: Sendable { var status: Int32; var output: String; var error: String }
 
     /// Runs `script` under sh on the machine and waits for it, without ever asking the user
-    /// for anything.
+    /// for anything. The whole of it gets three times the time to connect: a probe or a listing
+    /// (10 s) is over well inside 30 s, a file sent or fetched (20 s) inside a minute, and a probe
+    /// that stalls there gives up before the next one, 45 s on, starts another ssh.
     nonisolated static func run(_ script: String, on host: String, timeout: Int = 10, input: URL? = nil) async -> Answer {
         guard isValid(host) else { return Answer(status: 255, output: "", error: "not a machine name") }
         return await Task.detached {
-            let answer = RemotePath.run(script, on: host, input: input, timeout: timeout)
+            let answer = RemotePath.run(script, on: host, input: input, timeout: timeout, deadline: TimeInterval(timeout * 3))
             return Answer(status: answer.status, output: answer.text, error: answer.error)
         }.value
     }

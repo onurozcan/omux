@@ -90,6 +90,10 @@ final class CommandServer: @unchecked Sendable {
         // A session started while this request is answered (omux new) would otherwise inherit
         // the connection, keep it open, and leave the tool waiting for the end of the reply.
         _ = fcntl(client, F_SETFD, FD_CLOEXEC)
+        // A tool that hung up before the reply would make the write raise SIGPIPE, which kills
+        // the app and every session in it. Set here, not ignored app-wide: shells inherit that.
+        var on: Int32 = 1
+        _ = setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         var uid = uid_t(0), gid = gid_t(0)
         guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { return }
         guard let line = readLine(client) else { return }

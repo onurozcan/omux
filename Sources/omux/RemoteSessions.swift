@@ -167,6 +167,8 @@ final class RemoteMirrors {
             try process.run()
             mirror.process = process
             // What the copy holds already, so only the rest is sent.
+            // A far end that already quit fails the write instead of raising SIGPIPE in the app.
+            _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
             if let have = try? Wire.encode(Mirror.have(in: folder, session: mirror.session)) {
                 try? input.fileHandleForWriting.write(contentsOf: have)
             }

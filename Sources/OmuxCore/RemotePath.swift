@@ -44,24 +44,14 @@ public enum RemotePath {
     /// Runs `script` under sh on the machine and waits, never asking the user for anything: a
     /// machine that would need a password answered fails here, and a session's terminal is
     /// where that gets answered. `input` goes in as the script's standard input; the output
-    /// comes back as bytes, so a file can be fetched whole.
-    public static func run(_ script: String, on host: String, input: URL? = nil, timeout: Int = 10) -> Answer {
+    /// comes back as bytes, so a file can be fetched whole. `timeout` is for connecting only;
+    /// `deadline` bounds the whole command, which a stalled shell there would otherwise never end.
+    public static func run(_ script: String, on host: String, input: URL? = nil, timeout: Int = 10, deadline: TimeInterval? = nil) -> Answer {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         process.arguments = options + ["-o", "BatchMode=yes", "-o", "ConnectTimeout=\(timeout)", host, "sh -c " + Git.quote(script)]
-        let output = Pipe(), error = Pipe()
         process.standardInput = input.flatMap { try? FileHandle(forReadingFrom: $0) } ?? FileHandle.nullDevice
-        process.standardOutput = output
-        process.standardError = error
-        do { try process.run() } catch { return Answer(status: 255, output: Data(), error: "\(error)") }
-        // Standard error on its own thread: a full pipe would otherwise block the far end.
-        final class Box: @unchecked Sendable { var data = Data() }
-        let box = Box()
-        let reading = DispatchGroup()
-        DispatchQueue.global(qos: .utility).async(group: reading) { box.data = error.fileHandleForReading.readDataToEndOfFile() }
-        let out = output.fileHandleForReading.readDataToEndOfFile()
-        reading.wait()
-        process.waitUntilExit()
-        return Answer(status: process.terminationStatus, output: out, error: String(decoding: box.data, as: UTF8.self))
+        let result = ChildProcess.run(process, timeout: deadline)
+        return Answer(status: result.status, output: result.out, error: String(decoding: result.err, as: UTF8.self))
     }
 }

@@ -76,7 +76,8 @@ enum RemoteFiles {
         (stat -c '%s-%Y' -- "$F" 2>/dev/null || stat -f '%z-%m' -- "$F") >&2
         cat -- "$F"
         """#
-        let answer = await Task.detached { RemotePath.run(script, on: host, timeout: 20) }.value
+        // Bounded as RemoteMachines.run bounds a transfer.
+        let answer = await Task.detached { RemotePath.run(script, on: host, timeout: 20, deadline: 60) }.value
         switch answer.status {
         case 0: break
         case 4: return .failure(MachineProblem(text: "\((path as NSString).lastPathComponent) is over \(maxBytes / 1_000_000) MB: too large to look at from here."))
