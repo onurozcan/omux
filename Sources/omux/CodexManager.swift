@@ -93,10 +93,10 @@ final class CodexManager: ObservableObject {
     /// turns with the thread's model, and its own `-c model=` flag doesn't reach it.
     func prepare(tabID: UUID, threadID: String?, cwd: String, name: String, model: String? = nil, effort: String? = nil, host: String? = nil) async throws -> (threadID: String, command: String) {
         let connection = connection(for: tabID, host: host)
-        if let previous = retiring[tabID] {
+        // Taken out before the wait: a slow shutdown is reported once, not on every restart.
+        if let previous = retiring.removeValue(forKey: tabID) {
             try await previous.value
             try Task.checkCancellation()
-            retiring[tabID] = nil
         }
         try await connection.connect()
         try Task.checkCancellation()
