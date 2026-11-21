@@ -1225,7 +1225,15 @@ final class Store: ObservableObject {
             update(id) { $0.cwd = dir }
             // The shell is at its prompt again: whatever ran in it is gone.
             refreshBusy(id)
-        case .exited:
+        case .exited(let code):
+            // kill() marks the session exited before its shell is gone, so a session still
+            // marked running here ended on its own, e.g. the user typed `exit`.
+            let killed = runtime[id]?.exited ?? true
+            if let loc = location(of: id), Self.closesOnExit(code: code, killed: killed, remote: groups[loc.group].isRemote,
+                                                             worktree: groups[loc.group].tabs[loc.tab].worktree != nil) {
+                closeTab(id)
+                return
+            }
             update(id) { $0.exited = true; $0.statusState = nil; $0.statusKind = nil; $0.statusChildren = []; $0.busy = false }
         case .openPath(let path):
             preview(path)
@@ -1470,6 +1478,15 @@ final class Store: ObservableObject {
         guard let command else { return setup }
         let background = setup.hasSuffix("&") && !setup.hasSuffix("&&") && !setup.hasSuffix("\\&")
         return setup + (background ? " " : " && ") + command
+    }
+
+    /// Whether a session whose shell ended closes its tab, as in Terminal.app: only when the
+    /// shell left cleanly by itself (`exit`, Ctrl-D). A crash, an error or a kill keeps the tab,
+    /// stopped, with its output to read. A remote session's end may be the connection's, not
+    /// the shell's, and a worktree session's close asks what to do with the worktree, so both
+    /// stay for the user to close.
+    nonisolated static func closesOnExit(code: Int32?, killed: Bool, remote: Bool, worktree: Bool) -> Bool {
+        code == 0 && !killed && !remote && !worktree
     }
 
     func closeTab(_ id: UUID) {
