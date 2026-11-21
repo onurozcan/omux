@@ -1,7 +1,7 @@
 // The Files panel's editor page: a textarea over a highlighted copy of the same text, kept in
 // sync, so editing is native (undo, selection, dictation) and the colors come from highlight.js.
-// Swift calls editor.load, editor.replace, editor.setWrap, editor.setTheme and editor.markSaved;
-// the page posts {type: 'ready'}, {type: 'dirty', dirty} and {type: 'save', text}.
+// Swift calls editor.load, editor.replace, editor.setWrap, editor.setTheme, editor.markSaved and
+// editor.text; the page posts {type: 'ready'}, {type: 'dirty', dirty} and {type: 'save', text}.
 (function () {
   'use strict';
   const scroller = document.getElementById('scroller');
@@ -171,9 +171,10 @@
     post({ type: 'dirty', dirty: false });
   }
 
-  function markSaved() {
-    saved = input.value;
-    post({ type: 'dirty', dirty: false });
+  /// The text that was written, which may be behind what was typed while Swift wrote it.
+  function markSaved(text) {
+    saved = text;
+    markDirty();
   }
 
   function setWrap(wrap) {
