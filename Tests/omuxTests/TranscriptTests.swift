@@ -227,13 +227,18 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(overview.kind, "mcp")
     }
 
-    func testImagePathsInPromptsBecomeThumbnails() throws {
+    private func pngFile() throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("omux-test-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let file = dir.appendingPathComponent("shot one.png")
         let image = NSImage(size: NSSize(width: 4, height: 4), flipped: false) { rect in NSColor.red.setFill(); rect.fill(); return true }
         let png = NSBitmapImageRep(data: image.tiffRepresentation!)!.representation(using: .png, properties: [:])!
         try png.write(to: file)
+        return file
+    }
+
+    func testImagePathsInPromptsBecomeThumbnails() throws {
+        let file = try pngFile()
         let m = model()
         m.ingest([object(#"{"type":"user","message":{"role":"user","content":"why this? \"\#(file.path)\" /nonexistent/x.png and done"}}"#)])
         XCTAssertEqual(m.blocks.first?.text, "why this? /nonexistent/x.png and done")
@@ -246,6 +251,78 @@ final class TranscriptTests: XCTestCase {
         e.ingest([object(#"{"type":"user","message":{"role":"user","content":"look \\\"\#(file.path)\\\""}}"#)])
         XCTAssertEqual(e.blocks.count, 1)
         XCTAssertNil(e.blocks.first?.pending)
+    }
+
+    /// Making a thumbnail held the main thread for a good part of a second per screenshot: the
+    /// echo shows its text at once, and its images fill into the same bubble once they're made,
+    /// after whatever arrived meanwhile.
+    func testAnEchoShowsItsTextAtOnceAndItsImagesAfter() async throws {
+        let file = try pngFile()
+        let m = claude()
+        m.echo("look \"\(file.path)\"", queued: false)
+        XCTAssertEqual(m.blocks.first?.text, "look")
+        XCTAssertEqual(m.blocks.first?.images, [])
+        m.echo("and another", queued: true)
+        for _ in 0..<300 where m.blocks[0].images.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks.map(\.id), [0, 1])
+        XCTAssertEqual(m.blocks[0].images.count, 1)
+        XCTAssertTrue(m.blocks[0].images.first?.hasPrefix("data:image/jpeg;base64,") == true)
+        XCTAssertEqual(m.blocks[1].images, [])
+        // Once the agent's record has taken the echo, its images are the record's: the record
+        // lands before the decode can, and the decode is awaited before looking.
+        let r = claude()
+        r.echo("look \"\(file.path)\"", queued: false)
+        r.ingest([prompt("look")])
+        await r.thumbnailWork?.value
+        XCTAssertNil(r.blocks[0].pending)
+        XCTAssertEqual(r.blocks[0].images, [])
+        r.echo("again \"\(file.path)\"", queued: false)
+        await r.thumbnailWork?.value
+        XCTAssertEqual(r.blocks[1].images.count, 1)
+    }
+
+    /// A queued prompt handed to the agent mid-turn has no record coming: absorbed before its
+    /// thumbnails are made, it still gets them.
+    func testAnAbsorbedEchoKeepsItsImages() async throws {
+        let file = try pngFile()
+        let m = claude()
+        m.echo("look \"\(file.path)\"", queued: true)
+        m.ingest([queue("enqueue", "look"), queue("remove", "look", reason: "absorbed_mid_turn")])
+        XCTAssertNil(m.blocks[0].pending)
+        for _ in 0..<300 where m.blocks[0].images.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks[0].images.count, 1)
+    }
+
+    /// A Codex thread whose items the test sets.
+    private final class FakeCodex: CodexThreads {
+        var items: [[String: Any]] = []
+        var handler: ((CodexTranscriptEvent) -> Void)?
+        func listen(_ tabID: UUID, _ handler: ((CodexTranscriptEvent) -> Void)?) { self.handler = handler }
+        func transcriptItems(threadID: String, tabID: UUID) async throws -> [[String: Any]] { items }
+    }
+
+    private func codexItem(_ type: String, _ text: String) -> [String: Any] {
+        type == "userMessage" ? ["type": type, "content": [["text": text]]] : ["type": type, "text": text]
+    }
+
+    /// A Codex read rebuilds the list and moves the echoes it keeps to new places: thumbnails
+    /// still being made follow their echo there, not the item that took its old place.
+    func testCodexEchoThumbnailsFollowTheEchoWhenTheListIsRebuilt() async throws {
+        let file = try pngFile()
+        let codex = FakeCodex()
+        codex.items = [codexItem("userMessage", "hi"), codexItem("agentMessage", "hello")]
+        let m = SessionTranscript(tabID: UUID(), provider: .codex, claudeFile: { nil }, codexThread: { "t" }, codex: codex)
+        for _ in 0..<300 where m.blocks.count < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        m.echo("plain", queued: false)
+        m.echo("look \"\(file.path)\"", queued: true)
+        // The thread takes the first echo and replies before the thumbnail is made.
+        codex.items += [codexItem("userMessage", "plain"), codexItem("agentMessage", "ok")]
+        codex.handler?(.turn(completed: false))
+        await m.thumbnailWork?.value
+        for _ in 0..<300 where m.blocks.count < 5 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks.map(\.text), ["hi", "hello", "plain", "ok", "look"])
+        XCTAssertEqual(m.blocks[4].images.count, 1)
+        XCTAssertEqual(m.blocks[..<4].map(\.images.count), [0, 0, 0, 0])
     }
 
     func testCompactionSummaryFoldsInsteadOfBeingAPrompt() {

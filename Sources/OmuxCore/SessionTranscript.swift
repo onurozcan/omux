@@ -108,6 +108,12 @@ public final class SessionTranscript {
     private var startAtEnd = false
     private var countedMessages: Set<String> = []
     private var imagesKept = 0
+    /// Echoes whose thumbnails are still being made, by block id, each with its decode's token
+    /// so the decode finds the echo after a Codex read moves it. A record that takes one sets
+    /// its own images.
+    private var awaitingThumbnails: [Int: UUID] = [:]
+    /// The newest thumbnail decode, so a test can wait for it to land.
+    private(set) var thumbnailWork: Task<Void, Never>?
     /// The note a slash command made, so the command's output can replace its text.
     private var commandNote: Int?
     private var loading = false
@@ -200,7 +206,7 @@ public final class SessionTranscript {
         loading = false
         url = nil; offset = 0; remainder = Data()
         running = []; takenEchoes = []; dequeues = 0; countedMessages = []; commandNote = nil
-        lastPrompt = nil
+        lastPrompt = nil; awaitingThumbnails = [:]
         var list = blocks
         for index in list.indices where list[index].kind == .user && list[index].pending != nil { list[index].pending = .removed }
         list.append(ChatBlock(id: next, kind: .note, text: "Continued with \(to.label)" + (from == .claude || from == .codex ? ", handed the conversation so far" : ""))); next += 1
@@ -222,7 +228,7 @@ public final class SessionTranscript {
         loading = false
         url = nil; offset = 0; remainder = Data()
         blocks = []; encoded = []; encodedBytes = 0; changeLog = []; trimmedUpTo = 0
-        toolRows = [:]; running = []; takenEchoes = []; dequeues = 0; countedMessages = []; imagesKept = 0; commandNote = nil; next = 0
+        toolRows = [:]; running = []; takenEchoes = []; dequeues = 0; countedMessages = []; imagesKept = 0; awaitingThumbnails = [:]; commandNote = nil; next = 0
         lastPrompt = nil; lastWrite = nil; totalOut = 0; lastContext = nil; lastModel = nil
         promptCount = 0; firstPrompt = nil; filesTouched = []
         truncated = false; notice = nil; loaded = false
@@ -421,6 +427,7 @@ public final class SessionTranscript {
                     list[first].text = text
                     list[first].time = time
                     list[first].images = keep(images)
+                    awaitingThumbnails[list[first].id] = nil
                     list[first].pending = nil
                     touched.insert(first)
                     lastPrompt = time
@@ -436,6 +443,7 @@ public final class SessionTranscript {
                     list[index].text = text
                     list[index].time = time
                     list[index].images = keep(images)
+                    awaitingThumbnails[list[index].id] = nil
                     list[index].pending = nil
                     touched.insert(index)
                     lastPrompt = time
@@ -723,13 +731,35 @@ public final class SessionTranscript {
             list.append(ChatBlock(id: next, kind: .note, text: "Worked for " + Self.duration(end.timeIntervalSince(start)))); next += 1
             lastPrompt = nil
         }
-        let inline = TranscriptParser.inlineImages(in: text)
-        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date(), images: keep(inline.images))
+        let inline = TranscriptParser.inlineImages(in: text, thumbnails: false)
+        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date())
         // "queuing" until Claude Code's own queue record confirms it; then it can be reordered.
         block.pending = queued ? .queuing : .sent
         list.append(block); next += 1
         commit(list, touched: [])
         Timing.mark("echo", tabID, queued ? "queued" : "sent")
+        // Image paths came out of the text: their thumbnails follow, made off the main thread.
+        if inline.text != text { addThumbnails(of: text, to: block) }
+    }
+
+    /// Decoding a screenshot takes a good part of a second: the bubble shows its text at once
+    /// and its images when they're ready. Once the agent's record has taken the block, its
+    /// images are the record's, as when the thumbnails came with the echo; a prompt absorbed
+    /// mid-turn has no record coming and keeps the echo's.
+    private func addThumbnails(of text: String, to echo: ChatBlock) {
+        let generation = generation, token = UUID()
+        awaitingThumbnails[echo.id] = token
+        thumbnailWork = Task.detached(priority: .userInitiated) {
+            let images = TranscriptParser.inlineImages(in: text).images
+            await MainActor.run {
+                guard self.generation == generation, let id = self.awaitingThumbnails.first(where: { $0.value == token })?.key else { return }
+                self.awaitingThumbnails[id] = nil
+                guard !images.isEmpty, self.blocks.indices.contains(id), self.blocks[id].kind == .user else { return }
+                var list = self.blocks
+                list[id].images = self.keep(images)
+                self.commit(list, touched: [id])
+            }
+        }
     }
 
     /// The waiting prompt a queue record names: the one with that text, newest first.
@@ -938,11 +968,15 @@ public final class SessionTranscript {
                     list.append(ChatBlock(id: list.count, kind: .assistant, text: live.text))
                     codexLiveBlock = list.count - 1
                 }
+                // Thumbnails still being made follow their echo to its new place.
+                var awaiting: [Int: UUID] = [:]
                 for echo in echoes {
                     var block = ChatBlock(id: list.count, kind: .user, text: echo.text, time: echo.time, images: echo.images)
                     block.pending = echo.pending
+                    awaiting[block.id] = awaitingThumbnails[echo.id]
                     list.append(block)
                 }
+                awaitingThumbnails = awaiting
                 if list != blocks {
                     // Items keep their place, so only the ones that changed are re-encoded.
                     var touched: Set<Int> = []
