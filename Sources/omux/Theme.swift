@@ -6,17 +6,19 @@ import SwiftUI
 /// transcript page share these, so a state looks the same wherever it shows.
 enum Palette {
     /// An agent at work, and running tool calls.
-    static let working = Color(red: 0.231, green: 0.510, blue: 0.965)
+    static var working: SwiftUI.Color { colorBlind ? SwiftUI.Color(nsColor: NSColor(hex: 0x56B4E9)) : SwiftUI.Color(red: 0.231, green: 0.510, blue: 0.965) }
     /// Waiting on you: permissions, questions, attention.
-    static let needs = Color(red: 0.961, green: 0.620, blue: 0.043)
+    static var needs: SwiftUI.Color { colorBlind ? SwiftUI.Color(nsColor: NSColor(hex: 0xE69F00)) : SwiftUI.Color(red: 0.961, green: 0.620, blue: 0.043) }
     /// Finished, passed, added lines.
-    static let done = Color(red: 0.133, green: 0.773, blue: 0.369)
+    static var done: SwiftUI.Color { colorBlind ? SwiftUI.Color(nsColor: NSColor(hex: 0x009E73)) : SwiftUI.Color(red: 0.133, green: 0.773, blue: 0.369) }
     /// Failed, removed lines, limits nearly spent.
-    static let error = Color(red: 0.937, green: 0.267, blue: 0.267)
+    static var error: SwiftUI.Color { colorBlind ? SwiftUI.Color(nsColor: NSColor(hex: 0xD55E00)) : SwiftUI.Color(red: 0.937, green: 0.267, blue: 0.267) }
     /// Subagents and other secondary actors.
-    static let agent = Color(red: 0.655, green: 0.545, blue: 0.980)
+    static var agent: SwiftUI.Color { colorBlind ? SwiftUI.Color(nsColor: NSColor(hex: 0xCC79A7)) : SwiftUI.Color(red: 0.655, green: 0.545, blue: 0.980) }
     /// A usage bar with room left: quiet, since nothing needs attention.
     static let quiet = Color.primary.opacity(0.35)
+
+    static var colorBlind: Bool { UserDefaults.standard.bool(forKey: Prefs.colorBlindPalette) }
 }
 
 enum Theme: String, CaseIterable, Identifiable {
@@ -194,6 +196,7 @@ struct TranscriptStyle: Equatable {
     var timestamps = true
     /// "cards": each request with its work and answer is one card. "plain": a stream of bubbles and rows.
     var layout = "cards"
+    var colorBlind = false
 
     static var current: TranscriptStyle {
         let d = UserDefaults.standard
@@ -202,7 +205,8 @@ struct TranscriptStyle: Equatable {
                                width: d.string(forKey: Prefs.transcriptWidth) ?? "full", density: d.string(forKey: Prefs.transcriptDensity) ?? "comfortable",
                                bubbles: d.string(forKey: Prefs.transcriptBubbles) ?? "tinted",
                                timestamps: d.object(forKey: Prefs.transcriptTimestamps) as? Bool ?? true,
-                               layout: d.string(forKey: Prefs.transcriptLayout) ?? "cards")
+                               layout: d.string(forKey: Prefs.transcriptLayout) ?? "cards",
+                               colorBlind: d.bool(forKey: Prefs.colorBlindPalette))
     }
 
     /// The CSS font stack for the body text.

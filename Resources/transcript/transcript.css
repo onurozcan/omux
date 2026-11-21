@@ -337,3 +337,17 @@ main { padding-left: 12px; padding-right: 12px; }
 .outline { display: none !important; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
 .jump { right: 22px; }
+
+body.colorblind .tag.edit { background: rgba(230,159,0,0.13); }
+body.colorblind:not(.neutral) .tag.bash { background: rgba(86,180,233,0.13); }
+body.colorblind:not(.neutral) .spin { border-color: rgba(86,180,233,0.25); border-top-color: var(--blue); }
+body.colorblind .diff .d { background: rgba(213,94,0,0.16); color: #f2b48a; }
+body.colorblind .diff .a { background: rgba(0,158,115,0.16); color: #8fd8c3; }
+html.light body.colorblind .diff .d { color: #8a3a00; }
+html.light body.colorblind .diff .a { color: #00634a; }
+body.colorblind .tool.failed .tag { outline-color: rgba(213,94,0,0.5); }
+body.colorblind mark.hit { background: rgba(230,159,0,0.35); }
+body.colorblind .tool.just-done { animation-name: justdone-colorblind; }
+body.colorblind .tool.just-done.failed { animation-name: justfailed-colorblind; }
+@keyframes justdone-colorblind { 0% { background: rgba(0,158,115,0.18); } 100% { background: transparent; } }
+@keyframes justfailed-colorblind { 0% { background: rgba(213,94,0,0.18); } 100% { background: transparent; } }

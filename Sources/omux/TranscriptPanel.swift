@@ -53,9 +53,11 @@ struct TranscriptPanel: View {
     @AppStorage(Prefs.transcriptDensity) private var transcriptDensity = "comfortable"
     @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
+    @AppStorage(Prefs.colorBlindPalette) private var colorBlindPalette = false
     private var style: TranscriptStyle {
         TranscriptStyle(accent: accentChoice, font: transcriptFont, size: transcriptSize, width: transcriptWidth,
-                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps, layout: transcriptLayout)
+                        density: transcriptDensity, bubbles: transcriptBubbles, timestamps: transcriptTimestamps, layout: transcriptLayout,
+                        colorBlind: colorBlindPalette)
     }
     @AppStorage(Prefs.transcriptLayout) private var transcriptLayout = "cards"
     /// Whether the project is a git repository, checked once per folder rather than on every redraw.

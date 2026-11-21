@@ -70,6 +70,7 @@ enum Prefs {
     /// How agent sessions show in the main panel: "terminal" (default) or "transcript" (beta).
     static let sessionView = "sessionView"
     static let accent = "accent"
+    static let colorBlindPalette = "colorBlindPalette"
     static let transcriptFont = "transcriptFont"
     static let transcriptSize = "transcriptSize"
     static let transcriptWidth = "transcriptWidth"
@@ -276,6 +277,7 @@ private struct AppearanceSettings: View {
     @AppStorage(Prefs.transcriptLayout) private var transcriptLayout = "cards"
     @AppStorage(Prefs.transcriptBubbles) private var transcriptBubbles = "tinted"
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
+    @AppStorage(Prefs.colorBlindPalette) private var colorBlindPalette = false
 
     private var current: Theme { Theme(rawValue: theme) ?? .black }
 
@@ -301,6 +303,18 @@ private struct AppearanceSettings: View {
                     }
                 }
                 SettingNote("Buttons, selection, links and the send button. Theme uses the theme's own blue. Neutral is grey throughout, which leaves colour to mean one thing: a session's state.")
+            }
+            Section("Status colours") {
+                Toggle("Colour-blind friendly", isOn: $colorBlindPalette)
+                HStack(spacing: 12) {
+                    statusSwatch("Working", Palette.working)
+                    statusSwatch("Needs you", Palette.needs)
+                    statusSwatch("Done", Palette.done)
+                    statusSwatch("Failed", Palette.error)
+                    statusSwatch("Subagent", Palette.agent)
+                }
+                .id(colorBlindPalette)
+                SettingNote("Uses the Okabe–Ito palette for status dots, badges, diffs and the transcript, so done and failed stay apart with red–green colour blindness.")
             }
             Section("Terminal") {
                 Picker("Font", selection: $fontFamily) {
@@ -339,6 +353,13 @@ private struct AppearanceSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func statusSwatch(_ label: String, _ color: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label).font(.caption)
+        }
     }
 
     /// A row of theme cards: background, chrome strip, sample text and six palette colours.
@@ -531,6 +552,7 @@ struct ContentView: View {
     @AppStorage(Prefs.showSidebar) private var showSidebar = true
     @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
     @AppStorage(Prefs.accent) private var accentChoice = "neutral"
+    @AppStorage(Prefs.colorBlindPalette) private var colorBlindPalette = false
     @AppStorage("panelWidth") private var panelWidth = 250.0
     @ObservedObject private var home = HomeState.shared
     /// The session list is closed and the projects are on a rail: the rail stays, by itself.
@@ -641,6 +663,10 @@ struct ContentView: View {
         .onChange(of: themeName) { _, _ in store.applyAppearance() }
         .onChange(of: fontFamily) { _, _ in store.applyAppearance() }
         .onChange(of: fontSize) { _, _ in store.applyAppearance() }
+        .onChange(of: colorBlindPalette) { _, _ in
+            store.objectWillChange.send()
+            home.objectWillChange.send()
+        }
         .onChange(of: store.previewRequest) { _, path in if path != nil { store.showPanel(.files) } }
         .onChange(of: changesKey, initial: true) { _, _ in
             let tab = store.selectedTab
