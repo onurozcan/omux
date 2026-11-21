@@ -48,7 +48,9 @@ cp -R Resources/transcript "$APP/Contents/Resources/transcript"
 cp -R Resources/icons "$APP/Contents/Resources/icons"
 # The session host for other machines, when scripts/build-host.sh has built it: omux
 # installs it over SSH on a machine a project is set to run on.
-if ls build/host/omux-host-linux-*.tar.xz >/dev/null 2>&1; then
+# An array, not ls: under null_glob an unmatched pattern vanishes and a bare ls succeeds.
+HOST_BUILDS=(build/host/omux-host-linux-*.tar.xz)
+if (( ${#HOST_BUILDS} )); then
   mkdir -p "$APP/Contents/Resources/host"
   cp build/host/omux-host-linux-*.tar.xz build/host/omux-host-linux-*.sha256 "$APP/Contents/Resources/host/"
 elif [[ "$MODE" == dist ]]; then
@@ -85,8 +87,9 @@ if [[ "$MODE" == "install" ]]; then
   # each other in /Applications without Accessibility, Screen Recording and folder grants
   # starting over; without it, the Apple Development certificate, then an ad-hoc signature.
   IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null || true)
-  IDENTITY=$(echo "$IDENTITIES" | grep "Developer ID Application" | head -1 | awk '{print $2}')
-  [[ -z "$IDENTITY" ]] && IDENTITY=$(echo "$IDENTITIES" | grep "Apple Development" | head -1 | awk '{print $2}')
+  # awk, not grep: a certificate that isn't there must fall through to the next, not fail under pipe_fail.
+  IDENTITY=$(echo "$IDENTITIES" | awk '/Developer ID Application/ && !found { print $2; found = 1 }')
+  [[ -z "$IDENTITY" ]] && IDENTITY=$(echo "$IDENTITIES" | awk '/Apple Development/ && !found { print $2; found = 1 }')
   sign_sparkle "${IDENTITY:--}"
   codesign --force --sign "${IDENTITY:--}" "$APP/Contents/Resources/bin/omux" 2>&1 | without "replacing existing signature"
   codesign --force --sign "${IDENTITY:--}" "$APP" 2>&1 | without "replacing existing signature"
