@@ -723,13 +723,34 @@ public final class SessionTranscript {
             list.append(ChatBlock(id: next, kind: .note, text: "Worked for " + Self.duration(end.timeIntervalSince(start)))); next += 1
             lastPrompt = nil
         }
-        let inline = TranscriptParser.inlineImages(in: text)
-        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date(), images: keep(inline.images))
+        let inline = TranscriptParser.inlineImages(in: text, thumbnails: false)
+        var block = ChatBlock(id: next, kind: .user, text: inline.text, time: Date())
         // "queuing" until Claude Code's own queue record confirms it; then it can be reordered.
         block.pending = queued ? .queuing : .sent
         list.append(block); next += 1
         commit(list, touched: [])
         Timing.mark("echo", tabID, queued ? "queued" : "sent")
+        // Image paths came out of the text: their thumbnails follow, made off the main thread.
+        if inline.text != text { addThumbnails(of: text, to: block) }
+    }
+
+    /// Decoding a screenshot takes a good part of a second: the bubble shows its text at once
+    /// and its images when they're ready. Once the agent's record has taken the block, its
+    /// images are the record's, as when the thumbnails came with the echo.
+    private func addThumbnails(of text: String, to echo: ChatBlock) {
+        let generation = generation, id = echo.id, sent = echo.time
+        Task.detached(priority: .userInitiated) {
+            let images = TranscriptParser.inlineImages(in: text).images
+            guard !images.isEmpty else { return }
+            await MainActor.run {
+                guard self.generation == generation, self.blocks.indices.contains(id),
+                      // Still the echo: a record sets its own time.
+                      self.blocks[id].kind == .user, self.blocks[id].time == sent else { return }
+                var list = self.blocks
+                list[id].images = self.keep(images)
+                self.commit(list, touched: [id])
+            }
+        }
     }
 
     /// The waiting prompt a queue record names: the one with that text, newest first.
