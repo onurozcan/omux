@@ -18,6 +18,8 @@ final class FileDocument: ObservableObject {
     @Published private(set) var error: String?
     /// Bumped when `text` should replace what the editor shows: a load, a reload, a revert.
     @Published private(set) var generation = 0
+    /// The editor showing this document, so the Save buttons can ask what it holds.
+    weak var editor: CodeEditorView.Coordinator?
     private var modified: Date?
     private var watcher: DispatchSourceFileSystemObject?
 
@@ -83,8 +85,9 @@ final class FileDocument: ObservableObject {
 
     /// Writes in place, so permissions and the inode stay; refuses to overwrite a file that
     /// changed on disk unless told to.
-    func save(_ contents: String, overwrite: Bool = false) {
-        if changedOnDisk, !overwrite { return }
+    @discardableResult
+    func save(_ contents: String, overwrite: Bool = false) -> Bool {
+        if changedOnDisk, !overwrite { return false }
         do {
             try Data(contents.utf8).write(to: url)
             text = contents
@@ -94,9 +97,23 @@ final class FileDocument: ObservableObject {
             error = nil
             // A copy of a file on another machine goes back to where it came from.
             RemoteFiles.saved(url)
+            return true
         } catch {
             self.error = "Couldn't save: \(error.localizedDescription)"
+            return false
         }
+    }
+
+    /// The Save buttons: writes what the editor holds now, which can be newer than the last ⌘S.
+    func saveEditorText(overwrite: Bool = false) {
+        editor?.text { self.save(typed: $0, overwrite: overwrite) }
+    }
+
+    /// Saves text from the editor and tells the page it's on disk. A blank page never empties a
+    /// file that has text.
+    func save(typed text: String, overwrite: Bool = false) {
+        guard !text.isEmpty || self.text.isEmpty else { return }
+        if save(text, overwrite: overwrite) { editor?.markSaved(text) }
     }
 
     /// Drops the edits and shows what's on disk.
@@ -122,6 +139,7 @@ struct CodeEditorView: NSViewRepresentable {
         view.setValue(false, forKey: "drawsBackground")
         view.allowsBackForwardNavigationGestures = false
         context.coordinator.webView = view
+        document.editor = context.coordinator
         if let dir = Bundle.main.resourceURL?.appendingPathComponent("transcript", isDirectory: true) {
             view.loadFileURL(dir.appendingPathComponent("editor.html"), allowingReadAccessTo: dir)
         }
@@ -172,8 +190,15 @@ struct CodeEditorView: NSViewRepresentable {
             }
         }
 
-        /// Tells the page its text is what's on disk now.
-        func markSaved() { webView?.evaluateJavaScript("editor.markSaved()") }
+        /// Tells the page `text` is what's on disk now.
+        func markSaved(_ text: String) { webView?.evaluateJavaScript("editor.markSaved(\(Self.json(["text": text])).text)") }
+
+        /// Hands over what the page holds right now.
+        func text(_ done: @escaping @MainActor (String) -> Void) {
+            webView?.evaluateJavaScript("editor.text()") { result, _ in
+                if let text = result as? String { done(text) }
+            }
+        }
 
         private static func json(_ object: [String: Any]) -> String {
             let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
@@ -233,8 +258,6 @@ struct FileEditorPane: View {
     let wrap: Bool
     let theme: Theme
     @StateObject private var document: FileDocument
-    @State private var coordinatorSave: ((String) -> Void)?
-    @State private var latest = ""
 
     init(url: URL, wrap: Bool, theme: Theme) {
         self.url = url
@@ -248,16 +271,13 @@ struct FileEditorPane: View {
             if let error = document.error {
                 Text(error).font(.caption).foregroundStyle(Palette.error).padding(8).frame(maxWidth: .infinity, alignment: .leading)
             }
-            CodeEditorView(document: document, language: Self.language(for: url), wrap: wrap, theme: theme) { text in
-                latest = text
-                save(text)
-            }
+            CodeEditorView(document: document, language: Self.language(for: url), wrap: wrap, theme: theme) { document.save(typed: $0) }
             if document.changedOnDisk {
                 HStack(spacing: 8) {
                     Circle().fill(Palette.needs).frame(width: 7, height: 7)
                     Text("Changed on disk while you were editing.").font(.system(size: 11))
                     Button("Reload") { document.revert() }.buttonStyle(.bordered)
-                    Button("Save mine") { document.save(latest, overwrite: true) }.buttonStyle(.borderedProminent)
+                    Button("Save mine") { document.saveEditorText(overwrite: true) }.buttonStyle(.borderedProminent)
                     Spacer()
                 }
                 .controlSize(.small)
@@ -275,7 +295,7 @@ struct FileEditorPane: View {
                         + Text("⌘S saves").font(.system(size: 10.5)).foregroundStyle(.tertiary)
                 }
                 Spacer()
-                Button("Save") { save(latest) }
+                Button("Save") { document.saveEditorText() }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.mini)
                     .disabled(!document.dirty || document.changedOnDisk)
@@ -286,11 +306,6 @@ struct FileEditorPane: View {
             .frame(height: 24)
             .overlay(alignment: .top) { Hairline() }
         }
-    }
-
-    private func save(_ text: String) {
-        guard !text.isEmpty || document.text.isEmpty else { return }
-        document.save(text)
     }
 
     /// highlight.js language names by extension, from the common bundle the app ships.
