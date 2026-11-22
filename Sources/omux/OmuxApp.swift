@@ -1119,6 +1119,31 @@ struct AppCommands: Commands {
                 if let id = store.selectedTabID { store.toggleSplit(id) }
             }
             .keyboardShortcut("s", modifiers: [.command, .option])
+            // A shell is added before it is placed, so with the panes full it would be left over.
+            // A session shown alone joins the panes first, which takes one more place.
+            let panesFull = store.selectedTabID.map {
+                store.splitIDs.count + (store.splitIDs.contains($0) ? 0 : 1) >= PaneLayout.maxPanes
+            } ?? true
+            Button("Split Right") { if let id = store.selectedTabID { store.splitWithShell(id, axis: .horizontal) } }
+                .keyboardShortcut("d")
+                .disabled(panesFull)
+            Button("Split Down") { if let id = store.selectedTabID { store.splitWithShell(id, axis: .vertical) } }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(panesFull)
+            // Disabled with one pane on screen, so the keys reach the terminal then.
+            let onePane = store.shownLayout == nil
+            Button("Focus Pane Left") { store.focusPane(toward: .leading) }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                .disabled(onePane)
+            Button("Focus Pane Right") { store.focusPane(toward: .trailing) }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .disabled(onePane)
+            Button("Focus Pane Up") { store.focusPane(toward: .top) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(onePane)
+            Button("Focus Pane Down") { store.focusPane(toward: .bottom) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(onePane)
             Button("Tidy Panes") { store.tidyPanes() }
                 .disabled(store.splitIDs.isEmpty)
             Button("Clear Panes") { store.clearSplit() }
