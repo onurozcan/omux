@@ -2,6 +2,11 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Security
+- **Text in a reply can no longer become part of the conversation page.** A reply, a thinking block or an image record could carry markup that the page drew as real elements, and a click on them could add an MCP server, add a permission rule or type a command into the session. The text could come from anything the agent read: a web page, a README, an issue. Replies now pass an allowlist, pictures are checked where they are read and where they are drawn, and omux only acts on a request from the page when it matches what omux itself put there. Thanks to Yusuf Karan (#73).
+
 ## [0.12.5] - 2026-11-21
 
 ### Added

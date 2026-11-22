@@ -434,7 +434,7 @@ struct TranscriptPanel: View {
     /// or its settings files, then the overview is redrawn.
     private func configure(_ message: [String: Any]) {
         guard let action = message["action"] as? String, let blockID = message["block"] as? Int,
-              model.blocks.indices.contains(blockID), let shown = model.blocks[blockID].info,
+              let shown = model.blocks.first(where: { $0.id == blockID && $0.kind == .info })?.info,
               Self.offers(shown, action: action, message: message) else { return }
         if action == "machines-open" {
             UserDefaults.standard.set(SettingsView.Pane.machines.rawValue, forKey: SettingsView.paneKey)
