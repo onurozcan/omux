@@ -3,6 +3,23 @@
     <channel>
         <title>omux</title>
         <item>
+            <title>0.12.6</title>
+            <pubDate>Sun, 22 Nov 2026 10:45:27 +0300</pubDate>
+            <link>https://omux.app</link>
+            <sparkle:version>24</sparkle:version>
+            <sparkle:shortVersionString>0.12.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
+<h3>Security</h3>
+<ul>
+<li><strong>Text in a reply can no longer become part of the conversation page.</strong> A reply, a thinking block or an image record could carry markup that the page drew as real elements, and a click on them could add an MCP server, add a permission rule or type a command into the session. The text could come from anything the agent read: a web page, a README, an issue. Replies now pass an allowlist, pictures are checked where they are read and where they are drawn, and omux only acts on a request from the page when it matches what omux itself put there. Thanks to Yusuf Karan (#73).</li>
+</ul>
+</body></html>
+]]></description>
+            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.6/omux-0.12.6.zip" length="34854299" type="application/octet-stream" sparkle:edSignature="n6F3dRoSBIr2m/jdSYbAWKBGPQoqz0mLPJoVqOD7Jp0ozXOK74uIWm8lUgLs8QKRUAv8q12rnKQDOiccqsvmBQ=="/>
+        </item>
+        <item>
             <title>0.12.5</title>
             <pubDate>Sat, 21 Nov 2026 21:06:37 +0300</pubDate>
             <link>https://omux.app</link>
@@ -61,37 +78,6 @@
 </body></html>
 ]]></description>
             <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.4/omux-0.12.4.zip" length="34804810" type="application/octet-stream" sparkle:edSignature="3o3Wo50+N9q2ynQcTlIebfeQ7B6xlZaefXBQNgXv+xioFnhIzdzaLydHft6mj1Am561w+PLX/vuevSIm7X6gBw=="/>
-        </item>
-        <item>
-            <title>0.12.3</title>
-            <pubDate>Wed, 18 Nov 2026 19:42:14 +0300</pubDate>
-            <link>https://omux.app</link>
-            <sparkle:version>21</sparkle:version>
-            <sparkle:shortVersionString>0.12.3</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description><![CDATA[<html><body style="font: 13px -apple-system, sans-serif">
-<h3>Added</h3>
-<ul>
-<li><strong>Home.</strong> The first tile on the project rail opens a screen with the sessions that need you and the ones at work, a to-do list whose items can be sent to a session or a new one, this week's prompts and tokens per day, per project and per model across Claude Code and Codex, both agents' plan limits and pull requests. The share button on the week's figures makes a picture of today or the week, sized for X at 1600×900 with omux.app in its corner, to copy or save; project names stay off it unless you tick them. Settings › General › Home turns it off.</li>
-<li><strong>Links can open in your default browser.</strong> Settings › General › Links chooses where a web link clicked in a conversation or a terminal opens: omux's browser beside the session, as before, or the browser macOS opens links with.</li>
-</ul>
-<h3>Changed</h3>
-<ul>
-<li><strong>The request stays at the top of a long turn.</strong> While you scroll through a turn card, its request is held at the top of the conversation, so the card's sides end in its own rounded top instead of running off the page like a window border. It slides away as the card ends; a request longer than a few lines isn't held.</li>
-<li><strong>The panels are cards.</strong> The session list, the conversation and the right panel are each a rounded card with a faint edge on a darker backdrop, like the tiles of the project rail; their header rows sit on the backdrop above them.</li>
-<li><strong>The rail's spacing is even.</strong> Tiles have the same margin on both sides, and the limits ring, history and settings at the foot are the same width.</li>
-<li><strong>Idle projects fold back when the pointer leaves the rail.</strong> Listed from their "+N" tile, they stay only while the pointer is on the rail; an idle project that is on show keeps the list open.</li>
-<li><strong>Starting Claude Code is one line.</strong> The card with the terminal's last lines is a single quiet line above the message box, and it shows only after a message was sent to a session that has to start. A stopped session no longer shows it.</li>
-</ul>
-<h3>Fixed</h3>
-<ul>
-<li><strong>A message sent to a stopped session arrives.</strong> A session whose agent had ended could show "Starting Claude Code" and hold the message; omux now checks whether the agent is still there before it waits, and starts it again when it isn't.</li>
-<li><strong>Allow answers the prompt it is shown for.</strong> The Allow and Deny buttons checked a stale reading of whether the agent was running and could do nothing.</li>
-</ul>
-</body></html>
-]]></description>
-            <enclosure url="https://github.com/onurozcan/omux/releases/download/v0.12.3/omux-0.12.3.zip" length="34323710" type="application/octet-stream" sparkle:edSignature="clgLP9yyITp14grNYDEP1yPv9/kgluhzdtzEok9wtNDwDiOVl+PN4XQd96YM1dnKnMld3hYOo8cDo6aSs8F6BA=="/>
         </item>
     </channel>
 </rss>
