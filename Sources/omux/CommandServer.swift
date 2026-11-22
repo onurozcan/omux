@@ -1,19 +1,40 @@
+import CryptoKit
 import Foundation
 import OmuxCLIProtocol
-import Security
 
 /// Serves the `omux` command line tool. The socket lives in a folder only this user can
 /// open, each connection must come from this user, and each request must carry the token
-/// that only sessions started by this app have in their environment.
+/// of the session it says it comes from, which only that session has in its environment.
 final class CommandServer: @unchecked Sendable {
     static let shared = CommandServer()
 
-    /// Fresh on every launch; sessions get it as OMUX_TOKEN.
-    let token: String = {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return bytes.map { String(format: "%02x", $0) }.joined()
-    }()
+    /// Fresh on every launch; never leaves the app.
+    private let secret = SymmetricKey(size: .bits256)
+
+    /// The session's own token, given to it as OMUX_TOKEN. One token for every session let a
+    /// session pass for another by changing OMUX_TAB_ID to an id `omux list` shows, and then
+    /// type into that session and steer the sessions it started. A token tied to the id
+    /// proves the id: another session's token can't be made from one's own.
+    func token(for session: String) -> String {
+        HMAC<SHA256>.authenticationCode(for: Data(session.utf8), using: secret).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Whether `request` carries the token of the session it names, compared in constant time.
+    func authenticates(_ request: CLIRequest) -> Bool {
+        guard let mac = Self.bytes(hex: request.token) else { return false }
+        return HMAC<SHA256>.isValidAuthenticationCode(mac, authenticating: Data(request.from.utf8), using: secret)
+    }
+
+    private static func bytes(hex: String) -> Data? {
+        let digits = Array(hex.utf8)
+        guard digits.count == 64 else { return nil }
+        var data = Data(capacity: 32)
+        for index in stride(from: 0, to: 64, by: 2) {
+            guard let byte = UInt8(String(decoding: digits[index...index + 1], as: UTF8.self), radix: 16) else { return nil }
+            data.append(byte)
+        }
+        return data
+    }
 
     private(set) var socketPath: String?
     private var listenFD: Int32 = -1
@@ -99,7 +120,7 @@ final class CommandServer: @unchecked Sendable {
         guard let line = readLine(client) else { return }
         let response: CLIResponse
         if let request = try? JSONDecoder().decode(CLIRequest.self, from: line) {
-            if request.token != token {
+            if !authenticates(request) {
                 // Decided here, before anything in the app is touched.
                 response = .failure("bad token; run omux inside a session omux started")
             } else {
