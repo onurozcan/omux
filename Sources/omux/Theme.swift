@@ -42,8 +42,48 @@ enum Theme: String, CaseIterable, Identifiable {
     static var darkThemes: [Theme] { allCases.filter { !$0.isLight } }
     static var lightThemes: [Theme] { allCases.filter(\.isLight) }
 
+    /// Suggests the matching light theme for a dark theme (and vice versa) when enabling
+    /// system appearance matching for the first time.
+    var counterpart: Theme {
+        switch self {
+        case .solarizedDark: return .solarizedLight
+        case .solarizedLight: return .solarizedDark
+        case .catppuccin: return .catppuccinLatte
+        case .catppuccinLatte: return .catppuccin
+        case .midnight: return .githubLight
+        case .githubLight: return .midnight
+        default: return isLight ? .black : .light
+        }
+    }
+
+    static func resolve(
+        followSystem: Bool,
+        manual: String,
+        dark: String,
+        light: String,
+        systemIsDark: Bool
+    ) -> Theme {
+        if followSystem {
+            if systemIsDark {
+                let candidate = Theme(rawValue: dark)
+                return (candidate?.isLight == false ? candidate : nil) ?? .black
+            } else {
+                let candidate = Theme(rawValue: light)
+                return (candidate?.isLight == true ? candidate : nil) ?? .light
+            }
+        }
+        return Theme(rawValue: manual) ?? .black
+    }
+
     static var current: Theme {
-        Theme(rawValue: UserDefaults.standard.string(forKey: Prefs.theme) ?? "") ?? .black
+        let d = UserDefaults.standard
+        return resolve(
+            followSystem: d.bool(forKey: Prefs.followSystemAppearance),
+            manual: d.string(forKey: Prefs.theme) ?? Theme.black.rawValue,
+            dark: d.string(forKey: Prefs.darkTheme) ?? Theme.black.rawValue,
+            light: d.string(forKey: Prefs.lightTheme) ?? Theme.light.rawValue,
+            systemIsDark: SystemAppearance.isDark(Thread.isMainThread ? NSApp?.effectiveAppearance : nil)
+        )
     }
 
     var isLight: Bool { [.light, .solarizedLight, .catppuccinLatte, .githubLight].contains(self) }
@@ -259,5 +299,38 @@ enum Fonts {
         let size = Self.size
         return (family.isEmpty ? nil : NSFont(name: family, size: size))
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+}
+
+/// Tracks macOS's system appearance (Dark / Light) independently of any window-level
+/// `preferredColorScheme` override, so views and terminals can follow the OS theme live.
+@MainActor
+final class SystemAppearance: ObservableObject {
+    static let shared = SystemAppearance()
+
+    @Published private(set) var isDark: Bool
+    private var observation: NSKeyValueObservation?
+
+    private init() {
+        isDark = Self.isDark(NSApp?.effectiveAppearance)
+        startObserving()
+    }
+
+    func startObserving() {
+        guard observation == nil, let app = NSApp else { return }
+        observation = app.observe(\.effectiveAppearance, options: [.initial, .new]) { [weak self] app, _ in
+            let dark = Self.isDark(app.effectiveAppearance)
+            Task { @MainActor [weak self] in
+                guard let self, self.isDark != dark else { return }
+                self.isDark = dark
+            }
+        }
+    }
+
+    nonisolated static func isDark(_ appearance: NSAppearance?) -> Bool {
+        guard let appearance else {
+            return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        }
+        return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 }
