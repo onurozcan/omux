@@ -111,6 +111,19 @@ final class ChangesTests: XCTestCase {
         }
     }
 
+    func testListingReportsFailedAndTruncatedReads() throws {
+        let repo = try makeRepo()
+        let listed = Git.changedListing(dir: repo, base: "HEAD")
+        XCTAssertTrue(listed.ok)
+        XCTAssertFalse(listed.truncated)
+        XCTAssertFalse(Git.changedListing(dir: repo, base: "no-such-commit").ok)
+        for i in 0...300 { try "x\n".write(toFile: repo + "/new-\(i).txt", atomically: true, encoding: .utf8) }
+        let truncated = Git.changedListing(dir: repo, base: "HEAD")
+        XCTAssertTrue(truncated.ok)
+        XCTAssertTrue(truncated.truncated)
+        XCTAssertEqual(truncated.files.count, 300)
+    }
+
     func testStagedFilesShowBeforeTheFirstCommit() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).path
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -167,6 +180,23 @@ final class ChangesTests: XCTestCase {
         let marks = ["a": ViewedMarks.signature(a, blob: "x"), "b": ViewedMarks.signature(b, blob: nil)]
         XCTAssertEqual(ViewedMarks.kept(marks, files: [b], blobs: [:]), ["b": marks["b"]!])
         XCTAssertEqual(ViewedMarks.kept(marks, files: [], blobs: nil), [:])
+    }
+
+    func testViewedMarksStayWhenTheListingFailed() {
+        let a = ChangedFile(path: "a", added: 1, removed: 0, status: .modified)
+        let marks = ["a": ViewedMarks.signature(a, blob: "x")]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [], blobs: nil, ok: false), marks)
+        let wrong = ChangedFile(path: "a", added: 1, removed: 0, status: .added)
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [wrong], blobs: ["a": "y"], ok: false), marks)
+    }
+
+    func testViewedMarksStayForFilesLeftOutOfATruncatedListing() {
+        let a = ChangedFile(path: "a", added: 1, removed: 0, status: .modified)
+        let b = ChangedFile(path: "b", added: 2, removed: 0, status: .untracked)
+        let marks = ["a": ViewedMarks.signature(a, blob: "x"), "b": ViewedMarks.signature(b, blob: "y")]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [a], blobs: ["a": "x"], truncated: true), marks)
+        // A listed file still loses its mark when its change moved.
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [a], blobs: ["a": "z"], truncated: true), ["b": marks["b"]!])
     }
 
     func testViewedLabel() {

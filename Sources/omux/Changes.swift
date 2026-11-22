@@ -17,11 +17,14 @@ enum ViewedMarks {
         "\(file.statusLetter) \(file.added.map(String.init) ?? "-") \(file.removed.map(String.init) ?? "-") \(blob ?? "")"
     }
 
-    /// The marks still true for `files`. A file whose content wasn't read this time keeps its mark.
-    static func kept(_ marks: [String: String], files: [ChangedFile], blobs: [String: String]?) -> [String: String] {
+    /// The marks still true for `files`. A file whose content wasn't read this time keeps its mark;
+    /// so does every file when the listing failed, and a file left out of a truncated one.
+    static func kept(_ marks: [String: String], files: [ChangedFile], blobs: [String: String]?,
+                     ok: Bool = true, truncated: Bool = false) -> [String: String] {
+        guard ok else { return marks }
         let listed = Dictionary(files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         return marks.filter { path, mark in
-            guard let file = listed[path] else { return false }
+            guard let file = listed[path] else { return truncated }
             let blob = blobs?[path]
             if blob == nil, file.status != .deleted { return true }
             return mark == signature(file, blob: blob)
@@ -117,7 +120,8 @@ final class Changes: ObservableObject {
         let marked = tabID.flatMap { viewed[$0] } ?? [:]
         Task.detached {
             let base = Git.diffBase(dir: dir, worktree: worktree)
-            let files = Git.changedFiles(dir: dir, base: base)
+            let listing = Git.changedListing(dir: dir, base: base)
+            let files = listing.files
             // Read only while something is marked, and only for the marked files.
             let blobs = marked.isEmpty ? nil
                 : Git.blobIDs(dir: dir, paths: files.filter { marked[$0.path] != nil && $0.status != .deleted }.map(\.path))
@@ -127,7 +131,7 @@ final class Changes: ObservableObject {
                     self.base = base
                     if self.files != files { self.files = files }
                     if let tabID, tabID == self.tabID, let marks = self.viewed[tabID] {
-                        let kept = ViewedMarks.kept(marks, files: files, blobs: blobs)
+                        let kept = ViewedMarks.kept(marks, files: files, blobs: blobs, ok: listing.ok, truncated: listing.truncated)
                         if kept != marks { self.setViewed(kept, for: tabID) }
                     }
                     if worktree != nil, let tabID = self.tabID { DiffStatMonitor.shared.update(tabID, files.totals) }
