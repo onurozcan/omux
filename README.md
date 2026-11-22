@@ -117,6 +117,9 @@ Beta builds, distribution builds and tests are in [docs/building.md](docs/buildi
 | Rename / edit session | ⌘R / ⌘I |
 | Restart session | ⇧⌘R |
 | Interrupt (Ctrl-C) | ⇧⌘. |
+| Clear terminal and its scrollback | ⇧⌘K |
+| Delete to line start / line start / line end (terminal) | ⌘⌫ / ⌘← / ⌘→ |
+| Find in terminal / next / previous | ⌘F / ⌘G / ⇧⌘G |
 | Start or continue the session | ⇧⌘↩ |
 | Jump to session | ⌘K |
 | Next / previous session | ⇧⌘] / ⇧⌘[ |

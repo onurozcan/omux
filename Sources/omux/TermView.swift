@@ -177,6 +177,59 @@ final class TermView: LocalProcessTerminalView {
         return path
     }
 
+    // MARK: Keys
+
+    /// What a ⌘ key does in the focused terminal on top of SwiftTerm's own handling.
+    enum CommandKey: Equatable {
+        /// Raw bytes for the program, the shell's own line-editing control keys.
+        case send([UInt8])
+        case find(NSFindPanelAction)
+    }
+
+    /// ⌘⌫, ⌘← and ⌘→ edit the shell's line (^U, ^A, ^E); ⌘F, ⌘G and ⇧⌘G search the
+    /// scrollback. Any other modifier added leaves the key alone.
+    nonisolated static func commandKey(_ characters: String?, _ flags: NSEvent.ModifierFlags) -> CommandKey? {
+        switch (flags.intersection([.command, .option, .control, .shift]), characters?.lowercased()) {
+        case (.command, "\u{7f}"): .send([0x15])
+        case (.command, String(UnicodeScalar(NSLeftArrowFunctionKey)!)): .send([0x01])
+        case (.command, String(UnicodeScalar(NSRightArrowFunctionKey)!)): .send([0x05])
+        case (.command, "f"): .find(.showFindPanel)
+        case (.command, "g"): .find(.next)
+        case ([.command, .shift], "g"): .find(.previous)
+        default: nil
+        }
+    }
+
+    /// Takes a ⌘ key for the focused terminal before the menu sees it, so the keys work in Kitty
+    /// keyboard mode too. Called from the app's key monitor: SwiftTerm doesn't let a subclass
+    /// override its key handling. The find keys also work while the find bar has focus, the
+    /// editing keys only while the terminal itself does, so text fields keep ⌘⌫ and ⌘←.
+    static func handle(_ event: NSEvent) -> Bool {
+        guard let key = commandKey(event.charactersIgnoringModifiers, event.modifierFlags),
+              let responder = event.window?.firstResponder as? NSView,
+              let view = sequence(first: responder, next: \.superview).first(where: { $0 is TermView }) as? TermView else {
+            return false
+        }
+        switch key {
+        case .send(let bytes):
+            guard responder === view else { return false }
+            view.send(bytes)
+        case .find(let action):
+            let item = NSMenuItem()
+            item.tag = Int(action.rawValue)
+            view.performFindPanelAction(item)
+        }
+        return true
+    }
+
+    /// Empties the screen and the scrollback, then sends ^L so the shell or agent redraws.
+    /// The erase is fed to the terminal, not the program, which may not know ^L.
+    func clearHistory() {
+        feed(text: "\u{1b}[H\u{1b}[2J")
+        clearScrollback()
+        send([0x0c])
+    }
+
     // MARK: Images and files
 
     /// ⌘V with files or an image on the clipboard pastes their paths, which Claude Code and
