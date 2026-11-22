@@ -132,6 +132,69 @@ final class ChangesTests: XCTestCase {
         XCTAssertNil(Git.textLines(atPath: repo + "/link"))
     }
 
+    func testViewedMarkGoesWhenTheChangeMoves() {
+        let file = ChangedFile(path: "a", added: 3, removed: 1, status: .modified)
+        let marks = ["a": ViewedMarks.signature(file, blob: "b1")]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [file], blobs: ["a": "b1"]), marks)
+        // Same counts, other content: an edit that swapped one line for another.
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [file], blobs: ["a": "b2"]), [:])
+        let more = ChangedFile(path: "a", added: 4, removed: 1, status: .modified)
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [more], blobs: ["a": "b1"]), [:])
+        let gone = ChangedFile(path: "a", added: 0, removed: 5, status: .deleted)
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [gone], blobs: [:]), [:])
+        // A path git can no longer hash.
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [file], blobs: ["a": ""]), [:])
+    }
+
+    func testViewedMarkStaysWhileItsContentIsUnknown() {
+        let file = ChangedFile(path: "a", added: 3, removed: 1, status: .modified)
+        let marks = ["a": ViewedMarks.signature(file, blob: "b1")]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [file], blobs: nil), marks)
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [file], blobs: [:]), marks)
+    }
+
+    func testViewedMarkOnAPathGitCantHashFollowsItsCounts() {
+        let module = ChangedFile(path: "vendor", added: 1, removed: 1, status: .modified)
+        let marks = ["vendor": ViewedMarks.signature(module, blob: "")]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [module], blobs: ["vendor": ""]), marks)
+        let moved = ChangedFile(path: "vendor", added: 2, removed: 1, status: .modified)
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [moved], blobs: ["vendor": ""]), [:])
+    }
+
+    func testViewedMarksDropForFilesNoLongerListed() {
+        let a = ChangedFile(path: "a", added: 1, removed: 0, status: .untracked)
+        let b = ChangedFile(path: "b", added: 0, removed: 2, status: .deleted)
+        let marks = ["a": ViewedMarks.signature(a, blob: "x"), "b": ViewedMarks.signature(b, blob: nil)]
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [b], blobs: [:]), ["b": marks["b"]!])
+        XCTAssertEqual(ViewedMarks.kept(marks, files: [], blobs: nil), [:])
+    }
+
+    func testViewedLabel() {
+        XCTAssertNil(ViewedMarks.label(viewed: 0, of: 5))
+        XCTAssertEqual(ViewedMarks.label(viewed: 2, of: 5), "2/5 viewed")
+    }
+
+    func testBlobIDsFollowTheContent() throws {
+        let repo = try makeRepo()
+        let before = try XCTUnwrap(Git.blobIDs(dir: repo, paths: ["sub/file.txt"]))
+        XCTAssertEqual(before["sub/file.txt"]?.count, 40)
+        try "two\n".write(toFile: repo + "/sub/file.txt", atomically: true, encoding: .utf8)
+        XCTAssertNotEqual(Git.blobIDs(dir: repo, paths: ["sub/file.txt"]), before)
+        XCTAssertEqual(Git.blobIDs(dir: repo, paths: []), [:])
+    }
+
+    func testBlobIDsGiveEmptyForWhatGitCantHash() throws {
+        let repo = try makeRepo()
+        let id = try XCTUnwrap(Git.blobIDs(dir: repo, paths: ["sub/file.txt"])?["sub/file.txt"])
+        // A folder (a submodule's) and a file gone meanwhile, before and after a file that hashes.
+        XCTAssertEqual(Git.blobIDs(dir: repo, paths: ["sub", "sub/file.txt", "missing"]),
+                       ["sub": "", "sub/file.txt": id, "missing": ""])
+    }
+
+    func testBlobIDsAreUnknownWhenGitDoesNotRun() {
+        XCTAssertNil(Git.blobIDs(dir: "/nonexistent-\(UUID().uuidString)", paths: ["a"]))
+    }
+
     @MainActor
     private func waitUntil(timeout: Duration = .seconds(10), _ condition: () -> Bool) async throws {
         let end = ContinuousClock.now + timeout

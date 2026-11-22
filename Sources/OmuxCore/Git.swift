@@ -268,6 +268,23 @@ public enum Git {
         return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
+    /// The blob id of each file's current content in `dir`, in one git call while all of them
+    /// hash. "" for a path git can't hash (a folder, a submodule, a file removed meanwhile);
+    /// nil when git didn't run (timed out, the machine unreachable).
+    public static func blobIDs(dir: String, paths: [String]) -> [String: String]? {
+        guard !paths.isEmpty else { return [:] }
+        let r = run(["hash-object", "--no-filters", "--"] + paths, in: dir, timeout: readLimit)
+        let ids = r.out.split(whereSeparator: \.isNewline).map(String.init)
+        var all = Dictionary(zip(paths, ids), uniquingKeysWith: { first, _ in first })
+        if r.ok, ids.count == paths.count { return all }
+        // git hashes the paths in order and stops with 128 at the first it can't: that one
+        // gets "", and the ones after it go again.
+        guard r.status == 128, ids.count < paths.count,
+              let rest = blobIDs(dir: dir, paths: Array(paths[(ids.count + 1)...])) else { return nil }
+        all[paths[ids.count]] = ""
+        return all.merging(rest) { first, _ in first }
+    }
+
     private static func emptyTree(_ dir: String) -> String? {
         let r = run(["hash-object", "-t", "tree", "/dev/null"], in: dir, timeout: readLimit)
         return r.ok ? r.out.trimmingCharacters(in: .whitespacesAndNewlines) : nil
