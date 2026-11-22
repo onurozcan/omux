@@ -1000,14 +1000,18 @@ public final class SessionTranscript {
                     list.append(block)
                 }
                 awaitingThumbnails = awaiting
+                // Items keep their place, so only the ones that changed are re-encoded. A rebuilt
+                // block starts at revision 0: it takes the revision of the block in its place
+                // first, so an unchanged item compares equal however often that block changed
+                // before, and `commit` moves the revision of only the ones that differ.
+                var touched: Set<Int> = []
+                for index in list.indices where index < blocks.count {
+                    list[index].rev = blocks[index].rev
+                    if list[index] != blocks[index] { touched.insert(index) }
+                }
                 if list != blocks {
-                    // Items keep their place, so only the ones that changed are re-encoded.
-                    var touched: Set<Int> = []
-                    for index in list.indices where index < blocks.count && list[index] != blocks[index] { touched.insert(index) }
-                    var merged = list
-                    for index in touched { merged[index].rev = blocks[index].rev }
-                    promptCount = merged.filter { $0.kind == .user }.count
-                    commit(merged, touched: touched)
+                    promptCount = list.filter { $0.kind == .user }.count
+                    commit(list, touched: touched)
                 }
                 // Echoes and notes take the next id after the items.
                 next = blocks.count
