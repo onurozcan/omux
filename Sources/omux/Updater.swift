@@ -23,6 +23,8 @@ final class Updater: ObservableObject {
     /// The version Sparkle is about to install. Set just before it asks omux to quit and relaunch,
     /// so the quit confirmation can say why.
     var installingVersion: String?
+    /// The newer version Sparkle's last check found, until a check finds none or the user skips it.
+    @Published private(set) var availableVersion: String?
     private var observations: [NSKeyValueObservation] = []
     private let delegate = Delegate()
 
@@ -60,6 +62,20 @@ final class Updater: ObservableObject {
             let version = item.displayVersionString
             MainActor.assumeIsolated { Updater.shared.installingVersion = version }
         }
+
+        func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+            let version = item.displayVersionString
+            MainActor.assumeIsolated { Updater.shared.availableVersion = version }
+        }
+
+        func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+            MainActor.assumeIsolated { Updater.shared.availableVersion = nil }
+        }
+
+        func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate updateItem: SUAppcastItem, state: SPUUserUpdateState) {
+            guard choice == .skip else { return }
+            MainActor.assumeIsolated { Updater.shared.availableVersion = nil }
+        }
     }
 }
 
@@ -69,6 +85,20 @@ struct CheckForUpdatesButton: View {
     var body: some View {
         Button("Check for Updates…") { updater.check() }
             .disabled(!updater.canCheck)
+    }
+}
+
+/// Shown beside the settings button once Sparkle has found a newer version; opens its update window.
+struct UpdateAvailableButton: View {
+    @ObservedObject private var updater = Updater.shared
+    var font: Font = .system(size: 11.5, weight: .medium)
+
+    var body: some View {
+        if let version = updater.availableVersion {
+            Button { updater.check() } label: { Image(systemName: "arrow.down.circle").font(font) }
+                .help("Update to omux \(version)")
+                .accessibilityLabel("Update to omux \(version)")
+        }
     }
 }
 
