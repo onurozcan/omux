@@ -396,11 +396,16 @@ struct TranscriptPanel: View {
             if let id = message["id"] as? String, let agent = agents.agents[tabID]?.first(where: { $0.id == id }) {
                 store.openAgentTranscript(agent, in: tabID)
             }
+        // The page draws what agents and tools wrote, so what it asks for is checked against
+        // what omux put on it: a message from it is a request, not the user's word.
         case "send":
-            if let text = message["text"] as? String { send(text) }
+            // "Send again" on one of the user's own prompts: nothing else is sent as theirs.
+            if let text = message["text"] as? String, model.blocks.contains(where: { $0.kind == .user && $0.text == text }) { send(text) }
         case "manage":
-            // The real command, which opens the agent's dialog on the terminal.
+            // The real command, which opens the agent's dialog on the terminal: the one an
+            // overview on the page carries, and no other.
             if let command = message["command"] as? String, command.hasPrefix("/"), !command.contains(" "),
+               model.blocks.contains(where: { $0.info?.command == command }),
                store.sendText(command, to: tabID, submit: true) {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { TerminalPeek.shared.show(tabID, store: store, automatic: true) }
             }
@@ -428,7 +433,9 @@ struct TranscriptPanel: View {
     /// uninstall a plugin, add or remove a permission rule. Through the agent's own command line
     /// or its settings files, then the overview is redrawn.
     private func configure(_ message: [String: Any]) {
-        guard let action = message["action"] as? String, let blockID = message["block"] as? Int else { return }
+        guard let action = message["action"] as? String, let blockID = message["block"] as? Int,
+              model.blocks.indices.contains(blockID), let shown = model.blocks[blockID].info,
+              Self.offers(shown, action: action, message: message) else { return }
         if action == "machines-open" {
             UserDefaults.standard.set(SettingsView.Pane.machines.rawValue, forKey: SettingsView.paneKey)
             openSettings()
@@ -544,6 +551,28 @@ struct TranscriptPanel: View {
             let firstLine = output.split(separator: "\n").first.map(String.init) ?? (ok ? "Done" : "Failed")
             model.note((ok ? "" : "Failed: ") + (firstLine.count > 200 ? String(firstLine.prefix(200)) + "…" : firstLine))
             refresh(overviewKind, block: blockID, project: project)
+        }
+    }
+
+    /// Whether an overview omux drew offers `action`: through its add form, its extra button, or
+    /// a button on the row the message names. These actions add MCP servers, which are commands
+    /// that run, and change what an agent may do without asking, so the page can only ask for
+    /// what was put on it. Markup that got onto the page some other way names an overview that
+    /// isn't there, or a row it doesn't have.
+    static func offers(_ overview: AgentConfig.Overview, action: String, message: [String: Any]) -> Bool {
+        switch action {
+        case "mcp-add": return overview.form == "mcp"
+        case "perm-add": return overview.form == "permission"
+        case "machines-open", "mcp-import": return overview.actionID == action
+        default: break
+        }
+        // A row's button: "mcp-remove" is "remove" on a row of the servers' overview.
+        let verb = action.split(separator: "-", maxSplits: 1).last.map(String.init) ?? action
+        let arg = message["arg"] as? String ?? ""
+        return overview.rows.contains { row in
+            guard row.actions.contains(verb), row.arg == arg else { return false }
+            if action.hasPrefix("perm-") { return row.name == message["kind"] as? String && row.detail == message["rule"] as? String }
+            return row.name == message["name"] as? String
         }
     }
 

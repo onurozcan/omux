@@ -65,9 +65,25 @@
     }
   }
 
+  // Pictures reach the page as data URLs omux made itself. The string lands in an attribute,
+  // and a record holds whatever its writer put there (a tool's result, a transcript copied
+  // from another machine), so anything that isn't exactly such a URL isn't drawn.
+  const pictureURL = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+  function pictureHTML(src, cls, alt) {
+    return pictureURL.test(src) ? `<img class="${cls}" src="${esc(src)}" alt="${esc(alt)}">` : '';
+  }
+
   // MARK: Markdown. No raw HTML from the model, highlighted code, links opened by the app.
   const renderer = {
     html(token) { return esc(token.text || token.raw || ''); },
+    // The alt text is the model's, and marked hands it over as written: a quote in it ended
+    // the attribute, and what followed was markup. Nothing loads from the network here either
+    // (see the page's policy), so a picture that isn't inline shows as a link to it.
+    image(token) {
+      const href = token.href || '', alt = esc(token.text || '');
+      if (pictureURL.test(href)) return `<img src="${esc(href)}" alt="${alt}">`;
+      return `<a href="${esc(href)}">${alt || esc(href)}</a>`;
+    },
     code(token) {
       const lang = (token.lang || '').trim().split(/\s+/)[0];
       let body;
@@ -82,8 +98,51 @@
   };
   marked.use({ renderer, gfm: true, breaks: false });
 
+  // What a reply may be made of once marked is done with it: structure, emphasis, code and
+  // links. The renderer above already escapes what the model wrote as markup; this is the
+  // second lock, so that a way past it leaves text on the page and not an element. An element
+  // could carry the attributes this page's own clicks listen for (data-manage, a form of
+  // class info-form), cover the page with a style, and so act as the user on the next click.
+  const replyTags = {
+    P: [], BR: [], HR: [], EM: [], STRONG: [], DEL: [], BLOCKQUOTE: [], UL: [], OL: ['start'], LI: [],
+    H1: [], H2: [], H3: [], H4: [], H5: [], H6: [], TABLE: [], THEAD: [], TBODY: [], TR: [], TH: ['align'], TD: ['align'],
+    PRE: [], CODE: ['class'], SPAN: ['class'], A: ['href', 'title'], IMG: ['src', 'alt'],
+    INPUT: ['type', 'checked', 'disabled'], BUTTON: ['class', 'type']
+  };
+  // The classes highlight.js writes: hljs-keyword, language-xml, function_.
+  const codeClass = /^(?:hljs[\w-]*|language-[\w+#.-]+|\w+_)$/;
+  function sanitize(html) {
+    // A template's content is inert: nothing in it loads or runs while it is looked over.
+    const t = document.createElement('template');
+    t.innerHTML = html;
+    const comments = document.createTreeWalker(t.content, NodeFilter.SHOW_COMMENT);
+    for (let c = comments.nextNode(), next; c; c = next) { next = comments.nextNode(); c.remove(); }
+    for (const node of Array.from(t.content.querySelectorAll('*'))) {
+      // Gone with an element above it.
+      if (!t.content.contains(node)) continue;
+      // The name is the reply's to choose, so only the list's own entries count for it.
+      const tag = node.tagName, allowed = Object.hasOwn(replyTags, tag) ? replyTags[tag] : null;
+      // Of these three only what the renderer itself writes: an inline picture, a task's
+      // checkbox, a code block's Copy button.
+      const known = allowed
+        && (tag !== 'IMG' || pictureURL.test(node.getAttribute('src') || ''))
+        && (tag !== 'INPUT' || node.getAttribute('type') === 'checkbox')
+        && (tag !== 'BUTTON' || (node.className === 'copy' && node.getAttribute('type') === 'button'));
+      if (!known) { node.replaceWith(document.createTextNode(node.textContent)); continue; }
+      for (const name of node.getAttributeNames()) {
+        const value = node.getAttribute(name);
+        const keep = allowed.includes(name)
+          && (name !== 'class' || tag === 'BUTTON' || value.split(/\s+/).filter(Boolean).every(c => codeClass.test(c)))
+          && (name !== 'href' || /^(?:https?:|mailto:)/i.test(value));
+        if (!keep) node.removeAttribute(name);
+      }
+      if (tag === 'INPUT') node.setAttribute('disabled', '');
+    }
+    return t.innerHTML;
+  }
+
   function markdown(text) {
-    try { return marked.parse(text); } catch (e) { return `<p>${esc(text)}</p>`; }
+    try { return sanitize(marked.parse(text)); } catch (e) { return `<p>${esc(text)}</p>`; }
   }
 
   // Paths like src/app/layout.tsx or ./build.sh:12 become links that open the file preview.
@@ -222,7 +281,7 @@
     } else {
       body = esc(text);
     }
-    const pictures = (row.images || []).map(src => `<img class="result-image" src="${src}" alt="image from ${esc(row.name)}">`).join('');
+    const pictures = (row.images || []).map(src => pictureHTML(src, 'result-image', 'image from ' + row.name)).join('');
     return `<div class="output${row.isError ? ' error' : ''}">${pictures ? `<div class="result-images">${pictures}</div>` : ''}${body}</div>`;
   }
 
@@ -310,7 +369,7 @@
   function queueHint() { return queueReadsMidTurn ? 'read once the running tool call returns' : 'sent when the turn ends'; }
   function userHTML(block) {
     if (block.pending === 'removed' || (isQueued(block) && nestQueued)) return `<div class="queued-slot" hidden></div>`;
-    const images = (block.images || []).map(src => `<img class="thumb" src="${src}" alt="pasted image">`).join('');
+    const images = (block.images || []).map(src => pictureHTML(src, 'thumb', 'pasted image')).join('');
     // A prompt just sent looks like any other prompt; its record replaces it in place when it lands.
     const state = isQueued(block) ? `<div class="pending queued"><span class="dot pulse"></span>Queued · ${queueHint()}</div>` : '';
     return `<div class="user${block.pending && block.pending !== 'sent' ? ' is-pending' : ''}">` +
