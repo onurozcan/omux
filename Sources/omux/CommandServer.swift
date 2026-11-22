@@ -90,10 +90,6 @@ final class CommandServer: @unchecked Sendable {
         // A session started while this request is answered (omux new) would otherwise inherit
         // the connection, keep it open, and leave the tool waiting for the end of the reply.
         _ = fcntl(client, F_SETFD, FD_CLOEXEC)
-        // A tool that hung up before the reply would make the write raise SIGPIPE, which kills
-        // the app and every session in it. Set here, not ignored app-wide: shells inherit that.
-        var on: Int32 = 1
-        _ = setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         var uid = uid_t(0), gid = gid_t(0)
         guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { return }
         guard let line = readLine(client) else { return }
@@ -110,9 +106,13 @@ final class CommandServer: @unchecked Sendable {
         }
         guard var data = try? JSONEncoder().encode(response) else { return }
         data.append(UInt8(ascii: "\n"))
+        // A tool that hung up before the reply would make a plain write raise SIGPIPE, which
+        // kills the app and every session in it; SIGPIPE isn't ignored app-wide because shells
+        // inherit that. Not SO_NOSIGPIPE either: a socket whose peer left before accept()
+        // refuses the option with EINVAL, and that is the case it would be there for.
         var sent = 0
         while sent < data.count {
-            let n = data.withUnsafeBytes { raw in write(client, raw.baseAddress! + sent, data.count - sent) }
+            let n = data.withUnsafeBytes { raw in Darwin.send(client, raw.baseAddress! + sent, data.count - sent, MSG_NOSIGNAL) }
             guard n > 0 else { return }
             sent += n
         }
