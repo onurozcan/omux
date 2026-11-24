@@ -1144,7 +1144,7 @@ final class Store: ObservableObject {
 
     /// A project's folder may be typed as "~/app" or "/Users/me/app/"; Finder and agents
     /// report "/Users/me/app".
-    static func samePath(_ directory: String?, _ path: String) -> Bool {
+    nonisolated static func samePath(_ directory: String?, _ path: String) -> Bool {
         func normalized(_ p: String) -> String { ((p as NSString).expandingTildeInPath as NSString).standardizingPath }
         return directory.map(normalized) == normalized(path)
     }
@@ -1640,6 +1640,14 @@ final class Store: ObservableObject {
         makeTerminal(tab: group.tabs[0], group: group)
         selectedTabID = group.tabs[0].id
         if folder == nil { renamingID = group.id }
+    }
+
+    /// Projects brought over from another app. Their sessions stay stopped, as restored ones do,
+    /// until selected or played: a terminal for each of dozens of projects at once isn't wanted.
+    func importGroups(_ new: [TabGroup]) {
+        // Before the groups are published, so a view looking at a session finds it stopped.
+        for tab in new.flatMap(\.tabs) { runtime[tab.id] = TabRuntime(exited: true) }
+        groups.append(contentsOf: new)
     }
 
     /// Asks for the project's folder when it has none; false when the user cancelled.

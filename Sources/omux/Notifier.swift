@@ -17,7 +17,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// The macOS alert sounds, by name, plus "Default".
-    static let sounds = ["Default", "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
+    nonisolated static let sounds = ["Default", "Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
 
     /// Plays the sound chosen in Settings. Sound-only notifications are just this.
     func playSound() {
