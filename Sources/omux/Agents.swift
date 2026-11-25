@@ -71,8 +71,10 @@ final class AgentMonitor: ObservableObject {
             let rt = store.runtime[entry.tab.id] ?? TabRuntime()
             let active = !rt.exited && (rt.busy || rt.statusState == .working || rt.statusState == .blocked)
             guard active || agents[entry.tab.id] != nil else { continue }
-            sessions.append(.init(tab: entry.tab.id, session: entry.tab.claudeSessionID.uuidString.lowercased(), active: active,
-                                  project: store.claudeProjectFolderURL(for: entry.tab.id)))
+            // The conversation the session's `claude` is on, which a /resume or a `claude` typed
+            // into the shell takes away from the one omux started it with.
+            let conversation = store.claudeConversation(for: entry.tab.id)
+            sessions.append(.init(tab: entry.tab.id, session: conversation.session, active: active, project: conversation.project))
             children[entry.tab.id] = rt.statusChildren
             if rt.statusState == .working || rt.statusState == .blocked { working.insert(entry.tab.id) }
         }

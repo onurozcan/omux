@@ -2,6 +2,12 @@
 
 All notable changes to omux are listed here. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- **Subagents follow the conversation `claude` is on.** The Agents tab and the sidebar count looked for subagents under the conversation omux started the session with, so after a `claude --resume` typed into the session, or a /resume or /clear, they showed "No agents in this session" while agents ran. They now follow the running `claude`, as the transcript view does. (#88)
+- **The running `claude` is found when it runs with `CLAUDE_CONFIG_DIR` set.** Claude Code then keeps its process record in that folder instead of `~/.claude`, where omux looked, so the transcript view stayed on the session's first conversation. omux now reads the folder from the process's environment. (#88)
+
 ## [0.12.6] - 2026-11-22
 
 ### Security
