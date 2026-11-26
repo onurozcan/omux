@@ -126,7 +126,8 @@ final class Store: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        let saved = Persistence.loadWorkspace()
+        let loaded = Persistence.loadWorkspace()
+        let saved = loaded.workspace
         var groups = saved?.groups ?? []
         if groups.isEmpty {
             groups = [TabGroup(name: "Default", tabs: [TabItem(name: "Session 1")])]
@@ -185,6 +186,12 @@ final class Store: ObservableObject {
             self?.save()
         }
         if saved == nil { save() }
+        if !loaded.kept.isEmpty {
+            let paths = loaded.kept.map { ($0.path as NSString).abbreviatingWithTildeInPath }
+            Notices.shared.post("omux couldn't read all of its saved projects",
+                                detail: "It opened what it could and kept the file as it was: " + paths.joined(separator: ", "),
+                                isError: true)
+        }
         // Fresh installs (no workspace yet) get the welcome sheet; updates don't. It stays under
         // Help › Welcome to omux. A beat later, so the window is there to present it on.
         if !UserDefaults.standard.bool(forKey: Prefs.welcomed) {

@@ -166,7 +166,41 @@ struct TabGroup: Identifiable, Codable, Hashable {
         pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
         icon = try c.decodeIfPresent(String.self, forKey: .icon)
         host = try c.decodeIfPresent(String.self, forKey: .host)
-        tabs = try c.decodeIfPresent([TabItem].self, forKey: .tabs) ?? []
+        tabs = try c.decodeIfPresent(LenientList<TabItem>.self, forKey: .tabs)?.elements ?? []
+    }
+}
+
+/// Counts what a decode left out, handed to the decoder in `userInfo[.skippedElements]`.
+final class SkippedElements {
+    var count = 0
+}
+
+extension CodingUserInfoKey {
+    static let skippedElements = CodingUserInfoKey(rawValue: "omux.skippedElements")!
+}
+
+/// Decodes a list one element at a time: an element that can't be read is left out instead of
+/// failing the list and everything that holds it, so one bad session doesn't take every project
+/// with it. Left-out elements are counted in the decoder's `SkippedElements`, so the file can be
+/// kept before a save replaces it.
+struct LenientList<Element: Decodable>: Decodable {
+    var elements: [Element] = []
+
+    init(from decoder: Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        while !c.isAtEnd {
+            if let element = try? c.decode(Element.self) {
+                elements.append(element)
+                continue
+            }
+            (decoder.userInfo[.skippedElements] as? SkippedElements)?.count += 1
+            // A failed decode doesn't move the container on; this does. Stop if even that fails.
+            guard (try? c.decode(Skipped.self)) != nil else { break }
+        }
+    }
+
+    private struct Skipped: Decodable {
+        init(from decoder: Decoder) {}
     }
 }
 
@@ -184,7 +218,7 @@ struct Workspace: Codable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        groups = try c.decodeIfPresent([TabGroup].self, forKey: .groups) ?? []
+        groups = try c.decodeIfPresent(LenientList<TabGroup>.self, forKey: .groups)?.elements ?? []
         selectedTabID = try? c.decodeIfPresent(UUID.self, forKey: .selectedTabID)
         // Layouts a newer version wrote that can't be read are dropped, not the whole workspace.
         layouts = (try? c.decodeIfPresent([String: PaneLayout].self, forKey: .layouts)) ?? [:]
@@ -231,32 +265,69 @@ enum Persistence {
         return dir
     }()
 
-    static var workspaceURL: URL { directory.appendingPathComponent("workspace.json") }
-
     /// Built with `./build.sh --beta`: a separate app, preferences and workspace.
     static let isBeta = Bundle.main.bundleIdentifier?.hasSuffix(".beta") == true
 
-    static var backupURL: URL { directory.appendingPathComponent("workspace.json.bak") }
+    static func workspaceURL(in dir: URL) -> URL { dir.appendingPathComponent("workspace.json") }
+    static func backupURL(in dir: URL) -> URL { dir.appendingPathComponent("workspace.json.bak") }
 
-    /// Falls back to the previous save if the current file is missing or unreadable.
-    static func loadWorkspace() -> Workspace? {
-        for url in [workspaceURL, backupURL] {
-            if let data = try? Data(contentsOf: url),
-               let workspace = try? JSONDecoder().decode(Workspace.self, from: data),
-               !workspace.groups.isEmpty {
-                return workspace
-            }
-        }
-        return nil
+    /// What `loadWorkspace` found.
+    struct LoadedWorkspace {
+        /// The workspace to open; nil when no file held one.
+        var workspace: Workspace?
+        /// Copies of files that couldn't be read, or only in part, kept as they were.
+        var kept: [URL] = []
     }
 
-    static func save(_ workspace: Workspace) {
+    /// Falls back to the previous save if the current file is missing or unreadable. A file that
+    /// can't be read in full is copied aside first: the saves that follow replace the workspace
+    /// and then its backup, and the projects omux couldn't read would be gone for good.
+    static func loadWorkspace(in dir: URL = directory) -> LoadedWorkspace {
+        var loaded = LoadedWorkspace()
+        for (url, name) in [(workspaceURL(in: dir), "workspace"), (backupURL(in: dir), "workspace-backup")] {
+            guard let data = try? Data(contentsOf: url), !data.isEmpty else { continue }
+            let skipped = SkippedElements()
+            let decoder = JSONDecoder()
+            decoder.userInfo[.skippedElements] = skipped
+            let workspace = try? decoder.decode(Workspace.self, from: data)
+            if workspace == nil || skipped.count > 0, let copy = keep(data, as: name, in: dir) {
+                loaded.kept.append(copy)
+            }
+            if let workspace, !workspace.groups.isEmpty {
+                loaded.workspace = workspace
+                return loaded
+            }
+        }
+        return loaded
+    }
+
+    static func save(_ workspace: Workspace, in dir: URL = directory) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(workspace) else { return }
-        if let current = try? Data(contentsOf: workspaceURL), current != data {
-            try? current.write(to: backupURL, options: .atomic)
+        if let current = try? Data(contentsOf: workspaceURL(in: dir)), current != data {
+            try? current.write(to: backupURL(in: dir), options: .atomic)
         }
-        try? data.write(to: workspaceURL, options: .atomic)
+        try? data.write(to: workspaceURL(in: dir), options: .atomic)
+    }
+
+    /// Writes `data` beside the workspace under a name with the time in it, never over another
+    /// file. A file opened again before anything was saved over it is kept once, not once per
+    /// launch. nil when it couldn't be written.
+    private static func keep(_ data: Data, as name: String, in dir: URL) -> URL? {
+        let prefix = "\(name)-unreadable-"
+        for file in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] where file.hasPrefix(prefix) {
+            let url = dir.appendingPathComponent(file)
+            if FileManager.default.contents(atPath: url.path) == data { return url }
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let stamp = formatter.string(from: Date())
+        for attempt in 1...20 {
+            let url = dir.appendingPathComponent("\(prefix)\(stamp)\(attempt == 1 ? "" : "-\(attempt)").json")
+            if (try? data.write(to: url, options: .withoutOverwriting)) != nil { return url }
+        }
+        return nil
     }
 }
