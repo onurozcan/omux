@@ -338,12 +338,19 @@ struct FilePreview: View {
     let url: URL
     /// Closes the preview, where the panel can show something else in its place.
     var onClose: (() -> Void)?
+    @ObservedObject private var systemAppearance = SystemAppearance.shared
     @AppStorage(Prefs.previewWrapLines) private var wrapLines = true
     @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
+    @AppStorage(Prefs.followSystemAppearance) private var followSystem = false
+    @AppStorage(Prefs.darkTheme) private var darkThemeName = Theme.black.rawValue
+    @AppStorage(Prefs.lightTheme) private var lightThemeName = Theme.light.rawValue
     /// Markdown shows rendered until the pencil switches it to the editor.
     @State private var editingMarkdown = false
 
-    private var theme: Theme { Theme(rawValue: themeName) ?? .black }
+    private var theme: Theme {
+        Theme.resolve(followSystem: followSystem, manual: themeName, dark: darkThemeName, light: lightThemeName,
+                      systemIsDark: systemAppearance.isDark)
+    }
 
     private static let images: Set<String> = ["png", "jpg", "jpeg", "heic", "bmp", "tiff", "tif", "webp", "svg"]
     private static let media: Set<String> = ["mp4", "mov", "m4v", "mp3", "m4a", "wav", "aac", "aiff"]

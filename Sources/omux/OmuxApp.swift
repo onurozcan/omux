@@ -8,8 +8,17 @@ import UniformTypeIdentifiers
 struct OmuxApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = Store.shared
+    @ObservedObject private var systemAppearance = SystemAppearance.shared
     @AppStorage(Prefs.accent) private var accent = "neutral"
     @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
+    @AppStorage(Prefs.followSystemAppearance) private var followSystem = false
+    @AppStorage(Prefs.darkTheme) private var darkThemeName = Theme.black.rawValue
+    @AppStorage(Prefs.lightTheme) private var lightThemeName = Theme.light.rawValue
+
+    private var theme: Theme {
+        Theme.resolve(followSystem: followSystem, manual: themeName, dark: darkThemeName, light: lightThemeName,
+                      systemIsDark: systemAppearance.isDark)
+    }
 
     init() { Prefs.importReleaseSettingsIfBeta() }
 
@@ -17,7 +26,7 @@ struct OmuxApp: App {
         Window(Persistence.isBeta ? "omux Beta" : "omux", id: "main") {
             ContentView()
                 .environmentObject(store)
-                .tint(Color(nsColor: Appearance.accent(accent, theme: Theme(rawValue: themeName) ?? .black)))
+                .tint(Color(nsColor: Appearance.accent(accent, theme: theme)))
                 .frame(minWidth: 720, minHeight: 420)
         }
         .defaultSize(width: 1240, height: 780)
@@ -38,6 +47,9 @@ enum Prefs {
     static let sidebarLayout = "sidebarLayout"
     static let usageInterval = "usageInterval"
     static let theme = "theme"
+    static let followSystemAppearance = "followSystemAppearance"
+    static let darkTheme = "darkTheme"
+    static let lightTheme = "lightTheme"
     static let autoResume = "autoResume"
     static let showFiles = "showFiles"
     static let showSidebar = "showSidebar"
@@ -79,7 +91,8 @@ enum Prefs {
     static let transcriptBubbles = "transcriptBubbles"
     static let transcriptTimestamps = "transcriptTimestamps"
 
-    static let all = [confirmQuit, showFolderPath, usageInterval, theme, autoResume, showFiles, showSidebar, filesByDate,
+    static let all = [confirmQuit, showFolderPath, usageInterval, theme, followSystemAppearance, darkTheme, lightTheme,
+                      autoResume, showFiles, showSidebar, filesByDate,
                       filesBrowserCollapsed, previewWrapLines, panelTab, fontFamily, fontSize,
                       notifyNeedsYou, notifyDone, notifyPrograms, cliEnabled, openLinksIn, homeEnabled, playAgent, startWithoutHistory, bypassPermissions,
                       sessionView, accent, transcriptFont, transcriptSize, transcriptWidth, transcriptDensity, transcriptBubbles, transcriptTimestamps]
@@ -266,7 +279,11 @@ private struct AppearancePreview: View {
 }
 
 private struct AppearanceSettings: View {
+    @ObservedObject private var systemAppearance = SystemAppearance.shared
     @AppStorage(Prefs.theme) private var theme = Theme.black.rawValue
+    @AppStorage(Prefs.followSystemAppearance) private var followSystem = false
+    @AppStorage(Prefs.darkTheme) private var darkTheme = Theme.black.rawValue
+    @AppStorage(Prefs.lightTheme) private var lightTheme = Theme.light.rawValue
     @AppStorage(Prefs.accent) private var accent = "neutral"
     @AppStorage(Prefs.fontFamily) private var fontFamily = ""
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
@@ -279,7 +296,20 @@ private struct AppearanceSettings: View {
     @AppStorage(Prefs.transcriptTimestamps) private var transcriptTimestamps = true
     @AppStorage(Prefs.colorBlindPalette) private var colorBlindPalette = false
 
-    private var current: Theme { Theme(rawValue: theme) ?? .black }
+    private var current: Theme {
+        Theme.resolve(followSystem: followSystem, manual: theme, dark: darkTheme, light: lightTheme,
+                      systemIsDark: systemAppearance.isDark)
+    }
+
+    private var selectedDark: Theme {
+        let candidate = Theme(rawValue: darkTheme)
+        return (candidate?.isLight == false ? candidate : nil) ?? .black
+    }
+
+    private var selectedLight: Theme {
+        let candidate = Theme(rawValue: lightTheme)
+        return (candidate?.isLight == true ? candidate : nil) ?? .light
+    }
 
     var body: some View {
         Form {
@@ -288,9 +318,23 @@ private struct AppearanceSettings: View {
                     .listRowInsets(EdgeInsets())
             }
             Section("Theme") {
-                swatches("Dark", Theme.darkThemes)
-                swatches("Light", Theme.lightThemes)
-                SettingNote("Colours for terminals, the transcript view, the file editor and the window.")
+                Toggle("Match system appearance", isOn: $followSystem)
+                    .onChange(of: followSystem) { _, enabled in
+                        guard enabled else { return }
+                        let d = UserDefaults.standard
+                        let manual = Theme(rawValue: theme) ?? .black
+                        if d.string(forKey: Prefs.darkTheme) == nil {
+                            darkTheme = (manual.isLight ? manual.counterpart : manual).rawValue
+                        }
+                        if d.string(forKey: Prefs.lightTheme) == nil {
+                            lightTheme = (manual.isLight ? manual : manual.counterpart).rawValue
+                        }
+                    }
+                swatches(followSystem && systemAppearance.isDark ? "Dark — Active" : "Dark", Theme.darkThemes, isLightGroup: false)
+                swatches(followSystem && !systemAppearance.isDark ? "Light — Active" : "Light", Theme.lightThemes, isLightGroup: true)
+                SettingNote(followSystem
+                    ? "Switches automatically between your chosen Dark and Light themes as macOS changes appearance."
+                    : "Colours for terminals, the transcript view, the file editor and the window.")
             }
             Section("Accent") {
                 Picker("Accent colour", selection: $accent) {
@@ -363,12 +407,21 @@ private struct AppearanceSettings: View {
     }
 
     /// A row of theme cards: background, chrome strip, sample text and six palette colours.
-    private func swatches(_ title: String, _ themes: [Theme]) -> some View {
+    private func swatches(_ title: String, _ themes: [Theme], isLightGroup: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 5), spacing: 6) {
                 ForEach(themes) { option in
-                    Button { theme = option.rawValue } label: {
+                    let isSelected = followSystem
+                        ? (isLightGroup ? option == selectedLight : option == selectedDark)
+                        : option == current
+                    Button {
+                        if followSystem {
+                            if isLightGroup { lightTheme = option.rawValue } else { darkTheme = option.rawValue }
+                        } else {
+                            theme = option.rawValue
+                        }
+                    } label: {
                         VStack(alignment: .leading, spacing: 0) {
                             HStack(spacing: 4) {
                                 Text("Aa").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color(nsColor: option.foreground))
@@ -390,7 +443,7 @@ private struct AppearanceSettings: View {
                                 .background(Color(nsColor: option.chrome))
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(option == current ? Color.accent : Color.primary.opacity(0.12), lineWidth: option == current ? 2 : 1))
+                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(isSelected ? Color.accent : Color.primary.opacity(0.12), lineWidth: isSelected ? 2 : 1))
                     }
                     .buttonStyle(.plain)
                     .help(option.label)
@@ -545,7 +598,11 @@ private struct WindowChrome: NSViewRepresentable {
 struct ContentView: View {
     @EnvironmentObject var store: Store
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var systemAppearance = SystemAppearance.shared
     @AppStorage(Prefs.theme) private var themeName = Theme.black.rawValue
+    @AppStorage(Prefs.followSystemAppearance) private var followSystem = false
+    @AppStorage(Prefs.darkTheme) private var darkThemeName = Theme.black.rawValue
+    @AppStorage(Prefs.lightTheme) private var lightThemeName = Theme.light.rawValue
     @AppStorage(Prefs.fontFamily) private var fontFamily = ""
     @AppStorage(Prefs.fontSize) private var fontSize = Fonts.defaultSize
     @AppStorage(Prefs.showFiles) private var showFiles = false
@@ -563,7 +620,10 @@ struct ContentView: View {
         Binding(get: { showSidebar ? .all : .detailOnly }, set: { showSidebar = $0 != .detailOnly })
     }
 
-    private var theme: Theme { Theme(rawValue: themeName) ?? .black }
+    private var theme: Theme {
+        Theme.resolve(followSystem: followSystem, manual: themeName, dark: darkThemeName, light: lightThemeName,
+                      systemIsDark: systemAppearance.isDark)
+    }
 
     /// Changes follow the selected session and its folder, which may be its project's.
     private var changesKey: String {
@@ -660,7 +720,7 @@ struct ContentView: View {
             // Picking a session goes back to it.
             store.showStats = false
         }
-        .onChange(of: themeName) { _, _ in store.applyAppearance() }
+        .onChange(of: theme) { _, _ in store.applyAppearance() }
         .onChange(of: fontFamily) { _, _ in store.applyAppearance() }
         .onChange(of: fontSize) { _, _ in store.applyAppearance() }
         .onChange(of: colorBlindPalette) { _, _ in
@@ -1231,6 +1291,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = ServiceProvider()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        SystemAppearance.shared.startObserving()
         ShellPath.warmUp()
         Timing.logToSystem()
         SessionTranscript.playAgentName = { UserDefaults.standard.string(forKey: Prefs.playAgent) == "codex" ? "Codex" : "Claude Code" }
