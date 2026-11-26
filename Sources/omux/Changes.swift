@@ -122,19 +122,44 @@ final class Changes: ObservableObject {
         notes[tabID]?.removeAll { $0.id == note.id }
     }
 
+    /// Sessions whose notes are on their way, waiting for the agent to come up.
+    @Published private(set) var sendingNotes: Set<UUID> = []
+
+    /// Hands the notes' message to the session and says whether it was typed. A session whose
+    /// agent has quit sits at its shell prompt, and a shell runs what is typed into it:
+    /// `$(…)` in a note or a file name would run, and Return runs every line. So the agent is
+    /// started first, as the message box does, and the message waits for its prompt. A custom
+    /// command doesn't report its state; what runs in it takes the message, as it does from
+    /// the message box.
+    var deliver: @MainActor (_ text: String, _ tabID: UUID, _ done: @escaping @MainActor (Bool) -> Void) -> Void = { text, tabID, done in
+        let store = Store.shared
+        if store.tab(tabID).map(store.provider(of:)) == .custom {
+            done(store.sendText(text, to: tabID, submit: true))
+        } else {
+            store.deliver(text, to: tabID, done: done)
+        }
+    }
+
     /// Types every note into the session as one message and submits it.
     func sendNotes() {
-        guard let tabID, let list = notes[tabID], !list.isEmpty else { return }
+        guard let tabID, let list = notes[tabID], !list.isEmpty, !sendingNotes.contains(tabID) else { return }
         let body = list.map { note in
             // The name comes from the repository and can hold newlines, which Return would run.
             "- \(CheckLog.plain(note.path))\(note.lineNumber.map { ":\($0)" } ?? ""): \(note.text)"
         }.joined(separator: "\n")
-        // Kept when the session isn't running, so they can be sent once it is.
-        guard Store.shared.sendText("Review notes on your changes:\n" + body, to: tabID, submit: true) else {
-            Store.showError("Couldn't send the notes", "The session isn't running. Start it and send them again.")
-            return
+        let sent = Set(list.map(\.id))
+        sendingNotes.insert(tabID)
+        deliver("Review notes on your changes:\n" + body, tabID) { [weak self] delivered in
+            guard let self else { return }
+            self.sendingNotes.remove(tabID)
+            // Kept when the agent didn't take them, so they can be sent once it does.
+            guard delivered else {
+                Store.showError("Couldn't send the notes", "The agent didn't come up to take them. They're kept here: send them again once it's at its prompt.")
+                return
+            }
+            // Notes left while the agent was starting weren't in the message: they stay.
+            self.notes[tabID]?.removeAll { sent.contains($0.id) }
         }
-        notes[tabID] = []
     }
 }
 
@@ -440,8 +465,13 @@ struct ChangesPanel: View {
             if !notes.isEmpty {
                 Image(systemName: "text.bubble").foregroundStyle(.yellow)
                 Text("\(notes.count) note\(notes.count == 1 ? "" : "s")")
-                Button("Send to \(store.selectedProvider == .codex ? "Codex" : "Claude")") { changes.sendNotes() }
-                    .help("Types the notes into the session and sends them")
+                if let id = store.selectedTabID, changes.sendingNotes.contains(id) {
+                    ProgressView().controlSize(.small)
+                    Text("Sending…").foregroundStyle(.secondary)
+                } else {
+                    Button("Send to \(store.selectedProvider == .codex ? "Codex" : "Claude")") { changes.sendNotes() }
+                        .help("Types the notes into the session and sends them, starting its agent first if it isn't running")
+                }
             } else if !changes.files.isEmpty {
                 Text("Click a line to leave a note").foregroundStyle(.secondary)
             }

@@ -132,6 +132,65 @@ final class ChangesTests: XCTestCase {
         XCTAssertNil(Git.textLines(atPath: repo + "/link"))
     }
 
+    /// Notes were typed straight into the terminal and submitted. In a session whose agent had
+    /// quit, its shell ran them, `$(…)` in a note or a file name included. They now go the way
+    /// the message box sends a prompt, which starts the agent and waits for its prompt.
+    @MainActor
+    func testNotesWaitForTheAgentAndOnlyTheSentOnesAreCleared() throws {
+        let changes = Changes()
+        let tab = UUID()
+        changes.track(tabID: tab, dir: nil, worktree: nil)
+        var pending: [(text: String, done: @MainActor (Bool) -> Void)] = []
+        changes.deliver = { text, id, done in
+            XCTAssertEqual(id, tab)
+            pending.append((text, done))
+        }
+        let first = DiffNote(path: "$(touch pwned).swift", lineIndex: 3, lineNumber: 12, text: "Use `let` here")
+        changes.notes[tab] = [first]
+
+        changes.sendNotes()
+        XCTAssertEqual(pending.map(\.text), ["Review notes on your changes:\n- $(touch pwned).swift:12: Use `let` here"])
+        XCTAssertEqual(changes.sendingNotes, [tab])
+        // While the agent starts, Send again doesn't type the notes a second time.
+        changes.sendNotes()
+        XCTAssertEqual(pending.count, 1)
+
+        // A note left while it starts wasn't in the message, so it stays once the message is in.
+        let later = DiffNote(path: "b.swift", lineIndex: 0, lineNumber: nil, text: "And this")
+        changes.notes[tab]?.append(later)
+        try XCTUnwrap(pending.first).done(true)
+        XCTAssertEqual(changes.notes[tab], [later])
+        XCTAssertEqual(changes.sendingNotes, [])
+    }
+
+    /// The agent never took them: the notes stay, to be sent again.
+    @MainActor
+    func testNotesTheAgentDidntTakeAreKept() throws {
+        let changes = Changes()
+        let tab = UUID()
+        changes.track(tabID: tab, dir: nil, worktree: nil)
+        var done: (@MainActor (Bool) -> Void)?
+        changes.deliver = { _, _, finish in done = finish }
+        let note = DiffNote(path: "a.swift", lineIndex: 1, lineNumber: 2, text: "Rename")
+        changes.notes[tab] = [note]
+
+        changes.sendNotes()
+        try XCTUnwrap(done)(false)
+        XCTAssertEqual(changes.notes[tab], [note])
+        XCTAssertEqual(changes.sendingNotes, [])
+    }
+
+    /// What the delivery waits for: an agent that reports its state. One that quit leaves the
+    /// shell at its prompt with nothing reported, and that doesn't take input.
+    @MainActor
+    func testAShellWhoseAgentQuitDoesntTakeInput() {
+        XCTAssertFalse(TranscriptPanel.takesInput(TabRuntime(provider: .claude)))
+        XCTAssertFalse(TranscriptPanel.takesInput(TabRuntime(provider: .codex)))
+        XCTAssertFalse(TranscriptPanel.takesInput(TabRuntime(provider: .shell)))
+        XCTAssertTrue(TranscriptPanel.takesInput(TabRuntime(provider: .claude, statusState: .idle)))
+        XCTAssertTrue(TranscriptPanel.takesInput(TabRuntime(provider: .codex, agentConnected: true, tuiReady: true)))
+    }
+
     @MainActor
     private func waitUntil(timeout: Duration = .seconds(10), _ condition: () -> Bool) async throws {
         let end = ContinuousClock.now + timeout
