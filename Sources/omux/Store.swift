@@ -968,20 +968,115 @@ final class Store: ObservableObject {
     }
 
     /// The transcript of the session's Claude Code conversation. The `claude` running in the
-    /// terminal first, which Claude Code records per process in ~/.claude/sessions/<pid>.json: that
-    /// follows a /clear, a `claude` typed into a shell, or `claude --continue`. Else the tab's own id.
+    /// terminal first (see `liveClaudeSessions`): that follows a /clear, a `claude` typed into a
+    /// shell, or `claude --continue`. Else the tab's own id.
     func claudeTranscriptURL(for id: UUID) -> URL? {
         guard let tab = tab(id) else { return nil }
-        var live: [String] = []
-        if let view = terminals[id], !(runtime[id]?.exited ?? true) {
-            let sessions = NSHomeDirectory() + "/.claude/sessions"
-            live = Self.descendants(of: view.process.shellPid).compactMap { pid in
-                guard let data = FileManager.default.contents(atPath: "\(sessions)/\(pid).json"),
-                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-                return (object["sessionId"] as? String)?.lowercased()
-            }
+        return Self.claudeTranscriptURL(pinned: tab.claudeSessionID.uuidString.lowercased(), live: liveClaudeSessions(for: id),
+                                        lookup: Self.claudeTranscriptURL)
+    }
+
+    /// The conversation whose subagents the session lists: the one its `claude` is on, as for the
+    /// transcript, else the session's own, in its project folder.
+    func claudeConversation(for id: UUID) -> (session: String, project: URL?) {
+        Self.claudeConversation(pinned: tab(id)?.claudeSessionID.uuidString.lowercased() ?? "", live: liveClaudeSessions(for: id),
+                                project: claudeProjectFolderURL(for: id), lookup: Self.claudeTranscriptURL)
+    }
+
+    /// A live conversation with a transcript, in the folder that transcript is in; else the
+    /// session's own id in its project folder.
+    nonisolated static func claudeConversation(pinned: String, live: [String], project: URL?,
+                                               lookup: (String) -> URL?) -> (session: String, project: URL?) {
+        for session in live where session != pinned {
+            if let url = lookup(session) { return (session, url.deletingLastPathComponent()) }
         }
-        return Self.claudeTranscriptURL(pinned: tab.claudeSessionID.uuidString.lowercased(), live: live, lookup: Self.claudeTranscriptURL)
+        return (pinned, project)
+    }
+
+    /// The conversations the `claude` processes in the session's terminal are on. Claude Code
+    /// records each in <config>/sessions/<pid>.json and keeps it current through /clear and
+    /// /resume. <config> is the process's CLAUDE_CONFIG_DIR when it runs with one, else ~/.claude.
+    func liveClaudeSessions(for id: UUID) -> [String] {
+        guard let view = terminals[id], !(runtime[id]?.exited ?? true) else { return [] }
+        let home = NSHomeDirectory()
+        return Self.descendants(of: view.process.shellPid).compactMap { pid in
+            Self.claudeSessionID(pidFile: Self.claudePidFile(pid, configDirectory: claudeConfigDirectory(of: pid), home: home))
+        }
+    }
+
+    /// The CLAUDE_CONFIG_DIR each process was started with, "" for none, by pid and start time:
+    /// read once per process, since the sessions are looked up many times a minute.
+    private var claudeConfigDirectories: [String: String] = [:]
+
+    private func claudeConfigDirectory(of pid: pid_t) -> String {
+        guard let started = Self.startTime(of: pid) else { return "" }
+        let key = "\(pid)@\(started)"
+        if let known = claudeConfigDirectories[key] { return known }
+        if claudeConfigDirectories.count > 512 { claudeConfigDirectories.removeAll() }
+        let directory = Self.environment(of: pid)["CLAUDE_CONFIG_DIR"] ?? ""
+        claudeConfigDirectories[key] = directory
+        return directory
+    }
+
+    /// When the process started, which tells a pid's process from a later one with the same pid.
+    private static func startTime(of pid: pid_t) -> String? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let start = info.kp_proc.p_starttime
+        return "\(start.tv_sec).\(start.tv_usec)"
+    }
+
+    /// Where Claude Code records the conversation of the process `pid`.
+    nonisolated static func claudePidFile(_ pid: pid_t, configDirectory: String?, home: String) -> String {
+        let config = configDirectory.flatMap { $0.isEmpty ? nil : ($0 as NSString).expandingTildeInPath } ?? home + "/.claude"
+        return "\(config)/sessions/\(pid).json"
+    }
+
+    /// The session id in a Claude Code process record.
+    nonisolated static func claudeSessionID(pidFile path: String) -> String? {
+        guard let data = FileManager.default.contents(atPath: path),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (object["sessionId"] as? String)?.lowercased()
+    }
+
+    /// The environment one of the user's own processes was started with.
+    private static func environment(of pid: pid_t) -> [String: String] {
+        var argmax: Int32 = 0
+        var length = MemoryLayout<Int32>.size
+        var limit: [Int32] = [CTL_KERN, KERN_ARGMAX]
+        guard sysctl(&limit, 2, &argmax, &length, nil, 0) == 0, argmax > 0 else { return [:] }
+        var bytes = [UInt8](repeating: 0, count: Int(argmax))
+        var size = bytes.count
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        guard sysctl(&mib, 3, &bytes, &size, nil, 0) == 0 else { return [:] }
+        return processArguments(Array(bytes.prefix(size))).environment
+    }
+
+    /// Reads KERN_PROCARGS2: the argument count, the executable's path and the NULs after it,
+    /// the arguments, then the environment up to an empty string.
+    nonisolated static func processArguments(_ bytes: [UInt8]) -> (arguments: [String], environment: [String: String]) {
+        guard bytes.count >= 4 else { return ([], [:]) }
+        let argc = Int(bytes.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
+        var index = 4
+        func next() -> String? {
+            guard index < bytes.count else { return nil }
+            let start = index
+            while index < bytes.count, bytes[index] != 0 { index += 1 }
+            defer { index += 1 }
+            return String(decoding: bytes[start..<index], as: UTF8.self)
+        }
+        _ = next()
+        while index < bytes.count, bytes[index] == 0 { index += 1 }
+        var arguments: [String] = []
+        while arguments.count < argc, let argument = next() { arguments.append(argument) }
+        var environment: [String: String] = [:]
+        while let entry = next(), !entry.isEmpty {
+            guard let equals = entry.firstIndex(of: "=") else { continue }
+            environment[String(entry[..<equals])] = String(entry[entry.index(after: equals)...])
+        }
+        return (arguments, environment)
     }
 
     /// The tab's own conversation, unless the running `claude` is on another one with a transcript.
