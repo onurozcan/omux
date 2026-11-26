@@ -179,6 +179,7 @@ struct Sidebar: View {
                         .help("Open folder as a project (⌘O)")
                     Button { store.showRecentSessions = true } label: { Image(systemName: "clock.arrow.circlepath") }
                         .help("Open recent conversation (⇧⌘O)")
+                    UpdateAvailableButton()
                     SettingsLink { Image(systemName: "gearshape") }
                         .help("Settings (⌘,)")
                 }

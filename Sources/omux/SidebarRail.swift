@@ -116,6 +116,7 @@ struct ProjectRail: View {
                     Button { store.showStats.toggle() } label: { Image(systemName: "chart.bar.xaxis").font(.system(size: 13.5, weight: .medium)) }
                         .foregroundStyle(store.showStats ? .primary : .secondary)
                         .help("Statistics (⇧⌘Y)")
+                    UpdateAvailableButton(font: .system(size: 13.5, weight: .medium))
                     // Drawn as wide as the limits' ring above them.
                     SettingsLink { Image(systemName: "gearshape").font(.system(size: 13.5, weight: .medium)) }
                         .help("Settings (⌘,)")
