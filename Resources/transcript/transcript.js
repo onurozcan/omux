@@ -1057,6 +1057,7 @@
     if (theme.bg) root.setProperty('--bg', theme.bg);
     if (theme.fg) root.setProperty('--fg', theme.fg);
     document.body.classList.toggle('neutral', !!theme.neutral);
+    document.body.classList.toggle('colorblind', !!theme.colorBlind);
     if (theme.accent) {
       root.setProperty('--accent', theme.accent);
       root.setProperty('--accent-soft', theme.accentSoft || theme.accent);
@@ -1064,6 +1065,10 @@
     if (theme.mono) root.setProperty('--mono', theme.mono);
     if (theme.font) root.setProperty('--font', theme.font);
     if (theme.size) root.setProperty('--size', theme.size + 'px');
+    const statusColors = { '--blue': '#56b4e9', '--amber': '#e69f00', '--green': '#009e73', '--red': '#d55e00', '--violet': '#cc79a7' };
+    for (const [name, value] of Object.entries(statusColors)) {
+      if (theme.colorBlind) root.setProperty(name, value); else root.removeProperty(name);
+    }
     if (cardsOn !== !!theme.cards) { cardsOn = !!theme.cards; document.body.classList.toggle('cards', cardsOn); decorateTurns(); }
     const body = document.body.classList;
     ['width-wide', 'width-narrow', 'compact', 'bubbles-outline', 'bubbles-plain', 'no-times'].forEach(c => body.remove(c));

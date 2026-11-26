@@ -231,6 +231,7 @@ struct TranscriptWebView: NSViewRepresentable {
                 "mono": "'\(font.familyName ?? "Menlo")', ui-monospace, Menlo, monospace",
                 "font": style.fontStack, "size": style.size, "width": style.width, "density": style.density,
                 "bubbles": style.bubbles, "timestamps": style.timestamps, "cards": style.layout == "cards",
+                "colorBlind": style.colorBlind,
             ]
             let data = (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
             return String(decoding: data, as: UTF8.self)
