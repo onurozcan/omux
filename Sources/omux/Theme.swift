@@ -20,7 +20,7 @@ enum Palette {
 }
 
 enum Theme: String, CaseIterable, Identifiable {
-    case black, dark, graphite, midnight, dracula, nord, oneDark, gruvbox, solarizedDark, catppuccin, tokyoNight, monokai, rosePine, everforest,
+    case black, dark, graphite, midnight, dracula, nord, oneDark, gruvbox, solarizedDark, catppuccin, tokyoNight, monokai, rosePine, everforest, vesper,
          light, solarizedLight, catppuccinLatte, githubLight
 
     var id: String { rawValue }
@@ -66,6 +66,7 @@ enum Theme: String, CaseIterable, Identifiable {
         case .monokai: return (0x272822, 0x1E1F1C, 0xF8F8F2)
         case .rosePine: return (0x191724, 0x1F1D2E, 0xE0DEF4)
         case .everforest: return (0x2D353B, 0x232A2E, 0xD3C6AA)
+        case .vesper: return (0x101010, 0x181818, 0xFFFFFF)
         case .light: return (0xFBFBFB, 0xEFEFF1, 0x1F1F1F)
         case .solarizedLight: return (0xFDF6E3, 0xEEE8D5, 0x657B83)
         case .catppuccinLatte: return (0xEFF1F5, 0xE6E9EF, 0x4C4F69)
@@ -113,6 +114,9 @@ enum Theme: String, CaseIterable, Identifiable {
         case .everforest:
             hex = [0x4B565C, 0xE67E80, 0xA7C080, 0xDBBC7F, 0x7FBBB3, 0xD699B6, 0x83C092, 0xD3C6AA,
                    0x5C6A72, 0xE67E80, 0xA7C080, 0xDBBC7F, 0x7FBBB3, 0xD699B6, 0x83C092, 0x9DA9A0]
+        case .vesper:
+            hex = [0x101010, 0xF5A191, 0x90B99F, 0xE6B99D, 0xACA1CF, 0xE29ECA, 0xEA83A5, 0xA0A0A0,
+                   0x7E7E7E, 0xFF8080, 0x99FFE4, 0xFFC799, 0xB9AEDA, 0xECAAD6, 0xF591B2, 0xFFFFFF]
         case .githubLight:
             hex = [0x24292F, 0xCF222E, 0x116329, 0x4D2D00, 0x0969DA, 0x8250DF, 0x1B7C83, 0x6E7781,
                    0x57606A, 0xA40E26, 0x1A7F37, 0x633C01, 0x218BFF, 0xA475F9, 0x3192AA, 0x8C959F]
