@@ -67,5 +67,8 @@ final class LiveSessionTests: XCTestCase {
         let path = Store.claudePidFile(42, configDirectory: config.path, home: "/nowhere")
         XCTAssertEqual(Store.claudeSessionID(pidFile: path), "ab12cd34-0000-4000-8000-000000000001")
         XCTAssertNil(Store.claudeSessionID(pidFile: Store.claudePidFile(42, configDirectory: nil, home: "/nowhere")))
+        // The id becomes part of a path: a record that names something else is no session.
+        try Data(#"{"sessionId":"../../outside"}"#.utf8).write(to: config.appendingPathComponent("sessions/43.json"))
+        XCTAssertNil(Store.claudeSessionID(pidFile: Store.claudePidFile(43, configDirectory: config.path, home: "/nowhere")))
     }
 }

@@ -1012,6 +1012,10 @@ final class Store: ObservableObject {
         guard let started = Self.startTime(of: pid) else { return "" }
         let key = "\(pid)@\(started)"
         if let known = claudeConfigDirectories[key] { return known }
+        // A build starts thousands of processes that are gone in a moment, and each read takes
+        // a megabyte of buffer: only a process that has stayed a few seconds is asked. `claude`
+        // has, by the time its conversation matters; until then it is looked for in ~/.claude.
+        guard let since = Double(started), Date().timeIntervalSince1970 - since > 3 else { return "" }
         if claudeConfigDirectories.count > 512 { claudeConfigDirectories.removeAll() }
         let directory = Self.environment(of: pid)["CLAUDE_CONFIG_DIR"] ?? ""
         claudeConfigDirectories[key] = directory
@@ -1038,7 +1042,10 @@ final class Store: ObservableObject {
     nonisolated static func claudeSessionID(pidFile path: String) -> String? {
         guard let data = FileManager.default.contents(atPath: path),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return (object["sessionId"] as? String)?.lowercased()
+        // The id becomes part of a file path, and the record is whatever a process in the
+        // session wrote: only a real session id is taken.
+        guard let id = object["sessionId"] as? String, UUID(uuidString: id) != nil else { return nil }
+        return id.lowercased()
     }
 
     /// The environment one of the user's own processes was started with.
