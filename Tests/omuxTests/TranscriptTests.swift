@@ -306,12 +306,82 @@ final class TranscriptTests: XCTestCase {
     private final class FakeCodex: CodexThreads {
         var items: [[String: Any]] = []
         var handler: ((CodexTranscriptEvent) -> Void)?
+        /// How many times the transcript has read the thread.
+        var reads = 0
         func listen(_ tabID: UUID, _ handler: ((CodexTranscriptEvent) -> Void)?) { self.handler = handler }
-        func transcriptItems(threadID: String, tabID: UUID) async throws -> [[String: Any]] { items }
+        func transcriptItems(threadID: String, tabID: UUID) async throws -> [[String: Any]] { reads += 1; return items }
     }
 
     private func codexItem(_ type: String, _ text: String) -> [String: Any] {
         type == "userMessage" ? ["type": type, "content": [["text": text]]] : ["type": type, "text": text]
+    }
+
+    /// Sends the thread's event to the transcript and waits for the read it starts.
+    private func read(_ codex: FakeCodex, _ event: CodexTranscriptEvent = .turn(completed: false)) async throws {
+        let reads = codex.reads
+        codex.handler?(event)
+        for _ in 0..<300 where codex.reads == reads { try await Task.sleep(nanoseconds: 10_000_000) }
+    }
+
+    /// A Codex read rebuilds every block from the thread's items, and a rebuilt block starts at
+    /// revision 0. A block that had changed once kept its higher revision, so the rebuilt copy
+    /// never compared equal to it again: every later read re-encoded the block and the page
+    /// redrew it. Only the blocks whose items changed move now.
+    func testACodexReadRedrawsOnlyTheBlocksWhoseItemsChanged() async throws {
+        let codex = FakeCodex()
+        var command: [String: Any] = ["type": "commandExecution", "id": "c1", "command": "swift test", "status": "inProgress"]
+        codex.items = [codexItem("userMessage", "run the tests"), command]
+        let m = SessionTranscript(tabID: UUID(), provider: .codex, claudeFile: { nil }, codexThread: { "t" }, codex: codex)
+        for _ in 0..<300 where m.blocks.count < 2 { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(m.blocks.map(\.rev), [0, 0])
+
+        // The command finishes: its block changes, once.
+        command["status"] = "completed"
+        command["exitCode"] = 0
+        command["aggregatedOutput"] = "All tests passed"
+        codex.items[1] = command
+        try await read(codex, .item(id: "c1", type: "commandExecution", completed: true))
+        XCTAssertEqual(m.blocks[1].tools.first?.result, "Done")
+        XCTAssertEqual(m.blocks.map(\.rev), [0, 1])
+
+        // Reads that bring nothing new change nothing.
+        let settled = m.version
+        for _ in 0..<3 { try await read(codex) }
+        XCTAssertEqual(m.blocks.map(\.rev), [0, 1])
+        XCTAssertEqual(m.version, settled)
+        XCTAssertNil(m.delta(since: settled), "the page has nothing to redraw")
+
+        // A new item is still picked up, and only it is sent.
+        codex.items.append(codexItem("agentMessage", "All green."))
+        try await read(codex, .turn(completed: true))
+        XCTAssertEqual(m.blocks.map(\.rev), [0, 1, 0])
+        let delta = try XCTUnwrap(m.delta(since: settled))
+        XCTAssertTrue(delta.contains("All green."))
+        XCTAssertFalse(delta.contains("swift test"), "the finished command isn't sent again")
+    }
+
+    /// The reply Codex is writing is drawn from its deltas, then replaced by the thread's record
+    /// of it once the item completes. A record that says what the deltas said leaves the block
+    /// as it is, and so do the reads after it.
+    func testAStreamedCodexReplyIsNotRedrawnOnceItsRecordLands() async throws {
+        let codex = FakeCodex()
+        codex.items = [codexItem("userMessage", "hi")]
+        let m = SessionTranscript(tabID: UUID(), provider: .codex, claudeFile: { nil }, codexThread: { "t" }, codex: codex)
+        for _ in 0..<300 where m.blocks.isEmpty { try await Task.sleep(nanoseconds: 10_000_000) }
+        codex.handler?(.delta(item: "m1", text: "Hello"))
+        codex.handler?(.delta(item: "m1", text: ", world"))
+        XCTAssertEqual(m.blocks.map(\.text), ["hi", "Hello, world"])
+        let streamed = m.blocks.map(\.rev)
+
+        var reply = codexItem("agentMessage", "Hello, world")
+        reply["id"] = "m1"
+        codex.items.append(reply)
+        let settled = m.version
+        try await read(codex, .item(id: "m1", type: "agentMessage", completed: true))
+        for _ in 0..<3 { try await read(codex) }
+        XCTAssertEqual(m.blocks.map(\.text), ["hi", "Hello, world"])
+        XCTAssertEqual(m.blocks.map(\.rev), streamed)
+        XCTAssertEqual(m.version, settled)
     }
 
     /// A Codex read rebuilds the list and moves the echoes it keeps to new places: thumbnails
