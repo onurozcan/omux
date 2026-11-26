@@ -38,6 +38,10 @@ struct PullRequest: Equatable {
     let checks: [Check]
     /// The pull request's last commit, so commits made on the branch after it can be told apart.
     var head: String? = nil
+    /// Whether the open pull request conflicts with its base; nil until GitHub has worked it out.
+    var conflicts: Bool? = nil
+    /// The branch the pull request merges into, as named on GitHub.
+    var base: String? = nil
 
     /// The checks taken together: any failure wins, then anything still running.
     var checksResult: Result? {
@@ -54,6 +58,7 @@ struct PullRequest: Equatable {
         case .open: break
         }
         if checksResult == .failed { return "Checks failing" }
+        if conflicts == true { return "Conflicts" }
         if review == .changesRequested { return "Changes requested" }
         if checksResult == .pending { return "Checks running" }
         if isDraft { return "Draft" }
@@ -68,7 +73,7 @@ struct PullRequest: Equatable {
         case .closed: return .secondary
         case .open: break
         }
-        if checksResult == .failed { return Palette.error }
+        if checksResult == .failed || conflicts == true { return Palette.error }
         if review == .changesRequested { return Palette.needs }
         if checksResult == .pending { return Palette.working }
         if isDraft { return .secondary }
@@ -78,8 +83,24 @@ struct PullRequest: Equatable {
     /// Changes worth pulling the user back to the session for.
     func needsAttention(since old: PullRequest) -> Bool {
         (checksResult == .failed && old.checksResult != .failed)
+            || (conflicts == true && old.conflicts != true)
             || (review != old.review && (review == .changesRequested || review == .approved))
             || (state == .merged && old.state != .merged)
+    }
+
+    /// GitHub answers UNKNOWN while it works out mergeability again, as after a push:
+    /// keeps the last known answer until then, if it was about the same pull request and base.
+    func keepingConflicts(of old: PullRequest?) -> PullRequest {
+        guard conflicts == nil, state == .open, let old, old.number == number, old.base == base else { return self }
+        var pr = self
+        pr.conflicts = old.conflicts
+        return pr
+    }
+
+    /// Asks the session's agent to bring the base branch in and resolve the conflicts.
+    func conflictsPrompt(base: String) -> String {
+        "Pull request #\(number) conflicts with \(base). Fetch origin, merge origin/\(base) into this branch, "
+            + "resolve the conflicts, run the tests, and commit."
     }
 }
 
@@ -132,7 +153,8 @@ final class PullRequestMonitor: ObservableObject {
         // Tabs closed while gh ran.
         for (id, lookup) in found where Store.shared.tab(id) != nil {
             switch lookup {
-            case .found(let pr):
+            case .found(let found):
+                let pr = found.keepingConflicts(of: requests[id])
                 if let old = requests[id], pr.needsAttention(since: old) { Store.shared.requestAttention(id) }
                 result[id] = pr
             case .none:
@@ -145,7 +167,7 @@ final class PullRequestMonitor: ObservableObject {
         if result != requests { requests = result }
     }
 
-    nonisolated private static let fields = "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefOid"
+    nonisolated private static let fields = "number,title,url,state,isDraft,reviewDecision,statusCheckRollup,headRefOid,mergeable,baseRefName"
 
     /// Asks about the branch checked out in `dir` rather than naming it, so gh can follow
     /// the branch's upstream to a pull request opened from a fork.
@@ -155,15 +177,24 @@ final class PullRequestMonitor: ObservableObject {
         guard result.ok else {
             return result.err.contains("no pull requests found") ? .none : .unknown
         }
-        guard let raw = try? JSONDecoder().decode(Raw.self, from: Data(result.out.utf8)),
-              let url = webURL(raw.url), let state = PullRequest.State(rawValue: raw.state) else { return .unknown }
+        return parse(result.out).map(Lookup.found) ?? .unknown
+    }
+
+    /// The pull request in `gh pr view --json` output; nil when it can't be read.
+    nonisolated static func parse(_ json: String) -> PullRequest? {
+        guard let raw = try? JSONDecoder().decode(Raw.self, from: Data(json.utf8)),
+              let url = webURL(raw.url), let state = PullRequest.State(rawValue: raw.state) else { return nil }
         let checks = (raw.statusCheckRollup ?? []).enumerated().map { index, check in
             PullRequest.Check(id: index, name: check.name ?? check.context ?? "Check",
                               result: check.result, url: (check.detailsUrl ?? check.targetUrl).flatMap(webURL))
         }
-        return .found(PullRequest(number: raw.number, title: raw.title, url: url, state: state, isDraft: raw.isDraft,
-                                  review: raw.reviewDecision.flatMap(PullRequest.Review.init(rawValue:)), checks: checks,
-                                  head: raw.headRefOid))
+        // MERGEABLE, CONFLICTING, or UNKNOWN while GitHub works it out.
+        let conflicts = state == .open ? ["CONFLICTING": true, "MERGEABLE": false][raw.mergeable ?? ""] : nil
+        // The name ends up in a command the session is asked to run, so it's validated.
+        let base = raw.baseRefName.flatMap { $0.range(of: #"^[A-Za-z0-9._/-]+\z"#, options: .regularExpression) != nil ? $0 : nil }
+        return PullRequest(number: raw.number, title: raw.title, url: url, state: state, isDraft: raw.isDraft,
+                           review: raw.reviewDecision.flatMap(PullRequest.Review.init(rawValue:)), checks: checks,
+                           head: raw.headRefOid, conflicts: conflicts, base: base)
     }
 
     /// Only web links: these open on click, and check links come from whoever reports the check.
@@ -209,6 +240,8 @@ final class PullRequestMonitor: ObservableObject {
         let reviewDecision: String?
         let statusCheckRollup: [Check]?
         let headRefOid: String?
+        let mergeable: String?
+        let baseRefName: String?
     }
 }
 
@@ -237,14 +270,27 @@ extension Store {
                 + sections.joined(separator: "\n\n")
             await MainActor.run {
                 self.gitActivity[id] = nil
-                // Without bracketed paste, a shell would run the log's lines as commands.
-                guard self.acceptsBracketedPaste(id) else {
-                    Self.showError("Couldn't send failing checks", "The session isn't at a prompt that can take a paste. Start its agent and try again.")
-                    return
-                }
-                self.sendText(message, to: id, submit: false)
+                self.paste(message, to: id, failure: "Couldn't send failing checks")
             }
         }
+    }
+
+    /// Pastes a request to resolve the pull request's conflicts with its base into the
+    /// session's prompt, for the user to send.
+    func sendConflicts(_ id: UUID) {
+        guard let pr = PullRequestMonitor.shared.requests[id], pr.conflicts == true,
+              let base = pr.base ?? tab(id)?.worktree?.base else { return }
+        paste(pr.conflictsPrompt(base: base), to: id, failure: "Couldn't ask to resolve conflicts")
+    }
+
+    /// Pastes into the session's prompt without submitting it. Without bracketed paste,
+    /// a shell would run the message's lines as commands.
+    private func paste(_ message: String, to id: UUID, failure: String) {
+        guard acceptsBracketedPaste(id) else {
+            Self.showError(failure, "The session isn't at a prompt that can take a paste. Start its agent and try again.")
+            return
+        }
+        sendText(message, to: id, submit: false)
     }
 }
 
@@ -363,6 +409,7 @@ struct PullRequestDetails: View {
         case .required: facts.append("Review required")
         case nil: break
         }
+        if pr.conflicts == true { facts.append("Conflicts") }
         return facts.joined(separator: " · ")
     }
 
@@ -398,6 +445,20 @@ struct PullRequestDetails: View {
                 .buttonStyle(.plain)
                 .padding(.bottom, 4)
                 .help("Pastes each failing check's log into the session, for you to review and send")
+            }
+            if pr.conflicts == true {
+                Button {
+                    dismiss()
+                    store.sendConflicts(tabID)
+                } label: {
+                    Label("Ask Session to Resolve Conflicts", systemImage: "arrow.triangle.merge")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 4)
+                .help("Pastes a request to merge the base branch and resolve the conflicts, for you to review and send")
             }
             Button {
                 NSWorkspace.shared.open(pr.url)
