@@ -131,9 +131,24 @@ final class CommandServer: @unchecked Sendable {
         // kills the app and every session in it; SIGPIPE isn't ignored app-wide because shells
         // inherit that. Not SO_NOSIGPIPE either: a socket whose peer left before accept()
         // refuses the option with EINVAL, and that is the case it would be there for.
-        var sent = 0
+        // SIGPIPE is also held back on this thread while the reply is written, so the write is
+        // safe whatever a system's kernel makes of the flag: a signal raised anyway stays pending
+        // here and is taken off before the thread's signals are let through again.
+        var pipe = sigset_t(), before = sigset_t()
+        sigemptyset(&pipe)
+        sigaddset(&pipe, SIGPIPE)
+        pthread_sigmask(SIG_BLOCK, &pipe, &before)
+        defer {
+            var pending = sigset_t()
+            sigpending(&pending)
+            if sigismember(&pending, SIGPIPE) == 1 { var taken: Int32 = 0; sigwait(&pipe, &taken) }
+            pthread_sigmask(SIG_SETMASK, &before, nil)
+        }
+        var sent = 0, flags = MSG_NOSIGNAL
         while sent < data.count {
-            let n = data.withUnsafeBytes { raw in Darwin.send(client, raw.baseAddress! + sent, data.count - sent, MSG_NOSIGNAL) }
+            let n = data.withUnsafeBytes { raw in Darwin.send(client, raw.baseAddress! + sent, data.count - sent, flags) }
+            // A kernel that doesn't know the flag refuses it: the write goes without, behind the mask.
+            if n < 0, errno == EINVAL, flags != 0 { flags = 0; continue }
             guard n > 0 else { return }
             sent += n
         }
