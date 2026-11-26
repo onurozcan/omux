@@ -21,12 +21,15 @@ final class CommandServerTests: XCTestCase {
         return fd
     }
 
-    /// The handler runs on the main thread, which this test holds until the client has closed,
-    /// so the reply is always written to a socket nobody reads any more. Writing there raises
-    /// SIGPIPE, which kills the process unless the server guards against it.
+    /// The handler runs on the main thread, which this test holds until both clients have
+    /// closed, so every reply is written to a socket nobody reads any more. Writing there raises
+    /// SIGPIPE, which kills the process unless the server guards against it. The second client
+    /// is always accepted after it hung up, since the server is still waiting on the first one's
+    /// handler: a socket in that state can't take socket options any more.
     func testClientThatHangsUpBeforeTheReplyDoesNotKillTheServer() throws {
         let server = CommandServer()
         let answered = expectation(description: "handler ran")
+        answered.expectedFulfillmentCount = 2
         server.handler = { request in
             answered.fulfill()
             return CLIResponse(ok: true, session: CLISession(id: request.from, name: "x", provider: "shell", state: "running"))
@@ -35,12 +38,14 @@ final class CommandServerTests: XCTestCase {
         defer { server.stop() }
         let path = try XCTUnwrap(server.socketPath)
 
-        let client = try connect(to: path)
         let request = try JSONEncoder().encode(CLIRequest(token: server.token(for: "tab-1"), from: "tab-1", command: "status"))
         let line = request + Data([UInt8(ascii: "\n")])
-        let sent = line.withUnsafeBytes { write(client, $0.baseAddress!, line.count) }
-        XCTAssertEqual(sent, line.count)
-        close(client)
+        for _ in 0..<2 {
+            let client = try connect(to: path)
+            let sent = line.withUnsafeBytes { write(client, $0.baseAddress!, line.count) }
+            XCTAssertEqual(sent, line.count)
+            close(client)
+        }
 
         // Now let the server answer, and give it time to write the reply.
         wait(for: [answered], timeout: 5)
