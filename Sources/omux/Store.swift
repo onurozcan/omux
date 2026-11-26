@@ -386,6 +386,14 @@ final class Store: ObservableObject {
         selectedTabID = id
     }
 
+    /// Selects the pane across `edge` of the selected one; it takes keyboard focus as on a click.
+    /// Nothing happens with one pane on screen, a maximized one included, since there is no
+    /// neighbour in sight to go to.
+    func focusPane(toward edge: Edge) {
+        guard let selected = selectedTabID, let next = shownLayout?.neighbour(of: selected, toward: edge) else { return }
+        selectedTabID = next
+    }
+
     func maximize(_ id: UUID) {
         selectedTabID = id
         maximizedID = id

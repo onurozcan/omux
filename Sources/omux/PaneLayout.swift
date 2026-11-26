@@ -68,6 +68,40 @@ indirect enum PaneLayout: Equatable {
         return without.splitting(target, with: id, axis: axis, before: edge == .leading || edge == .top)
     }
 
+    /// The pane across `edge` of `id`'s pane: of those touching that side, the one sharing the
+    /// most of it, so a tall pane steps to the bigger of the two short ones beside it. nil at the
+    /// layout's edge, or when `id` isn't in it.
+    func neighbour(of id: UUID, toward edge: Edge) -> UUID? {
+        // Each pane's share of the whole area, from the top left, by walking the splits.
+        func frames(_ layout: PaneLayout, in rect: CGRect) -> [(UUID, CGRect)] {
+            switch layout {
+            case .session(let id): return [(id, rect)]
+            case .split(let axis, let fraction, let first, let second):
+                let (a, b) = axis == .horizontal ? rect.divided(atDistance: rect.width * fraction, from: .minXEdge)
+                                                 : rect.divided(atDistance: rect.height * fraction, from: .minYEdge)
+                return frames(first, in: a) + frames(second, in: b)
+            }
+        }
+        let all = frames(self, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        guard let from = all.first(where: { $0.0 == id })?.1 else { return nil }
+        let tolerance = 1e-9
+        // Panes tile the area, so the ones across the edge start where `from` ends.
+        let across: (CGRect) -> Bool = switch edge {
+        case .leading: { abs($0.maxX - from.minX) < tolerance }
+        case .trailing: { abs($0.minX - from.maxX) < tolerance }
+        case .top: { abs($0.maxY - from.minY) < tolerance }
+        case .bottom: { abs($0.minY - from.maxY) < tolerance }
+        }
+        let horizontal = edge == .leading || edge == .trailing
+        let shared: (CGRect) -> Double = { other in
+            horizontal ? min(from.maxY, other.maxY) - max(from.minY, other.minY)
+                       : min(from.maxX, other.maxX) - max(from.minX, other.minX)
+        }
+        let candidates = all.filter { across($0.1) && shared($0.1) > tolerance }
+        // max(by:) keeps the first of equals, so a tie goes to the first in reading order.
+        return candidates.max(by: { shared($0.1) < shared($1.1) })?.0
+    }
+
     /// Every split back to halves.
     var balanced: PaneLayout {
         switch self {

@@ -92,6 +92,59 @@ final class PaneLayoutTests: XCTestCase {
         XCTAssertEqual(tree.resizing([false], to: 0.2), tree, "a leaf has nothing to resize")
         XCTAssertEqual(tree.resizing([], to: 0.3).ids, tree.ids)
     }
+
+    func testNeighbourAcrossASplit() {
+        let sideBySide = PaneLayout.split(axis: .horizontal, first: .session(a), second: .session(b))
+        XCTAssertEqual(sideBySide.neighbour(of: a, toward: .trailing), b)
+        XCTAssertEqual(sideBySide.neighbour(of: b, toward: .leading), a)
+        XCTAssertNil(sideBySide.neighbour(of: a, toward: .leading), "nothing beyond the layout's edge")
+        XCTAssertNil(sideBySide.neighbour(of: a, toward: .top))
+        XCTAssertNil(sideBySide.neighbour(of: b, toward: .bottom))
+
+        let stacked = PaneLayout.split(axis: .vertical, fraction: 0.3, first: .session(a), second: .session(b))
+        XCTAssertEqual(stacked.neighbour(of: a, toward: .bottom), b)
+        XCTAssertEqual(stacked.neighbour(of: b, toward: .top), a)
+        XCTAssertNil(stacked.neighbour(of: a, toward: .trailing))
+
+        XCTAssertNil(PaneLayout.session(a).neighbour(of: a, toward: .trailing), "one pane has no neighbour")
+        XCTAssertNil(sideBySide.neighbour(of: c, toward: .trailing), "a session that isn't a pane")
+    }
+
+    func testNeighbourPrefersTheLongestSharedSide() {
+        // a | (b over c): from a, the taller of b and c; a tie goes to the first in reading order.
+        let even = PaneLayout.split(axis: .horizontal, first: .session(a),
+                                    second: .split(axis: .vertical, first: .session(b), second: .session(c)))
+        XCTAssertEqual(even.neighbour(of: a, toward: .trailing), b)
+        XCTAssertEqual(even.neighbour(of: b, toward: .leading), a)
+        XCTAssertEqual(even.neighbour(of: c, toward: .leading), a)
+        XCTAssertEqual(even.neighbour(of: b, toward: .bottom), c)
+        XCTAssertEqual(even.neighbour(of: c, toward: .top), b)
+        let shortTop = PaneLayout.split(axis: .horizontal, fraction: 0.6, first: .session(a),
+                                        second: .split(axis: .vertical, fraction: 0.3, first: .session(b), second: .session(c)))
+        XCTAssertEqual(shortTop.neighbour(of: a, toward: .trailing), c)
+
+        // (a | b) over c, with a narrow a: going up from c lands on b.
+        let wideBottom = PaneLayout.split(axis: .vertical, first: .split(axis: .horizontal, fraction: 0.3, first: .session(a), second: .session(b)),
+                                          second: .session(c))
+        XCTAssertEqual(wideBottom.neighbour(of: c, toward: .top), b)
+        XCTAssertEqual(wideBottom.neighbour(of: a, toward: .bottom), c)
+        XCTAssertNil(wideBottom.neighbour(of: b, toward: .trailing))
+    }
+
+    func testNeighbourInAGridWithUnevenRows() {
+        // (a over b) | (c over d), the left column halved and the right one split at 0.8.
+        let grid = PaneLayout.split(axis: .horizontal, fraction: 0.4,
+                                    first: .split(axis: .vertical, first: .session(a), second: .session(b)),
+                                    second: .split(axis: .vertical, fraction: 0.8, first: .session(c), second: .session(d)))
+        XCTAssertEqual(grid.neighbour(of: a, toward: .trailing), c)
+        XCTAssertEqual(grid.neighbour(of: b, toward: .trailing), c, "b shares 0.3 with c and 0.2 with d")
+        XCTAssertEqual(grid.neighbour(of: d, toward: .leading), b)
+        XCTAssertEqual(grid.neighbour(of: c, toward: .leading), a)
+        XCTAssertEqual(grid.neighbour(of: a, toward: .bottom), b)
+        XCTAssertEqual(grid.neighbour(of: d, toward: .top), c)
+        XCTAssertNil(grid.neighbour(of: d, toward: .trailing))
+        XCTAssertNil(grid.neighbour(of: b, toward: .bottom))
+    }
 }
 
 private struct AnyEncodable: Encodable {

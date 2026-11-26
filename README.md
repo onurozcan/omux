@@ -64,7 +64,7 @@ omux turns that into a dashboard.
 | **Conversations that resume** | Each Claude Code session keeps its session ID and each Codex session its thread, so Restart and relaunch reopen the exact conversation. |
 | **Live status** | Working, needs you or done, per session. The Dock badge counts sessions waiting on you, and a notification brings you to the right one. |
 | **Allow or deny from the sidebar** | Claude Code tool permissions and Codex approvals answered without switching sessions. Deny lets you tell the agent what to do instead. |
-| **Panes** | Sessions of a project arranged in the window: a shell beside or below from a session's menu, or drag from the sidebar onto an edge; resize, move, maximize. One message box under them all writes to the active pane. One arrangement per project, saved. |
+| **Panes** | Sessions of a project arranged in the window: a shell beside or below from a session's menu (⌘D, ⇧⌘D), or drag from the sidebar onto an edge; resize, move, maximize, and ⌥⌘ with an arrow to go to the next pane. One message box under them all writes to the active pane. One arrangement per project, saved. |
 | **The `omux` command** | Programs in a session can list the project's sessions, read their screens, and start sessions of their own to send text to. Scoped to the project, children only, every action shown as a banner. [docs/cli.md](docs/cli.md) |
 | **Subagents** | Every subagent of Claude Code or Codex listed with its current tool. Click one to read its transcript. |
 | **Project defaults** | Each project can choose Terminal or Transcript for its sessions, and the model and effort new sessions start with. A project can also start Claude Code without permission prompts (`--dangerously-skip-permissions`), off by default. |
@@ -124,6 +124,8 @@ Beta builds, distribution builds and tests are in [docs/building.md](docs/buildi
 | Jump to session | ⌘K |
 | Next / previous session | ⇧⌘] / ⇧⌘[ |
 | Session 1–9 in the current project | ⌘1 … ⌘9 |
+| New shell to the right / below | ⌘D / ⇧⌘D |
+| Pane to the left / right / above / below | ⌥⌘← / ⌥⌘→ / ⌥⌘↑ / ⌥⌘↓ |
 | Right panel / Files / Changes / Browser | ⌥⌘F / ⌥⌘1 / ⌥⌘2 / ⌥⌘3 |
 | Terminal font bigger / smaller / default | ⌘+ or ⌘= / ⌘− / ⌘0 |
 
