@@ -1140,6 +1140,9 @@ struct AppCommands: Commands {
                 .keyboardShortcut("r", modifiers: [.command, .shift])
             Button("Interrupt (Ctrl-C)") { if let id = store.selectedTabID { store.stop(id) } }
                 .keyboardShortcut(".", modifiers: [.command, .shift])
+            Button("Clear Terminal") { store.selectedTabID.flatMap(store.terminal(ifRunning:))?.clearHistory() }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .disabled(store.selectedTabID.flatMap(store.terminal(ifRunning:)) == nil)
             Button("Kill Session") { if let id = store.selectedTabID { store.kill(id) } }
             Button("Start or Continue Session") { if let id = store.selectedTabID { store.start(id) } }
                 .keyboardShortcut(.return, modifiers: [.command, .shift])
@@ -1188,7 +1191,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Notifier.shared.activate()
         _ = Updater.shared
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard Fonts.isBiggerKey(event.charactersIgnoringModifiers, event.modifierFlags) else { return event }
+            guard Fonts.isBiggerKey(event.charactersIgnoringModifiers, event.modifierFlags) else {
+                return TermView.handle(event) ? nil : event
+            }
             Fonts.adjustSize(by: 1)
             return nil
         }
