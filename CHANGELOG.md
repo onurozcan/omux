@@ -4,9 +4,26 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 
 ## [Unreleased]
 
+### Security
+- **Each session has its own `omux` token.** Every session shared one, so a session could name a sibling in `OMUX_TAB_ID` and type into it. A token now only works for the session it was made for. Thanks to Samet Samyeli (#83).
+- **Review notes are no longer run by the shell.** Sent from Changes to a session whose agent had quit, the notes were typed at the shell prompt, which ran `$(…)` in a note or a file name. They now wait for the agent, starting it first if needed. Thanks to Samet Samyeli (#76).
+
+### Added
+- **Follow the system's light or dark appearance.** Settings › Appearance › Match system appearance, with a theme of your choice for each. Off by default. Thanks to Ahmet Bedir (#85).
+- **A colour-blind friendly status palette.** Settings › Appearance › Status colours switches working, needs you, done, failed and subagent to the Okabe–Ito colours. Thanks to Yunus Emre Özbucak (#72).
+- **The Vesper theme.** Thanks to Anıl Soylu (#77).
+- **Terminal keys.** ⌘⌫, ⌘← and ⌘→ edit the line, ⌘F searches the scrollback (⌘G and ⇧⌘G for next and previous), and Session › Clear Terminal (⇧⌘K) empties it. Thanks to Anıl Soylu (#78).
+- **Panes from the keyboard.** ⌘D and ⇧⌘D open a shell to the right or below; ⌥⌘ with an arrow goes to the pane on that side. Thanks to Anıl Soylu (#79).
+- **An update button in the sidebar** once a newer version has been found, so "Remind Me Later" doesn't hide it until the next day. Thanks to Anıl Soylu (#80).
+- **A pull request that conflicts with its base says so**, with "Ask Session to Resolve Conflicts" in its popover and the session's menu. Thanks to Anıl Soylu (#81).
+- **Mark files as viewed in Changes.** The mark goes away when the file changes again. Thanks to Anıl Soylu (#82).
+
 ### Fixed
+- **A workspace omux can't read is kept, not saved over.** An unreadable `workspace.json` was replaced by "Default" and its backup a save later. The file is now copied aside first, one bad session no longer takes every project with it, and a notice says where the copy is. Thanks to Samet Samyeli (#75).
+- **An `omux` command that hangs up early no longer quits omux.** The guard from 0.12.5 missed the case where the tool was gone before omux picked up the connection. Thanks to Anıl Soylu (#84).
+- **A Codex conversation redraws only what changed**, not every finished command every five seconds. Thanks to Samet Samyeli (#74).
 - **Subagents follow the conversation `claude` is on.** The Agents tab and the sidebar count looked for subagents under the conversation omux started the session with, so after a `claude --resume` typed into the session, or a /resume or /clear, they showed "No agents in this session" while agents ran. They now follow the running `claude`, as the transcript view does. (#88)
-- **The running `claude` is found when it runs with `CLAUDE_CONFIG_DIR` set.** Claude Code then keeps its process record in that folder instead of `~/.claude`, where omux looked, so the transcript view stayed on the session's first conversation. omux now reads the folder from the process's environment. (#88)
+- **The running `claude` is found when it runs with `CLAUDE_CONFIG_DIR` set.** Claude Code then keeps its process record in that folder instead of `~/.claude`, where omux looked, so the transcript view stayed on the session's first conversation. omux now reads the folder from the process's environment. Thanks to Ozan Bilgili (#89).
 
 ## [0.12.6] - 2026-11-22
 
