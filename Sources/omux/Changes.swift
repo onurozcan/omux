@@ -10,6 +10,33 @@ struct DiffNote: Identifiable, Hashable {
     var text: String
 }
 
+/// Files marked as viewed, by path, with what their change looked like then: its kind, its
+/// line counts and the blob id of its content. The mark goes when any of them moves.
+enum ViewedMarks {
+    static func signature(_ file: ChangedFile, blob: String?) -> String {
+        "\(file.statusLetter) \(file.added.map(String.init) ?? "-") \(file.removed.map(String.init) ?? "-") \(blob ?? "")"
+    }
+
+    /// The marks still true for `files`. A file whose content wasn't read this time keeps its mark;
+    /// so does every file when the listing failed, and a file left out of a truncated one.
+    static func kept(_ marks: [String: String], files: [ChangedFile], blobs: [String: String]?,
+                     ok: Bool = true, truncated: Bool = false) -> [String: String] {
+        guard ok else { return marks }
+        let listed = Dictionary(files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        return marks.filter { path, mark in
+            guard let file = listed[path] else { return truncated }
+            let blob = blobs?[path]
+            if blob == nil, file.status != .deleted { return true }
+            return mark == signature(file, blob: blob)
+        }
+    }
+
+    /// "2/5 viewed", or nil while nothing is marked.
+    static func label(viewed: Int, of total: Int) -> String? {
+        viewed > 0 ? "\(viewed)/\(total) viewed" : nil
+    }
+}
+
 /// The selected session's changes, kept fresh while its folder changes.
 @MainActor
 final class Changes: ObservableObject {
@@ -22,6 +49,12 @@ final class Changes: ObservableObject {
     @Published private(set) var baseName = "HEAD"
     /// Review notes per session, until they're sent.
     @Published var notes: [UUID: [DiffNote]] = [:]
+    /// Files marked as viewed per session, by path, with `ViewedMarks.signature` at the time.
+    /// Kept across relaunches, and only for files still listed.
+    @Published private(set) var viewed: [UUID: [String: String]] = Changes.loadViewed()
+    private static let viewedKey = "changesViewed"
+    /// Files of this session marked a moment ago, shown checked while their content is read.
+    @Published private var pendingViewed: Set<String> = []
 
     private(set) var dir: String?
     private var worktree: Worktree?
@@ -41,6 +74,7 @@ final class Changes: ObservableObject {
         self.dir = dir
         self.worktree = worktree
         files = []
+        pendingViewed = []
         base = nil
         remotePoll?.invalidate(); remotePoll = nil
         watcher = nil
@@ -82,14 +116,24 @@ final class Changes: ObservableObject {
         if refreshing { again = true; return }
         refreshing = true
         let worktree = self.worktree
+        let tabID = self.tabID
+        let marked = tabID.flatMap { viewed[$0] } ?? [:]
         Task.detached {
             let base = Git.diffBase(dir: dir, worktree: worktree)
-            let files = Git.changedFiles(dir: dir, base: base)
+            let listing = Git.changedListing(dir: dir, base: base)
+            let files = listing.files
+            // Read only while something is marked, and only for the marked files.
+            let blobs = marked.isEmpty ? nil
+                : Git.blobIDs(dir: dir, paths: files.filter { marked[$0.path] != nil && $0.status != .deleted }.map(\.path))
             await MainActor.run {
                 self.refreshing = false
                 if self.dir == dir {
                     self.base = base
                     if self.files != files { self.files = files }
+                    if let tabID, tabID == self.tabID, let marks = self.viewed[tabID] {
+                        let kept = ViewedMarks.kept(marks, files: files, blobs: blobs, ok: listing.ok, truncated: listing.truncated)
+                        if kept != marks { self.setViewed(kept, for: tabID) }
+                    }
                     if worktree != nil, let tabID = self.tabID { DiffStatMonitor.shared.update(tabID, files.totals) }
                 }
                 if self.again || self.dir != dir {
@@ -104,6 +148,50 @@ final class Changes: ObservableObject {
         guard let dir else { return [] }
         let base = self.base
         return await Task.detached { Git.diff(dir: dir, base: base, file: file) }.value
+    }
+
+    func isViewed(_ file: ChangedFile) -> Bool {
+        pendingViewed.contains(file.path) || tabID.flatMap { viewed[$0]?[file.path] } != nil
+    }
+
+    /// Marks the file as viewed, or takes the mark off. A second click while its content is
+    /// still being read takes the mark back too.
+    func toggleViewed(_ file: ChangedFile) {
+        guard let tabID, let dir else { return }
+        if isViewed(file) {
+            pendingViewed.remove(file.path)
+            var marks = viewed[tabID] ?? [:]
+            marks[file.path] = nil
+            setViewed(marks, for: tabID)
+            return
+        }
+        pendingViewed.insert(file.path)
+        Task.detached {
+            let blob = file.status == .deleted ? nil : Git.blobIDs(dir: dir, paths: [file.path])?[file.path]
+            await MainActor.run {
+                guard self.tabID == tabID, self.dir == dir, self.pendingViewed.remove(file.path) != nil,
+                      blob != nil || file.status == .deleted else { return }
+                var marks = self.viewed[tabID] ?? [:]
+                marks[file.path] = ViewedMarks.signature(file, blob: blob)
+                self.setViewed(marks, for: tabID)
+            }
+        }
+    }
+
+    /// Drops a closed session's marks.
+    func forgetViewed(tab id: UUID) {
+        if viewed[id] != nil { setViewed([:], for: id) }
+    }
+
+    private func setViewed(_ marks: [String: String], for tabID: UUID) {
+        viewed[tabID] = marks.isEmpty ? nil : marks
+        let kept = viewed.reduce(into: [String: [String: String]]()) { $0[$1.key.uuidString] = $1.value }
+        if kept.isEmpty { UserDefaults.standard.removeObject(forKey: Self.viewedKey) } else { UserDefaults.standard.set(kept, forKey: Self.viewedKey) }
+    }
+
+    private static func loadViewed() -> [UUID: [String: String]] {
+        (UserDefaults.standard.dictionary(forKey: viewedKey) as? [String: [String: String]] ?? [:])
+            .reduce(into: [UUID: [String: String]]()) { if let id = UUID(uuidString: $1.key) { $0[id] = $1.value } }
     }
 
     func setNote(_ text: String, for line: DiffLine, path: String) {
@@ -397,6 +485,9 @@ struct ChangesPanel: View {
             Text("\(changes.files.count) changed file\(changes.files.count == 1 ? "" : "s")")
                 .font(.system(size: 11, weight: .semibold))
             Text("vs \(changes.baseName)").font(.caption2).foregroundStyle(.tertiary)
+            if let viewed = ViewedMarks.label(viewed: changes.files.filter(changes.isViewed).count, of: changes.files.count) {
+                Text(viewed).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            }
             Spacer()
             Button { changes.refresh() } label: { Image(systemName: "arrow.clockwise") }
                 .help("Refresh")
@@ -412,13 +503,26 @@ struct ChangesPanel: View {
         ScrollViewReader { proxy in
         List {
             ForEach(changes.files) { file in
+                let viewed = changes.isViewed(file)
+                let toggle = viewed ? "Unmark as viewed" : "Mark as viewed"
                 SoftRow(selected: selected == file.path) { selected = file.path; listFocused = true } content: {
                 HStack(spacing: 6) {
+                    Button { changes.toggleViewed(file) } label: {
+                        // The whole box takes the click, not only the glyph's outline.
+                        Image(systemName: viewed ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 11))
+                            .frame(width: 14, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help(toggle)
+                    .accessibilityLabel(toggle)
                     Text(file.statusLetter)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundStyle(file.statusColor)
                         .frame(width: 12)
-                    Text(file.name).lineLimit(1)
+                    Text(file.name).lineLimit(1).foregroundStyle(viewed ? .secondary : .primary)
                     Text(file.folder)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)

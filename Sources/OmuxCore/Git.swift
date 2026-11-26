@@ -224,12 +224,24 @@ public enum Git {
 
     /// Changed and untracked files, compared with `base` (working tree included).
     public static func changedFiles(dir: String, base: String?) -> [ChangedFile] {
+        changedListing(dir: dir, base: base).files
+    }
+
+    /// The untracked files listed at most; the rest are left out.
+    private static let untrackedLimit = 300
+
+    /// `changedFiles`, and how far to trust the list: `ok` is false when a read failed (timed
+    /// out, the machine unreachable), `truncated` when untracked files were left out.
+    public static func changedListing(dir: String, base: String?) -> (files: [ChangedFile], ok: Bool, truncated: Bool) {
         var files: [ChangedFile] = []
+        var ok = true
         // Before the first commit, staged files are measured against the empty tree.
         if let base = base ?? emptyTree(dir) {
             // --relative: paths from `dir`, as ls-files and the diff below take them.
-            let numstat = run(["diff", "--numstat", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit).out
-            let status = run(["diff", "--name-status", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit).out
+            let numstatRun = run(["diff", "--numstat", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit)
+            let statusRun = run(["diff", "--name-status", "-z", "--no-renames", "--relative", base], in: dir, timeout: readLimit)
+            ok = numstatRun.ok && statusRun.ok
+            let numstat = numstatRun.out, status = statusRun.out
             var kinds: [String: ChangedFile.Status] = [:]
             let parts = status.split(separator: "\0", omittingEmptySubsequences: false).map(String.init)
             var i = 0
@@ -243,29 +255,53 @@ public enum Git {
                 files.append(ChangedFile(path: fields[2], added: Int(fields[0]), removed: Int(fields[1]),
                                          status: kinds[fields[2]] ?? .modified))
             }
+        } else {
+            ok = false
         }
         if let remote = RemotePath.parse(dir) {
             // Counted there, in one go: a look at each file from here would be a connection each.
             let script = RemotePath.entering(remote.path) + #"""
-            git ls-files --others --exclude-standard 2>/dev/null | head -300 | while IFS= read -r f; do
+            git ls-files --others --exclude-standard 2>/dev/null | head -\#(untrackedLimit + 1) | while IFS= read -r f; do
               n=$(wc -l < "$f" 2>/dev/null | tr -d ' '); printf '%s\t%s\n' "$n" "$f"
             done
             """#
-            for line in RemotePath.run(script, on: remote.host, deadline: readLimit).text.split(whereSeparator: \.isNewline) {
+            let answer = RemotePath.run(script, on: remote.host, deadline: readLimit)
+            let rows = answer.text.split(whereSeparator: \.isNewline)
+            for line in rows.prefix(untrackedLimit) {
                 let fields = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
                 guard fields.count == 2, !fields[1].isEmpty else { continue }
                 let lines = Int(fields[0])
                 files.append(ChangedFile(path: fields[1], added: lines, removed: lines == nil ? nil : 0, status: .untracked))
             }
-            return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+            return (files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending },
+                    ok && answer.status == 0, rows.count > untrackedLimit)
         }
-        let untracked = run(["ls-files", "--others", "--exclude-standard", "-z"], in: dir, timeout: readLimit).out
-        for path in untracked.split(separator: "\0").map(String.init).prefix(300) {
+        let untrackedRun = run(["ls-files", "--others", "--exclude-standard", "-z"], in: dir, timeout: readLimit)
+        let untracked = untrackedRun.out.split(separator: "\0").map(String.init)
+        for path in untracked.prefix(untrackedLimit) {
             let full = (dir as NSString).appendingPathComponent(path)
             let lines = textLines(atPath: full)?.count
             files.append(ChangedFile(path: path, added: lines, removed: lines == nil ? nil : 0, status: .untracked))
         }
-        return files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+        return (files.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending },
+                ok && untrackedRun.ok, untracked.count > untrackedLimit)
+    }
+
+    /// The blob id of each file's current content in `dir`, in one git call while all of them
+    /// hash. "" for a path git can't hash (a folder, a submodule, a file removed meanwhile);
+    /// nil when git didn't run (timed out, the machine unreachable).
+    public static func blobIDs(dir: String, paths: [String]) -> [String: String]? {
+        guard !paths.isEmpty else { return [:] }
+        let r = run(["hash-object", "--no-filters", "--"] + paths, in: dir, timeout: readLimit)
+        let ids = r.out.split(whereSeparator: \.isNewline).map(String.init)
+        var all = Dictionary(zip(paths, ids), uniquingKeysWith: { first, _ in first })
+        if r.ok, ids.count == paths.count { return all }
+        // git hashes the paths in order and stops with 128 at the first it can't: that one
+        // gets "", and the ones after it go again.
+        guard r.status == 128, ids.count < paths.count,
+              let rest = blobIDs(dir: dir, paths: Array(paths[(ids.count + 1)...])) else { return nil }
+        all[paths[ids.count]] = ""
+        return all.merging(rest) { first, _ in first }
     }
 
     private static func emptyTree(_ dir: String) -> String? {
