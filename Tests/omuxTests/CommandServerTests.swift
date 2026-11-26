@@ -36,7 +36,7 @@ final class CommandServerTests: XCTestCase {
         let path = try XCTUnwrap(server.socketPath)
 
         let client = try connect(to: path)
-        let request = try JSONEncoder().encode(CLIRequest(token: server.token, from: "tab-1", command: "status"))
+        let request = try JSONEncoder().encode(CLIRequest(token: server.token(for: "tab-1"), from: "tab-1", command: "status"))
         let line = request + Data([UInt8(ascii: "\n")])
         let sent = line.withUnsafeBytes { write(client, $0.baseAddress!, line.count) }
         XCTAssertEqual(sent, line.count)

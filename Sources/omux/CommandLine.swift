@@ -39,12 +39,12 @@ extension Store {
     /// Whether sessions get the `omux` tool at all. Settings › Sessions.
     static var cliEnabled: Bool { UserDefaults.standard.object(forKey: Prefs.cliEnabled) as? Bool ?? true }
 
-    /// Environment that lets a session reach the tool: its id, the token, the socket, the PATH.
+    /// Environment that lets a session reach the tool: its id, its token, the socket, the PATH.
     func cliEnvironment(for tabID: UUID, path: String) -> [String: String] {
         guard Self.cliEnabled else { return ["PATH": path] }
         CommandServer.shared.start()
         guard let socket = CommandServer.shared.socketPath else { return ["PATH": path] }
-        var env = ["OMUX_TAB_ID": tabID.uuidString, "OMUX_TOKEN": CommandServer.shared.token, "OMUX_SOCKET": socket, "PATH": path]
+        var env = ["OMUX_TAB_ID": tabID.uuidString, "OMUX_TOKEN": CommandServer.shared.token(for: tabID.uuidString), "OMUX_SOCKET": socket, "PATH": path]
         if let bin = CommandServer.binDirectory { env["PATH"] = bin + ":" + path }
         return env
     }

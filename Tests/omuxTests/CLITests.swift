@@ -91,6 +91,23 @@ final class CLITests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(CLIResponse.self, from: JSONEncoder().encode(response)), response)
     }
 
+    /// Every session had the same token, so one could name another in OMUX_TAB_ID and act
+    /// as it: type into it and steer the sessions it started. A token now proves its id.
+    func testATokenOnlyVouchesForItsOwnSession() {
+        let server = CommandServer()
+        let one = UUID().uuidString, two = UUID().uuidString
+        let token = server.token(for: one)
+        XCTAssertTrue(server.authenticates(CLIRequest(token: token, from: one, command: "list")))
+        XCTAssertFalse(server.authenticates(CLIRequest(token: token, from: two, command: "send", target: two, text: "rm -rf ~", submit: true)))
+        XCTAssertNotEqual(server.token(for: two), token)
+        XCTAssertEqual(server.token(for: one), token, "the same session keeps its token for the launch")
+        // Another launch's tokens are no good: the secret is fresh each time.
+        XCTAssertFalse(CommandServer().authenticates(CLIRequest(token: token, from: one, command: "list")))
+        for broken in ["", "nope", String(token.dropLast()), String(token.dropLast()) + "z", token + "00"] {
+            XCTAssertFalse(server.authenticates(CLIRequest(token: broken, from: one, command: "list")), broken)
+        }
+    }
+
     /// The built tool against a live server: socket, peer check, framing and the token gate.
     /// A wrong token is answered by the server alone; a right one reaches the handler.
     func testToolReachesTheServerOverTheSocket() throws {
@@ -108,7 +125,7 @@ final class CLITests: XCTestCase {
 
         // The server answers on the main thread, so the tool runs off it while the test
         // spins the run loop; blocking the main thread here would hang both.
-        func run(_ args: [String], token: String) throws -> (status: Int32, out: String, err: String) {
+        func run(_ args: [String], token: String, from: String = "tab-1") throws -> (status: Int32, out: String, err: String) {
             let done = expectation(description: args.joined(separator: " "))
             var result: (status: Int32, out: String, err: String) = (-1, "", "")
             var failure: Error?
@@ -116,7 +133,7 @@ final class CLITests: XCTestCase {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: tool)
                 process.arguments = args
-                process.environment = ["OMUX_SOCKET": socket, "OMUX_TOKEN": token, "OMUX_TAB_ID": "tab-1", "PATH": "/usr/bin:/bin"]
+                process.environment = ["OMUX_SOCKET": socket, "OMUX_TOKEN": token, "OMUX_TAB_ID": from, "PATH": "/usr/bin:/bin"]
                 let out = Pipe(), err = Pipe()
                 process.standardOutput = out
                 process.standardError = err
@@ -132,13 +149,17 @@ final class CLITests: XCTestCase {
             if let failure { throw failure }
             return result
         }
-        let good = try run(["status"], token: server.token)
+        let good = try run(["status"], token: server.token(for: "tab-1"))
         XCTAssertEqual(good.status, 0, good.err)
         XCTAssertTrue(good.out.contains("echo status"), good.out)
         let bad = try run(["status"], token: "nope")
         XCTAssertNotEqual(bad.status, 0)
         XCTAssertTrue(bad.err.contains("bad token"), bad.err)
-        let json = try run(["--json", "list"], token: server.token)
+        // A session's own token with another session's id: the server refuses it too.
+        let posing = try run(["status"], token: server.token(for: "tab-1"), from: "tab-2")
+        XCTAssertNotEqual(posing.status, 0)
+        XCTAssertTrue(posing.err.contains("bad token"), posing.err)
+        let json = try run(["--json", "list"], token: server.token(for: "tab-1"))
         XCTAssertTrue(json.out.contains("\"ok\" : true"), json.out)
     }
 }

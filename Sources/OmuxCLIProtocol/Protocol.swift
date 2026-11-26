@@ -3,7 +3,7 @@ import Foundation
 /// What the `omux` command line tool and the app say to each other: one JSON request line
 /// on a Unix socket only this user can open, one JSON response line back.
 public struct CLIRequest: Codable, Equatable {
-    /// The per-launch secret the app put in the session's environment (OMUX_TOKEN).
+    /// The session's own token, which the app put in its environment (OMUX_TOKEN).
     public var token: String
     /// The session the command runs from (OMUX_TAB_ID).
     public var from: String
