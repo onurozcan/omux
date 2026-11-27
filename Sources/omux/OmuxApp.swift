@@ -122,7 +122,7 @@ private struct MachinesMenuItem: View {
 }
 
 struct SettingsView: View {
-    enum Pane: String { case general, appearance, sessions, machines, notifications, updates }
+    enum Pane: String { case general, appearance, sessions, machines, notifications, migration, updates }
     static let paneKey = "settingsPane"
     @AppStorage(SettingsView.paneKey) private var pane = Pane.general.rawValue
 
@@ -139,6 +139,9 @@ struct SettingsView: View {
                 .tabItem { Label("Machines", systemImage: "network") }.tag(Pane.machines.rawValue)
             NotificationSettings()
                 .tabItem { Label("Notifications", systemImage: "bell") }.tag(Pane.notifications.rawValue)
+            MigrationSettings()
+                .environmentObject(Store.shared)
+                .tabItem { Label("Migration", systemImage: "square.and.arrow.down") }.tag(Pane.migration.rawValue)
             Form { UpdateSettings() }
                 .formStyle(.grouped)
                 .tabItem { Label("Updates", systemImage: "arrow.down.circle") }.tag(Pane.updates.rawValue)
