@@ -7,8 +7,11 @@ All notable changes to omux are listed here. Versions follow [Semantic Versionin
 ### Security
 - **Each session has its own `omux` token.** Every session shared one, so a session could name a sibling in `OMUX_TAB_ID` and type into it. A token now only works for the session it was made for. Thanks to Samet Samyeli (#83).
 - **Review notes are no longer run by the shell.** Sent from Changes to a session whose agent had quit, the notes were typed at the shell prompt, which ran `$(…)` in a note or a file name. They now wait for the agent, starting it first if needed. Thanks to Samet Samyeli (#76).
+- **Adding an MCP server asks first.** The Add server form now confirms in omux's own window, showing the command or address in full, before anything is added.
 
 ### Added
+- **Statistics: a range and Share.** 24 hours, 7 days, 30 days or a month, with everything on the page following it. Share makes a card to post or a full report, with a choice of projects and switches to hide project names, session titles and commit messages; copy it as an image or Markdown, or save a PNG or PDF. Thanks to Hasan Emir Yıldırım (#63).
+- **Migrate from Muxy.** Settings › Migration brings over Muxy's projects, with their pictures, and the settings omux has a counterpart for. Muxy's files are only read. Thanks to ZgrK (#86).
 - **Follow the system's light or dark appearance.** Settings › Appearance › Match system appearance, with a theme of your choice for each. Off by default. Thanks to Ahmet Bedir (#85).
 - **A colour-blind friendly status palette.** Settings › Appearance › Status colours switches working, needs you, done, failed and subagent to the Okabe–Ito colours. Thanks to Yunus Emre Özbucak (#72).
 - **The Vesper theme.** Thanks to Anıl Soylu (#77).
