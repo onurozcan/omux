@@ -11,6 +11,7 @@ struct StatsView: View {
     let theme: Theme
     @Binding var showSidebar: Bool
     @AppStorage(Prefs.sidebarLayout) private var sidebarLayout = "rail"
+    @State private var sharing = false
 
     private var bubbles: some View { TokenBubbles(model: model) }
     private var detail: some View { StatsDetail(model: model) }
@@ -36,9 +37,9 @@ struct StatsView: View {
                         bubbles.frame(height: 420).statsCard()
                         detail.frame(height: 420).statsCard()
                     }
-                    DailyChart(model: model, bars: model.bars, days: model.snapshot.days, perDay: model.snapshot.perDay,
+                    DailyChart(model: model, bars: model.bars, buckets: model.snapshot.buckets, perBucket: model.snapshot.perBucket,
                                total: model.snapshot.total, picked: model.selectedProjectID, day: model.day,
-                               month: model.month, monthEnd: model.monthEnd)
+                               hourly: model.snapshot.hourly)
                         .equatable()
                         .frame(height: 250)
                         .statsCard()
@@ -54,6 +55,7 @@ struct StatsView: View {
         .background(Color(nsColor: theme.background))
         .onAppear { model.reload() }
         .onExitCommand { store.showStats = false }
+        .sheet(isPresented: $sharing) { ShareReportSheet(model: model) }
     }
 
     private var header: some View {
@@ -64,20 +66,40 @@ struct StatsView: View {
             Text("Statistics").font(.system(size: 11, weight: .semibold)).foregroundStyle(.primary)
             Spacer()
             if model.loading { ProgressView().controlSize(.mini) }
-            Button { model.step(-1) } label: { Image(systemName: "chevron.left") }
-                .help("Previous month")
-            Text(model.month.formatted(.dateTime.month(.wide).year()))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.primary)
-                .frame(minWidth: 96)
-            Button { model.step(1) } label: { Image(systemName: "chevron.right") }
-                .disabled(model.isCurrentMonth)
-                .help("Next month")
-            Button { model.month = StatsModel.startOfMonth(Date()) } label: { Image(systemName: "calendar.badge.clock") }
-                .disabled(model.isCurrentMonth)
-                .help("This month")
+            if let month = model.month {
+                Button { model.step(-1) } label: { Image(systemName: "chevron.left") }
+                    .help("Previous month")
+                Text(month.formatted(.dateTime.month(.wide).year()))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(minWidth: 96)
+                Button { model.step(1) } label: { Image(systemName: "chevron.right") }
+                    .disabled(model.isCurrentMonth)
+                    .help("Next month")
+            } else {
+                Text(model.range.dates())
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 4)
+            }
+            RangePicker(range: $model.range)
+                .padding(.horizontal, 4)
             Button { model.reload(force: true) } label: { Image(systemName: "arrow.clockwise") }
                 .help("Read the conversations again")
+            Button { sharing = true } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.up").font(.system(size: 10, weight: .semibold))
+                    Text("Share").font(.system(size: 11, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 9)
+                .frame(height: 20)
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 5))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 2)
+            .help("Make a report of these statistics to save or send")
             Button { store.showStats = false } label: { Image(systemName: "xmark") }
                 .help("Back to the session (Esc)")
         }
@@ -97,7 +119,7 @@ struct StatsView: View {
             Image(systemName: model.loaded ? "circle.dotted" : "hourglass")
                 .font(.system(size: 22))
                 .foregroundStyle(StatsStyle.faint)
-            Text(model.loaded ? "No Claude Code sessions this month" : "Reading conversations…")
+            Text(model.loaded ? "No Claude Code sessions \(model.range.phrase)" : "Reading conversations…")
                 .font(.system(size: 12))
                 .foregroundStyle(StatsStyle.muted)
         }
@@ -134,6 +156,33 @@ struct StatsView: View {
                 .statsCard()
             }
         }
+    }
+}
+
+/// 24 hours, 7 days, 30 days or a month, side by side.
+struct RangePicker: View {
+    @Binding var range: StatsRange
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(StatsRange.Kind.allCases, id: \.self) { kind in
+                let on = range.kind == kind
+                Button { if !on { range = .of(kind) } } label: {
+                    Text(kind.rawValue)
+                        .font(.system(size: 10.5, weight: on ? .semibold : .regular))
+                        .foregroundStyle(on ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 7)
+                        .frame(height: 18)
+                        .background(on ? Color.primary.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 4))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.08)))
+        .fixedSize()
     }
 }
 
@@ -211,7 +260,7 @@ private struct StatsDetail: View {
         }()
         let top = rows.first?.1 ?? 1
         return VStack(alignment: .leading, spacing: 8) {
-            SectionTitle(text: model.day.map { "Projects on \($0.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))" } ?? "Projects this month")
+            SectionTitle(text: model.day.map { "Projects on \($0.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))" } ?? "Projects \(model.range.phrase)")
             if rows.isEmpty {
                 Text("Nothing yet.").font(.system(size: 12)).foregroundStyle(StatsStyle.muted)
             }
@@ -461,87 +510,107 @@ private struct CommitList: View {
 
 // MARK: - Hours a day, in each project's color
 
-private struct DailyChart: View, Equatable {
+struct DailyChart: View, Equatable {
     /// For picking a day; not watched: the chart redraws only when what it shows changes.
-    let model: StatsModel
+    let model: StatsModel?
     let bars: [StatsBar]
-    let days: [Date]
-    let perDay: [Date: TimeInterval]
+    /// Its columns: days, or hours when `hourly`.
+    let buckets: [Date]
+    let perBucket: [Date: TimeInterval]
     let total: TimeInterval
     let picked: String?
     let day: Date?
-    let month: Date
-    let monthEnd: Date
+    let hourly: Bool
 
     static func == (a: DailyChart, b: DailyChart) -> Bool {
-        a.bars == b.bars && a.days == b.days && a.perDay == b.perDay && a.total == b.total
-            && a.picked == b.picked && a.day == b.day && a.month == b.month
+        a.bars == b.bars && a.buckets == b.buckets && a.perBucket == b.perBucket && a.total == b.total
+            && a.picked == b.picked && a.day == b.day && a.hourly == b.hourly
     }
     /// A working day, as a time sheet expects.
     private let target: Double = 8
+    /// A column's width in seconds.
+    private var width: TimeInterval { hourly ? 3600 : 86400 }
+    /// Hours a day; minutes an hour.
+    private func amount(_ seconds: TimeInterval) -> Double { hourly ? seconds / 60 : seconds / 3600 }
 
     var body: some View {
         let calendar = Calendar.current
-        let maxHours = (perDay.values.max() ?? 0) / 3600
+        let days = buckets
+        let perDay = perBucket
+        let maxHours = amount(perDay.values.max() ?? 0)
+        let unit: Calendar.Component = hourly ? .hour : .day
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Hours a day").font(.system(size: 12, weight: .semibold))
-                Text("click a day to see it below")
-                    .font(.system(size: 11))
-                    .foregroundStyle(StatsStyle.faint)
+                Text(hourly ? "Minutes an hour" : "Hours a day").font(.system(size: 12, weight: .semibold))
+                if model != nil {
+                    Text(hourly ? "click an hour to see its day below" : "click a day to see it below")
+                        .font(.system(size: 11))
+                        .foregroundStyle(StatsStyle.faint)
+                }
                 Spacer()
-                HStack(spacing: 5) {
-                    Capsule().fill(StatsStyle.target).frame(width: 12, height: 2)
-                    Text("8h a weekday").font(.system(size: 11)).foregroundStyle(StatsStyle.muted)
+                if !hourly {
+                    HStack(spacing: 5) {
+                        Capsule().fill(StatsStyle.target).frame(width: 12, height: 2)
+                        Text("8h a weekday").font(.system(size: 11)).foregroundStyle(StatsStyle.muted)
+                    }
                 }
                 Text("Total \(StatsStyle.hours(total)) h")
                     .font(.system(size: 11.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(StatsStyle.muted)
             }
             Chart {
-                ForEach(days.filter { calendar.isDateInWeekend($0) }, id: \.self) { day in
-                    RectangleMark(xStart: .value("Day", day), xEnd: .value("Day", day.addingTimeInterval(86400)))
-                        .foregroundStyle(StatsStyle.wash)
+                if !hourly {
+                    ForEach(days.filter { calendar.isDateInWeekend($0) }, id: \.self) { day in
+                        RectangleMark(xStart: .value("Day", day), xEnd: .value("Day", day.addingTimeInterval(86400)))
+                            .foregroundStyle(StatsStyle.wash)
+                    }
                 }
                 if let day {
-                    RectangleMark(xStart: .value("Day", day), xEnd: .value("Day", day.addingTimeInterval(86400)))
+                    RectangleMark(xStart: .value("Day", max(day, days.first ?? day)),
+                                  xEnd: .value("Day", min(day.addingTimeInterval(86400), (days.last ?? day).addingTimeInterval(width))))
                         .foregroundStyle(StatsStyle.accent.opacity(0.13))
                 }
                 ForEach(Array(bars.enumerated()), id: \.offset) { _, item in
-                    let faded = (picked != nil && item.project != picked) || (day != nil && day != item.day)
-                    BarMark(x: .value("Day", item.day, unit: .day), y: .value("Hours", item.seconds / 3600), width: .ratio(0.6))
+                    let faded = (picked != nil && item.project != picked) || (day != nil && day != calendar.startOfDay(for: item.day))
+                    BarMark(x: .value("Day", item.day, unit: unit), y: .value("Hours", amount(item.seconds)), width: .ratio(0.6))
                         .foregroundStyle(item.color.opacity(faded ? 0.25 : 0.9))
                 }
                 ForEach(days, id: \.self) { day in
-                    if let total = perDay[day], total >= 180 {
-                        PointMark(x: .value("Day", day, unit: .day), y: .value("Hours", total / 3600))
+                    if let total = perDay[day], total >= (hourly ? 60 : 180) {
+                        PointMark(x: .value("Day", day, unit: unit), y: .value("Hours", amount(total)))
                             .opacity(0)
                             .annotation(position: .top, spacing: 2) {
-                                Text(StatsStyle.hours(total))
+                                Text(hourly ? "\(Int(amount(total).rounded()))" : StatsStyle.hours(total))
                                     .font(.system(size: 9, weight: .semibold).monospacedDigit())
                                     .foregroundStyle(StatsStyle.muted)
                             }
                     }
                 }
-                ForEach(days, id: \.self) { day in
-                    LineMark(x: .value("Day", day.addingTimeInterval(43200)), y: .value("Target", calendar.isDateInWeekend(day) ? 0 : target),
-                             series: .value("Series", "Target"))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(StatsStyle.target.opacity(0.8))
-                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                if !hourly {
+                    ForEach(days, id: \.self) { day in
+                        LineMark(x: .value("Day", day.addingTimeInterval(43200)), y: .value("Target", calendar.isDateInWeekend(day) ? 0 : target),
+                                 series: .value("Series", "Target"))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(StatsStyle.target.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                    }
                 }
             }
-            .chartXScale(domain: (days.first ?? month)...monthEnd)
-            .chartYScale(domain: 0...max(9, maxHours.rounded(.up) + 1))
+            .chartXScale(domain: (days.first ?? Date())...((days.last ?? Date()).addingTimeInterval(width)))
+            .chartYScale(domain: 0...(hourly ? 60 : max(9, maxHours.rounded(.up) + 1)))
             .chartXAxis {
-                AxisMarks(values: days.map { $0.addingTimeInterval(43200) }) { value in
+                AxisMarks(values: days.enumerated().filter { !hourly || $0.offset % 3 == 0 }.map { $0.element.addingTimeInterval(width / 2) }) { value in
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
-                            VStack(spacing: 0) {
-                                Text(date.formatted(.dateTime.weekday(.narrow))).foregroundStyle(StatsStyle.muted)
-                                Text(date.formatted(.dateTime.day())).foregroundStyle(StatsStyle.faint)
+                            if hourly {
+                                Text(date.formatted(.dateTime.hour())).foregroundStyle(StatsStyle.muted).font(.system(size: 9))
+                            } else {
+                                VStack(spacing: 0) {
+                                    Text(date.formatted(.dateTime.weekday(.narrow))).foregroundStyle(StatsStyle.muted)
+                                    Text(date.formatted(.dateTime.day())).foregroundStyle(StatsStyle.faint)
+                                }
+                                .font(.system(size: 9))
                             }
-                            .font(.system(size: 9))
                         }
                     }
                 }
@@ -556,11 +625,11 @@ private struct DailyChart: View, Equatable {
                 GeometryReader { geo in
                     Rectangle().fill(.clear).contentShape(Rectangle())
                         .onTapGesture { location in
-                            guard let frame = proxy.plotFrame else { return }
+                            guard let model, let frame = proxy.plotFrame else { return }
                             guard let date: Date = proxy.value(atX: location.x - geo[frame].origin.x) else { return }
                             let day = calendar.startOfDay(for: date)
                             withAnimation(.easeOut(duration: 0.15)) {
-                                model.day = model.day == day || (perDay[day] ?? 0) == 0 ? nil : day
+                                model.day = model.day == day || (model.snapshot.perDay[day] ?? 0) == 0 ? nil : day
                             }
                         }
                 }
@@ -716,7 +785,7 @@ private struct WorkLog: View {
         }
         .onChange(of: model.selection) { _, _ in limit = WorkLog.page }
         .onChange(of: model.day) { _, _ in limit = WorkLog.page }
-        .onChange(of: model.month) { _, _ in limit = WorkLog.page }
+        .onChange(of: model.range) { _, _ in limit = WorkLog.page }
     }
 }
 
