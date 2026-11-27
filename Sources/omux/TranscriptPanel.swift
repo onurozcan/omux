@@ -459,6 +459,17 @@ struct TranscriptPanel: View {
             guard AgentConfig.validName(name), !target.isEmpty, ["stdio", "http", "sse"].contains(transport) else {
                 model.note("Add server: a name of letters, digits, dots and dashes, and a command or URL, are needed"); return
             }
+            // Asked in omux's own window, which the page can't draw on or click: a server is a
+            // command that runs every time the agent starts, so nothing on the page adds one alone.
+            let question = Self.addServerQuestion(name: name, transport: transport, target: target, scope: scope, agent: tool == "codex" ? "Codex" : "Claude Code")
+            let alert = NSAlert()
+            alert.messageText = question.title
+            alert.informativeText = question.detail
+            alert.addButton(withTitle: "Add Server")
+            alert.addButton(withTitle: "Cancel")
+            // Return doesn't add it: the choice has to be made.
+            alert.buttons.first?.keyEquivalent = ""
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
             let words = target.split(separator: " ").map(String.init)
             if tool == "codex" {
                 work = { await AgentConfig.run(transport == "stdio" ? ["mcp", "add", name, "--"] + words : ["mcp", "add", name, "--url", target], tool: "codex") }
@@ -554,6 +565,18 @@ struct TranscriptPanel: View {
             model.note((ok ? "" : "Failed: ") + (firstLine.count > 200 ? String(firstLine.prefix(200)) + "…" : firstLine))
             refresh(overviewKind, block: blockID, project: project)
         }
+    }
+
+    /// What is asked before an MCP server is added: the command or address in full, as it will
+    /// be stored, so what is agreed to is what runs.
+    static func addServerQuestion(name: String, transport: String, target: String, scope: String, agent: String) -> (title: String, detail: String) {
+        let place = ["user": "for all your projects", "local": "for this project, on this Mac only", "project": "in this project's .mcp.json, shared with the project"][scope] ?? "for all your projects"
+        if transport == "stdio" {
+            return ("Add the MCP server “\(name)”?",
+                    "\(agent) will run this command each time it starts, \(place):\n\n\(target)\n\nOnly add a command you know.")
+        }
+        return ("Add the MCP server “\(name)”?",
+                "\(agent) will connect to this address (\(transport)) each time it starts, \(place):\n\n\(target)\n\nOnly add a server you trust.")
     }
 
     /// Whether an overview omux drew offers `action`: through its add form, its extra button, or
